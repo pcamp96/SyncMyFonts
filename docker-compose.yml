@@ -1,0 +1,14 @@
+services:
+  syncmyfonts:
+    build: .
+    ports:
+      - "7368:7368"
+    environment:
+      SYNCMYFONTS_LISTEN: "0.0.0.0:7368"
+      SYNCMYFONTS_DATA_DIR: "/data"
+      SYNCMYFONTS_API_KEY: "${SYNCMYFONTS_API_KEY:-}"
+    volumes:
+      - syncmyfonts-data:/data
+
+volumes:
+  syncmyfonts-data:
