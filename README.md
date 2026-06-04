@@ -99,6 +99,65 @@ With auth:
 SYNCMYFONTS_API_KEY=change-me cargo run -p syncmyfonts-agent -- sync --server http://localhost:7368
 ```
 
+## LAN Peer Sync
+
+LAN sync lets two installs exchange user-installed fonts directly without the
+Docker sync server. It is pull-only for the MVP: one device temporarily serves
+its local user-font manifest and blobs, and the other device pulls anything it
+is missing.
+
+On the device that has the fonts:
+
+```bash
+SYNCMYFONTS_LAN_KEY=choose-a-shared-key \
+  cargo run -p syncmyfonts-agent -- lan-serve --listen 0.0.0.0:7370
+```
+
+On the device that needs the fonts:
+
+```bash
+SYNCMYFONTS_LAN_KEY=choose-a-shared-key \
+  cargo run -p syncmyfonts-agent -- lan-sync --peer http://<peer-lan-ip>:7370
+```
+
+For a dry run:
+
+```bash
+cargo run -p syncmyfonts-agent -- lan-sync \
+  --peer http://<peer-lan-ip>:7370 \
+  --lan-key choose-a-shared-key \
+  --dry-run
+```
+
+The first LAN MVP uses manual peer URLs. Bonjour/mDNS discovery, QR-code
+pairing, tray apps, and background startup wrappers are planned next-layer app
+features.
+
+To sync both directions today, run `lan-sync` once from each device while the
+other device is serving. For example:
+
+1. Mac runs `lan-serve`; Windows runs `lan-sync --peer http://<mac-ip>:7370`.
+2. Windows runs `lan-serve`; Mac runs `lan-sync --peer http://<windows-ip>:7370`.
+
+No port forwarding is required. The peer URL should be a LAN address reachable
+inside the same local network. Windows or macOS may still ask for local network
+or firewall permission when a device is serving fonts.
+
+## App Wrapper Plan
+
+The current MVP is a cross-platform CLI agent. The app wrapper should call these
+same commands instead of reimplementing sync logic:
+
+- "Share fonts on this network" -> `syncmyfonts-agent lan-serve`
+- "Pull fonts from another device" -> `syncmyfonts-agent lan-sync`
+- "Preview what would install" -> `syncmyfonts-agent lan-sync --dry-run`
+- "Sync through my server" -> `syncmyfonts-agent sync`
+
+See the platform app notes in:
+
+- `docs/macos-lan-app.md`
+- `docs/windows-lan-app.md`
+
 ## Platform Install Paths
 
 macOS installs synced fonts into:

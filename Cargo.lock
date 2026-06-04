@@ -1720,6 +1720,8 @@ name = "syncmyfonts-agent"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
+ "chrono",
  "clap",
  "directories",
  "font-kit",
@@ -1729,6 +1731,11 @@ dependencies = [
  "serde_json",
  "sha2",
  "syncmyfonts-core",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
  "walkdir",
 ]
 

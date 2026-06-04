@@ -2,18 +2,33 @@ use std::{
     collections::BTreeMap,
     fs,
     io::Write,
+    net::SocketAddr,
     path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
 };
 
 use anyhow::{Context, Result, anyhow, bail};
+use axum::{
+    Json, Router,
+    body::Body,
+    extract::{Path as AxumPath, State},
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
+    routing::get,
+};
+use chrono::Utc;
 use clap::{Parser, Subcommand};
 use reqwest::blocking::{Client, multipart};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use syncmyfonts_core::{
-    DEFAULT_API_KEY_HEADER, DeviceCheckInRequest, FontFormat, ManifestResponse,
-    RegisterFontRequest, RegisterFontResponse,
+    API_VERSION, DEFAULT_API_KEY_HEADER, DeviceCheckInRequest, FontFormat, FontManifestEntry,
+    HealthResponse, ManifestResponse, RegisterFontRequest, RegisterFontResponse,
 };
+use tower_http::trace::TraceLayer;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use uuid::Uuid;
 use walkdir::WalkDir;
 
 #[derive(Parser)]
@@ -47,6 +62,22 @@ enum Commands {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Serve this machine's user-installed fonts to paired LAN devices.
+    LanServe {
+        #[arg(long, default_value = "0.0.0.0:7370")]
+        listen: SocketAddr,
+        #[arg(long, env = "SYNCMYFONTS_LAN_KEY")]
+        lan_key: Option<String>,
+    },
+    /// Pull missing fonts directly from another SyncMyFonts LAN peer.
+    LanSync {
+        #[arg(long)]
+        peer: String,
+        #[arg(long, env = "SYNCMYFONTS_LAN_KEY")]
+        lan_key: Option<String>,
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -67,6 +98,26 @@ struct LocalFont {
     format: FontFormat,
 }
 
+impl LocalFont {
+    fn to_manifest_entry(&self) -> FontManifestEntry {
+        let now = Utc::now();
+        FontManifestEntry {
+            id: stable_font_id(&self.content_sha256),
+            sha256: self.content_sha256.clone(),
+            file_name: self.file_name.clone(),
+            family_name: None,
+            postscript_name: None,
+            style_name: None,
+            full_name: None,
+            format: self.format.clone(),
+            size_bytes: self.file_size,
+            archived: false,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
@@ -83,6 +134,18 @@ fn main() -> Result<()> {
             dry_run,
         } => {
             let report = sync(&server, api_key.as_deref(), dry_run)?;
+            print_json(&report)?;
+        }
+        Commands::LanServe { listen, lan_key } => {
+            let runtime = tokio::runtime::Runtime::new().context("starting LAN peer runtime")?;
+            runtime.block_on(lan_serve(listen, lan_key))?;
+        }
+        Commands::LanSync {
+            peer,
+            lan_key,
+            dry_run,
+        } => {
+            let report = lan_sync(&peer, lan_key.as_deref(), dry_run)?;
             print_json(&report)?;
         }
     }
@@ -163,7 +226,7 @@ struct PushReport {
 
 fn push(server: &str, api_key: Option<&str>) -> Result<PushReport> {
     let scan = scan(false)?;
-    let client = Client::new();
+    let client = http_client()?;
     let mut report = PushReport {
         scanned: scan.fonts.len(),
         registered: 0,
@@ -229,7 +292,7 @@ struct SyncReport {
 }
 
 fn sync(server: &str, api_key: Option<&str>, dry_run: bool) -> Result<SyncReport> {
-    let client = Client::new();
+    let client = http_client()?;
     let local = scan(true)?;
     let local_hashes = local
         .fonts
@@ -303,6 +366,155 @@ fn sync(server: &str, api_key: Option<&str>, dry_run: bool) -> Result<SyncReport
         skipped,
         dry_run,
     })
+}
+
+#[derive(Debug, Clone)]
+struct LanState {
+    lan_key: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct LanSyncReport {
+    known_local: usize,
+    peer_fonts: usize,
+    installed: Vec<PathBuf>,
+    skipped: Vec<String>,
+    dry_run: bool,
+}
+
+async fn lan_serve(listen: SocketAddr, lan_key: Option<String>) -> Result<()> {
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
+    let state = Arc::new(LanState { lan_key });
+    let app = Router::new()
+        .route("/health", get(lan_health))
+        .route("/api/lan/v1/health", get(lan_health))
+        .route("/api/lan/v1/manifest", get(lan_manifest))
+        .route("/api/lan/v1/blobs/{sha256}", get(lan_blob))
+        .route("/api/lan/v1/fonts/{sha256}/blob", get(lan_blob))
+        .layer(TraceLayer::new_for_http())
+        .with_state(state);
+
+    let listener = tokio::net::TcpListener::bind(listen)
+        .await
+        .with_context(|| format!("binding LAN peer listener at {listen}"))?;
+    tracing::info!("syncmyfonts LAN peer listening on http://{listen}");
+    axum::serve(listener, app).await?;
+    Ok(())
+}
+
+async fn lan_health() -> Json<HealthResponse> {
+    Json(HealthResponse {
+        ok: true,
+        api_version: API_VERSION,
+    })
+}
+
+async fn lan_manifest(
+    State(state): State<Arc<LanState>>,
+    headers: HeaderMap,
+) -> Result<Json<ManifestResponse>, LanApiError> {
+    authorize_lan(&state, &headers)?;
+    let scan = scan(true).map_err(LanApiError::internal)?;
+    let fonts = scan
+        .fonts
+        .into_iter()
+        .map(|font| font.to_manifest_entry())
+        .collect();
+    Ok(Json(ManifestResponse { fonts }))
+}
+
+async fn lan_blob(
+    State(state): State<Arc<LanState>>,
+    headers: HeaderMap,
+    AxumPath(sha256): AxumPath<String>,
+) -> Result<Response, LanApiError> {
+    authorize_lan(&state, &headers)?;
+    validate_sha256(&sha256).map_err(LanApiError::bad_request)?;
+    let font = find_local_font_by_hash(&sha256).map_err(LanApiError::internal)?;
+    let Some(font) = font else {
+        return Err(LanApiError::not_found("font blob not found"));
+    };
+    let bytes = fs::read(&font.path).map_err(LanApiError::internal)?;
+    let actual = hex::encode(Sha256::digest(&bytes));
+    if actual != sha256 {
+        return Err(LanApiError::internal("local font hash changed during read"));
+    }
+    Response::builder()
+        .header("content-type", "application/octet-stream")
+        .body(Body::from(bytes))
+        .map_err(|error| LanApiError::internal(error.to_string()))
+}
+
+fn lan_sync(peer: &str, lan_key: Option<&str>, dry_run: bool) -> Result<LanSyncReport> {
+    let client = http_client()?;
+    let local = scan(true)?;
+    let local_hash_set = local
+        .fonts
+        .iter()
+        .map(|font| font.content_sha256.clone())
+        .collect::<std::collections::HashSet<_>>();
+    let manifest: ManifestResponse =
+        lan_authed(client.get(api_url(peer, "/api/lan/v1/manifest")?), lan_key)
+            .send()
+            .context("fetching LAN peer manifest")?
+            .error_for_status()
+            .context("LAN peer rejected manifest request")?
+            .json()
+            .context("parsing LAN peer manifest")?;
+
+    let mut installed = Vec::new();
+    let mut skipped = Vec::new();
+
+    for font in &manifest.fonts {
+        if local_hash_set.contains(&font.sha256) {
+            skipped.push(format!("{} already present", font.file_name));
+            continue;
+        }
+        if !font.format.is_installable_desktop_font() {
+            skipped.push(format!("{} unsupported format", font.file_name));
+            continue;
+        }
+        if dry_run {
+            skipped.push(format!("would install {}", font.file_name));
+            continue;
+        }
+        let bytes = lan_authed(
+            client.get(api_url(
+                peer,
+                &format!("/api/lan/v1/blobs/{}", font.sha256),
+            )?),
+            lan_key,
+        )
+        .send()
+        .context("downloading LAN peer font blob")?
+        .error_for_status()
+        .context("LAN peer rejected font download")?
+        .bytes()
+        .context("reading LAN peer font bytes")?;
+        let path = install_font(&font.file_name, &font.sha256, &bytes)?;
+        installed.push(path);
+    }
+
+    Ok(LanSyncReport {
+        known_local: local.fonts.len(),
+        peer_fonts: manifest.fonts.len(),
+        installed,
+        skipped,
+        dry_run,
+    })
+}
+
+fn find_local_font_by_hash(sha256: &str) -> Result<Option<LocalFont>> {
+    Ok(scan(true)?
+        .fonts
+        .into_iter()
+        .find(|font| font.content_sha256 == sha256))
 }
 
 fn inspect_font(path: &Path, file_name: String, format: FontFormat) -> Result<LocalFont> {
@@ -501,6 +713,14 @@ fn api_url(server: &str, path: &str) -> Result<String> {
     Ok(format!("{}{}", base, path))
 }
 
+fn http_client() -> Result<Client> {
+    Client::builder()
+        .timeout(Duration::from_secs(120))
+        .connect_timeout(Duration::from_secs(15))
+        .build()
+        .context("building HTTP client")
+}
+
 fn authed(
     builder: reqwest::blocking::RequestBuilder,
     api_key: Option<&str>,
@@ -508,6 +728,94 @@ fn authed(
     match api_key {
         Some(api_key) => builder.header(DEFAULT_API_KEY_HEADER, api_key),
         None => builder,
+    }
+}
+
+fn lan_authed(
+    builder: reqwest::blocking::RequestBuilder,
+    lan_key: Option<&str>,
+) -> reqwest::blocking::RequestBuilder {
+    match lan_key {
+        Some(lan_key) => builder.header(DEFAULT_API_KEY_HEADER, lan_key),
+        None => builder,
+    }
+}
+
+fn authorize_lan(state: &LanState, headers: &HeaderMap) -> Result<(), LanApiError> {
+    let Some(expected) = &state.lan_key else {
+        return Ok(());
+    };
+    let provided = headers
+        .get(DEFAULT_API_KEY_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| LanApiError::unauthorized("missing LAN key"))?;
+    if provided == expected {
+        Ok(())
+    } else {
+        Err(LanApiError::unauthorized("invalid LAN key"))
+    }
+}
+
+fn validate_sha256(value: &str) -> Result<()> {
+    if value.len() == 64 && value.chars().all(|c| c.is_ascii_hexdigit()) {
+        Ok(())
+    } else {
+        bail!("sha256 must be a 64-character hex string")
+    }
+}
+
+fn stable_font_id(sha256: &str) -> Uuid {
+    let mut bytes = [0_u8; 16];
+    if let Ok(decoded) = hex::decode(sha256) {
+        for (index, byte) in decoded.into_iter().take(16).enumerate() {
+            bytes[index] = byte;
+        }
+    }
+    Uuid::from_bytes(bytes)
+}
+
+struct LanApiError {
+    status: StatusCode,
+    message: String,
+}
+
+impl LanApiError {
+    fn bad_request(error: impl std::fmt::Display) -> Self {
+        Self {
+            status: StatusCode::BAD_REQUEST,
+            message: error.to_string(),
+        }
+    }
+
+    fn unauthorized(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::UNAUTHORIZED,
+            message: message.into(),
+        }
+    }
+
+    fn not_found(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::NOT_FOUND,
+            message: message.into(),
+        }
+    }
+
+    fn internal(error: impl std::fmt::Display) -> Self {
+        Self {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            message: error.to_string(),
+        }
+    }
+}
+
+impl IntoResponse for LanApiError {
+    fn into_response(self) -> Response {
+        (
+            self.status,
+            Json(serde_json::json!({ "error": self.message })),
+        )
+            .into_response()
     }
 }
 
