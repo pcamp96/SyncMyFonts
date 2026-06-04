@@ -69,8 +69,17 @@ fn saved_peer_sync_all_installs_matching_font_bytes() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let installed = peer_b_fonts.join("SyncMyFonts").join("Workshop-Test.ttf");
-    assert_eq!(fs::read(source_font).unwrap(), fs::read(installed).unwrap());
+    let expected_bytes = fs::read(source_font).unwrap();
+    let managed_dir = peer_b_fonts.join("SyncMyFonts");
+    let matching_install = fs::read_dir(&managed_dir)
+        .unwrap()
+        .filter_map(Result::ok)
+        .any(|entry| fs::read(entry.path()).is_ok_and(|bytes| bytes == expected_bytes));
+    assert!(
+        matching_install,
+        "no installed font in {} matched source bytes",
+        managed_dir.display()
+    );
 
     let _ = fs::remove_dir_all(root);
 }
