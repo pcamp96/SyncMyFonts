@@ -73,6 +73,18 @@ docker run -d \
 cargo build
 ```
 
+## Run the Local App
+
+The agent includes a small browser-based desktop control surface:
+
+```bash
+cargo run -p syncmyfonts-agent -- app
+```
+
+Open the shown localhost URL. The app can scan fonts, save LAN peers, dry-run
+syncs, sync all saved peers, start/stop LAN sharing, and produce a redacted
+diagnostics report.
+
 ## Client Commands
 
 Scan local user fonts:
@@ -166,18 +178,21 @@ or firewall permission when a device is serving fonts.
 
 ## App Wrapper Plan
 
-The current MVP is a cross-platform CLI agent. The app wrapper should call these
-same commands instead of reimplementing sync logic:
+The current MVP is a cross-platform agent with a local browser control surface.
+Native tray/menu wrappers should call these same commands instead of
+reimplementing sync logic:
 
 - "Share fonts on this network" -> `syncmyfonts-agent lan-serve`
 - "Pull fonts from another device" -> `syncmyfonts-agent lan-sync`
 - "Preview what would install" -> `syncmyfonts-agent lan-sync --dry-run`
 - "Sync through my server" -> `syncmyfonts-agent sync`
+- "Open control surface" -> `syncmyfonts-agent app`
 
 See the platform app notes in:
 
 - `docs/macos-lan-app.md`
 - `docs/windows-lan-app.md`
+- `docs/release.md`
 
 ## Platform Install Paths
 

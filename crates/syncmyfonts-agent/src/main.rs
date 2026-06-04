@@ -4,7 +4,8 @@ use std::{
     io::Write,
     net::SocketAddr,
     path::{Path, PathBuf},
-    sync::Arc,
+    process::{Child, Command},
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -14,8 +15,8 @@ use axum::{
     body::Body,
     extract::{Path as AxumPath, State},
     http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
-    routing::get,
+    response::{Html, IntoResponse, Response},
+    routing::{get, post},
 };
 use chrono::Utc;
 use clap::{Parser, Subcommand};
@@ -93,6 +94,13 @@ enum Commands {
     LanSyncAll {
         #[arg(long)]
         dry_run: bool,
+    },
+    /// Print a redacted support report for troubleshooting.
+    Diagnostics,
+    /// Run the local desktop control surface.
+    App {
+        #[arg(long, default_value = "127.0.0.1:7380")]
+        listen: SocketAddr,
     },
 }
 
@@ -174,6 +182,13 @@ fn main() -> Result<()> {
         Commands::LanSyncAll { dry_run } => {
             let report = lan_sync_all(dry_run)?;
             print_json(&report)?;
+        }
+        Commands::Diagnostics => {
+            print_json(&diagnostics()?)?;
+        }
+        Commands::App { listen } => {
+            let runtime = tokio::runtime::Runtime::new().context("starting app runtime")?;
+            runtime.block_on(app_serve(listen))?;
         }
     }
     Ok(())
@@ -439,6 +454,61 @@ struct LanPeerSyncReport {
     error: Option<String>,
 }
 
+#[derive(Clone)]
+struct AppState {
+    share_child: Arc<Mutex<Option<Child>>>,
+}
+
+#[derive(Debug, Serialize)]
+struct AppStatus {
+    platform: &'static str,
+    device_name: String,
+    config_path: PathBuf,
+    user_font_dir: PathBuf,
+    managed_font_dir: PathBuf,
+    sharing: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct AddPeerRequest {
+    name: String,
+    url: String,
+    lan_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ShareRequest {
+    listen: Option<String>,
+    lan_key: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct ShareResponse {
+    sharing: bool,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+struct DiagnosticsReport {
+    version: &'static str,
+    platform: &'static str,
+    device_name: String,
+    config_path: PathBuf,
+    user_font_dir: PathBuf,
+    managed_font_dir: PathBuf,
+    saved_peer_count: usize,
+    saved_peers: Vec<RedactedPeer>,
+    user_font_count: usize,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct RedactedPeer {
+    name: String,
+    url: String,
+    has_lan_key: bool,
+}
+
 async fn lan_serve(listen: SocketAddr, lan_key: Option<String>) -> Result<()> {
     tracing_subscriber::registry()
         .with(
@@ -611,6 +681,153 @@ fn lan_sync_all(dry_run: bool) -> Result<LanSyncAllReport> {
         }
     }
     Ok(LanSyncAllReport { peers, dry_run })
+}
+
+fn diagnostics() -> Result<DiagnosticsReport> {
+    let config = load_app_config()?;
+    let scan = scan(true)?;
+    let saved_peers = config
+        .peers
+        .iter()
+        .map(|peer| RedactedPeer {
+            name: peer.name.clone(),
+            url: peer.url.clone(),
+            has_lan_key: peer.lan_key.is_some(),
+        })
+        .collect::<Vec<_>>();
+    Ok(DiagnosticsReport {
+        version: env!("CARGO_PKG_VERSION"),
+        platform: platform_name(),
+        device_name: device_name(),
+        config_path: app_config_path()?,
+        user_font_dir: user_font_dir()?,
+        managed_font_dir: managed_font_dir()?,
+        saved_peer_count: config.peers.len(),
+        saved_peers,
+        user_font_count: scan.fonts.len(),
+        warnings: scan.warnings,
+    })
+}
+
+async fn app_serve(listen: SocketAddr) -> Result<()> {
+    let state = AppState {
+        share_child: Arc::new(Mutex::new(None)),
+    };
+    let app = Router::new()
+        .route("/", get(app_index))
+        .route("/api/status", get(app_status))
+        .route("/api/scan", get(app_scan))
+        .route("/api/diagnostics", get(app_diagnostics))
+        .route("/api/peers", get(app_peers).post(app_add_peer))
+        .route("/api/sync-all", post(app_sync_all))
+        .route("/api/sync-all/dry-run", post(app_sync_all_dry_run))
+        .route("/api/share/start", post(app_share_start))
+        .route("/api/share/stop", post(app_share_stop))
+        .with_state(state);
+
+    let listener = tokio::net::TcpListener::bind(listen)
+        .await
+        .with_context(|| format!("binding app control surface at {listen}"))?;
+    eprintln!("SyncMyFonts app running at http://{listen}");
+    axum::serve(listener, app).await?;
+    Ok(())
+}
+
+async fn app_index() -> Html<&'static str> {
+    Html(APP_HTML)
+}
+
+async fn app_status(State(state): State<AppState>) -> Result<Json<AppStatus>, LanApiError> {
+    Ok(Json(AppStatus {
+        platform: platform_name(),
+        device_name: device_name(),
+        config_path: app_config_path().map_err(LanApiError::internal)?,
+        user_font_dir: user_font_dir().map_err(LanApiError::internal)?,
+        managed_font_dir: managed_font_dir().map_err(LanApiError::internal)?,
+        sharing: state
+            .share_child
+            .lock()
+            .map_err(|_| LanApiError::internal("share state lock poisoned"))?
+            .is_some(),
+    }))
+}
+
+async fn app_scan() -> Result<Json<ScanOutput>, LanApiError> {
+    scan(true).map(Json).map_err(LanApiError::internal)
+}
+
+async fn app_diagnostics() -> Result<Json<DiagnosticsReport>, LanApiError> {
+    diagnostics().map(Json).map_err(LanApiError::internal)
+}
+
+async fn app_peers() -> Result<Json<Vec<LanPeerConfig>>, LanApiError> {
+    load_app_config()
+        .map(|config| Json(config.peers))
+        .map_err(LanApiError::internal)
+}
+
+async fn app_add_peer(
+    Json(request): Json<AddPeerRequest>,
+) -> Result<Json<LanPeerConfig>, LanApiError> {
+    add_lan_peer(request.name, request.url, request.lan_key)
+        .map(Json)
+        .map_err(LanApiError::internal)
+}
+
+async fn app_sync_all() -> Result<Json<LanSyncAllReport>, LanApiError> {
+    lan_sync_all(false).map(Json).map_err(LanApiError::internal)
+}
+
+async fn app_sync_all_dry_run() -> Result<Json<LanSyncAllReport>, LanApiError> {
+    lan_sync_all(true).map(Json).map_err(LanApiError::internal)
+}
+
+async fn app_share_start(
+    State(state): State<AppState>,
+    Json(request): Json<ShareRequest>,
+) -> Result<Json<ShareResponse>, LanApiError> {
+    let mut guard = state
+        .share_child
+        .lock()
+        .map_err(|_| LanApiError::internal("share state lock poisoned"))?;
+    if guard.is_some() {
+        return Ok(Json(ShareResponse {
+            sharing: true,
+            message: "Already sharing fonts on the LAN.".to_string(),
+        }));
+    }
+    let exe = std::env::current_exe().map_err(LanApiError::internal)?;
+    let listen = request.listen.unwrap_or_else(|| "0.0.0.0:7370".to_string());
+    let mut command = Command::new(exe);
+    command.args(["lan-serve", "--listen", &listen]);
+    if let Some(lan_key) = request.lan_key {
+        command.env("SYNCMYFONTS_LAN_KEY", lan_key);
+    }
+    let child = command.spawn().map_err(LanApiError::internal)?;
+    *guard = Some(child);
+    Ok(Json(ShareResponse {
+        sharing: true,
+        message: format!("Sharing fonts at {listen}."),
+    }))
+}
+
+async fn app_share_stop(State(state): State<AppState>) -> Result<Json<ShareResponse>, LanApiError> {
+    let mut guard = state
+        .share_child
+        .lock()
+        .map_err(|_| LanApiError::internal("share state lock poisoned"))?;
+    let Some(mut child) = guard.take() else {
+        return Ok(Json(ShareResponse {
+            sharing: false,
+            message: "Sharing was not running.".to_string(),
+        }));
+    };
+    let _ = child.kill();
+    let _ = child.wait();
+    Ok(Json(ShareResponse {
+        sharing: false,
+        message: "Stopped sharing fonts.".to_string(),
+    }))
 }
 
 fn find_local_font_by_hash(sha256: &str) -> Result<Option<LocalFont>> {
@@ -1019,3 +1236,226 @@ fn is_temp_file(path: &Path) -> bool {
         })
         .unwrap_or(false)
 }
+
+const APP_HTML: &str = r#"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SyncMyFonts</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.4;
+    }
+    body {
+      margin: 0;
+      background: Canvas;
+      color: CanvasText;
+    }
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 1px solid color-mix(in oklab, CanvasText 18%, Canvas);
+      padding-bottom: 18px;
+      margin-bottom: 22px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 30px;
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+    }
+    section {
+      padding: 18px 0;
+      border-bottom: 1px solid color-mix(in oklab, CanvasText 12%, Canvas);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+    }
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+      color: color-mix(in oklab, CanvasText 72%, Canvas);
+    }
+    input {
+      font: inherit;
+      padding: 10px;
+      border: 1px solid color-mix(in oklab, CanvasText 28%, Canvas);
+      background: Canvas;
+      color: CanvasText;
+      border-radius: 6px;
+    }
+    button {
+      font: inherit;
+      padding: 10px 12px;
+      border: 1px solid color-mix(in oklab, CanvasText 30%, Canvas);
+      background: color-mix(in oklab, CanvasText 8%, Canvas);
+      color: CanvasText;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button.primary {
+      background: #116149;
+      border-color: #116149;
+      color: white;
+    }
+    button.danger {
+      background: #8f1f1f;
+      border-color: #8f1f1f;
+      color: white;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: color-mix(in oklab, CanvasText 7%, Canvas);
+      border-radius: 6px;
+      padding: 12px;
+      min-height: 120px;
+    }
+    .muted {
+      color: color-mix(in oklab, CanvasText 64%, Canvas);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>SyncMyFonts</h1>
+        <div class="muted" id="status">Loading local app status...</div>
+      </div>
+      <button onclick="refresh()">Refresh</button>
+    </header>
+
+    <section>
+      <h2>Local Font Library</h2>
+      <div class="row">
+        <button onclick="scanFonts()">Scan Fonts</button>
+        <button onclick="diagnostics()">Diagnostics</button>
+        <button class="primary" onclick="syncAll(false)">Sync Saved Peers</button>
+        <button onclick="syncAll(true)">Dry Run</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Saved LAN Peer</h2>
+      <div class="grid">
+        <label>Name <input id="peerName" placeholder="Workshop PC"></label>
+        <label>URL <input id="peerUrl" placeholder="http://192.168.1.50:7370"></label>
+        <label>Shared Key <input id="peerKey" placeholder="choose-a-shared-key"></label>
+      </div>
+      <p class="row">
+        <button onclick="savePeer()">Save Peer</button>
+        <button onclick="loadPeers()">List Peers</button>
+      </p>
+    </section>
+
+    <section>
+      <h2>Share This Device</h2>
+      <div class="grid">
+        <label>Listen Address <input id="listen" value="0.0.0.0:7370"></label>
+        <label>Shared Key <input id="shareKey" placeholder="choose-a-shared-key"></label>
+      </div>
+      <p class="row">
+        <button class="primary" onclick="startShare()">Share Fonts On LAN</button>
+        <button class="danger" onclick="stopShare()">Stop Sharing</button>
+      </p>
+      <p class="muted">Only use sharing on trusted local networks. No port forwarding is required.</p>
+    </section>
+
+    <section>
+      <h2>Result</h2>
+      <pre id="output">Ready.</pre>
+    </section>
+  </main>
+  <script>
+    const out = document.getElementById('output');
+    function show(value) {
+      out.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    }
+    async function request(path, options = {}) {
+      const response = await fetch(path, options);
+      const text = await response.text();
+      let body;
+      try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+      if (!response.ok) throw new Error(typeof body === 'string' ? body : JSON.stringify(body));
+      return body;
+    }
+    async function refresh() {
+      try {
+        const status = await request('/api/status');
+        document.getElementById('status').textContent =
+          `${status.device_name} · ${status.platform} · sharing: ${status.sharing ? 'on' : 'off'}`;
+      } catch (error) { show(error.message); }
+    }
+    async function scanFonts() {
+      try { show(await request('/api/scan')); } catch (error) { show(error.message); }
+    }
+    async function diagnostics() {
+      try { show(await request('/api/diagnostics')); } catch (error) { show(error.message); }
+    }
+    async function loadPeers() {
+      try { show(await request('/api/peers')); } catch (error) { show(error.message); }
+    }
+    async function savePeer() {
+      try {
+        show(await request('/api/peers', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            name: document.getElementById('peerName').value,
+            url: document.getElementById('peerUrl').value,
+            lan_key: document.getElementById('peerKey').value || null
+          })
+        }));
+      } catch (error) { show(error.message); }
+    }
+    async function syncAll(dryRun) {
+      try {
+        show(await request(dryRun ? '/api/sync-all/dry-run' : '/api/sync-all', { method: 'POST' }));
+      } catch (error) { show(error.message); }
+    }
+    async function startShare() {
+      try {
+        show(await request('/api/share/start', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            listen: document.getElementById('listen').value,
+            lan_key: document.getElementById('shareKey').value || null
+          })
+        }));
+        refresh();
+      } catch (error) { show(error.message); }
+    }
+    async function stopShare() {
+      try {
+        show(await request('/api/share/stop', { method: 'POST' }));
+        refresh();
+      } catch (error) { show(error.message); }
+    }
+    refresh();
+  </script>
+</body>
+</html>"#;

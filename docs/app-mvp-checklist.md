@@ -50,6 +50,8 @@ The app MVP should reuse the current agent commands:
 - [ ] `Save Peer` wraps
   `syncmyfonts-agent lan-add-peer --name <name> --url http://<peer-lan-ip>:7370`.
 - [ ] `Sync Saved Peers` wraps `syncmyfonts-agent lan-sync-all`.
+- [ ] `Diagnostics` wraps `syncmyfonts-agent diagnostics`.
+- [ ] `Open Control Surface` wraps `syncmyfonts-agent app`.
 - [ ] `Share Fonts On This Network` starts
   `syncmyfonts-agent lan-serve --listen 0.0.0.0:7370`.
 - [ ] `Stop Sharing` terminates the running `lan-serve` process cleanly.
@@ -182,6 +184,8 @@ Already present in the repo:
 - CLI commands for `scan`, `push`, `sync`, `lan-serve`, and `lan-sync`.
 - CLI commands for saved peers: `lan-add-peer`, `lan-peers`, and
   `lan-sync-all`.
+- CLI/app command for redacted diagnostics: `diagnostics`.
+- Local browser control surface command: `app`.
 - LAN peer HTTP endpoints for health, manifest, and blob download.
 - Optional LAN bearer key through `SYNCMYFONTS_LAN_KEY`.
 - Server API key support through `SYNCMYFONTS_API_KEY`.
@@ -195,16 +199,19 @@ Already present in the repo:
 - Per-user JSON config with a stable local device ID and saved LAN peers.
 - macOS LaunchAgent templates and install/uninstall helpers.
 - Windows current-user Scheduled Task and Startup shortcut helpers.
+- macOS release helper that packages the agent, docs, and launcher helpers.
+- Windows release helper script for PowerShell-based packaging.
 
 ## Remaining Gaps
 
-- [ ] App wrapper or tray/menu-bar UI for macOS.
-- [ ] App wrapper or tray UI for Windows.
-- [ ] Packaged binaries and installer/update flow for both platforms.
+- [x] Local browser app/control surface for macOS and Windows.
+- [ ] Native tray/menu-bar UI for macOS.
+- [ ] Native tray UI for Windows.
+- [x] Basic release archive scripts for macOS and Windows.
 - [x] Stored per-user config with saved peer URLs and LAN keys.
 - [ ] Keychain or Credential Manager integration for secrets.
 - [ ] Stable machine-readable reports for every command and error.
-- [ ] Dedicated diagnostics command or support-report artifact.
+- [x] Dedicated diagnostics command or support-report artifact.
 - [ ] Local ownership manifest for managed fonts.
 - [ ] Explicit conflict review UI.
 - [ ] Bonjour/mDNS discovery.
