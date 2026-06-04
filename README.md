@@ -133,6 +133,27 @@ The first LAN MVP uses manual peer URLs. Bonjour/mDNS discovery, QR-code
 pairing, tray apps, and background startup wrappers are planned next-layer app
 features.
 
+Save a peer for repeated sync:
+
+```bash
+cargo run -p syncmyfonts-agent -- lan-add-peer \
+  --name "Workshop PC" \
+  --url http://<peer-lan-ip>:7370 \
+  --lan-key choose-a-shared-key
+```
+
+List saved peers:
+
+```bash
+cargo run -p syncmyfonts-agent -- lan-peers
+```
+
+Pull from every saved peer:
+
+```bash
+cargo run -p syncmyfonts-agent -- lan-sync-all
+```
+
 To sync both directions today, run `lan-sync` once from each device while the
 other device is serving. For example:
 

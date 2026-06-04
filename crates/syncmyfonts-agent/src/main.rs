@@ -20,7 +20,7 @@ use axum::{
 use chrono::Utc;
 use clap::{Parser, Subcommand};
 use reqwest::blocking::{Client, multipart};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use syncmyfonts_core::{
     API_VERSION, DEFAULT_API_KEY_HEADER, DeviceCheckInRequest, FontFormat, FontManifestEntry,
@@ -75,6 +75,22 @@ enum Commands {
         peer: String,
         #[arg(long, env = "SYNCMYFONTS_LAN_KEY")]
         lan_key: Option<String>,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Save a LAN peer so app wrappers can sync without retyping URLs.
+    LanAddPeer {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        url: String,
+        #[arg(long, env = "SYNCMYFONTS_LAN_KEY")]
+        lan_key: Option<String>,
+    },
+    /// List saved LAN peers.
+    LanPeers,
+    /// Pull missing fonts from every saved LAN peer.
+    LanSyncAll {
         #[arg(long)]
         dry_run: bool,
     },
@@ -146,6 +162,17 @@ fn main() -> Result<()> {
             dry_run,
         } => {
             let report = lan_sync(&peer, lan_key.as_deref(), dry_run)?;
+            print_json(&report)?;
+        }
+        Commands::LanAddPeer { name, url, lan_key } => {
+            let peer = add_lan_peer(name, url, lan_key)?;
+            print_json(&peer)?;
+        }
+        Commands::LanPeers => {
+            print_json(&load_app_config()?.peers)?;
+        }
+        Commands::LanSyncAll { dry_run } => {
+            let report = lan_sync_all(dry_run)?;
             print_json(&report)?;
         }
     }
@@ -382,6 +409,36 @@ struct LanSyncReport {
     dry_run: bool,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct AppConfig {
+    schema: u8,
+    device_id: Option<Uuid>,
+    peers: Vec<LanPeerConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LanPeerConfig {
+    name: String,
+    url: String,
+    lan_key: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct LanSyncAllReport {
+    peers: Vec<LanPeerSyncReport>,
+    dry_run: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct LanPeerSyncReport {
+    name: String,
+    url: String,
+    ok: bool,
+    installed: Vec<PathBuf>,
+    skipped: Vec<String>,
+    error: Option<String>,
+}
+
 async fn lan_serve(listen: SocketAddr, lan_key: Option<String>) -> Result<()> {
     tracing_subscriber::registry()
         .with(
@@ -510,11 +567,121 @@ fn lan_sync(peer: &str, lan_key: Option<&str>, dry_run: bool) -> Result<LanSyncR
     })
 }
 
+fn add_lan_peer(name: String, url: String, lan_key: Option<String>) -> Result<LanPeerConfig> {
+    let mut config = load_app_config()?;
+    let peer = LanPeerConfig {
+        name,
+        url: normalize_peer_url(&url),
+        lan_key,
+    };
+    if let Some(existing) = config
+        .peers
+        .iter_mut()
+        .find(|existing| existing.name == peer.name)
+    {
+        *existing = peer.clone();
+    } else {
+        config.peers.push(peer.clone());
+    }
+    save_app_config(&config)?;
+    Ok(peer)
+}
+
+fn lan_sync_all(dry_run: bool) -> Result<LanSyncAllReport> {
+    let config = load_app_config()?;
+    let mut peers = Vec::new();
+    for peer in config.peers {
+        match lan_sync(&peer.url, peer.lan_key.as_deref(), dry_run) {
+            Ok(report) => peers.push(LanPeerSyncReport {
+                name: peer.name,
+                url: peer.url,
+                ok: true,
+                installed: report.installed,
+                skipped: report.skipped,
+                error: None,
+            }),
+            Err(error) => peers.push(LanPeerSyncReport {
+                name: peer.name,
+                url: peer.url,
+                ok: false,
+                installed: Vec::new(),
+                skipped: Vec::new(),
+                error: Some(error.to_string()),
+            }),
+        }
+    }
+    Ok(LanSyncAllReport { peers, dry_run })
+}
+
 fn find_local_font_by_hash(sha256: &str) -> Result<Option<LocalFont>> {
     Ok(scan(true)?
         .fonts
         .into_iter()
         .find(|font| font.content_sha256 == sha256))
+}
+
+fn load_app_config() -> Result<AppConfig> {
+    let path = app_config_path()?;
+    if !path.exists() {
+        return Ok(AppConfig {
+            schema: 1,
+            device_id: Some(Uuid::new_v4()),
+            peers: Vec::new(),
+        });
+    }
+    let bytes = fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
+    let mut config: AppConfig =
+        serde_json::from_slice(&bytes).with_context(|| format!("parsing {}", path.display()))?;
+    if config.schema == 0 {
+        config.schema = 1;
+    }
+    if config.device_id.is_none() {
+        config.device_id = Some(Uuid::new_v4());
+        save_app_config(&config)?;
+    }
+    Ok(config)
+}
+
+fn save_app_config(config: &AppConfig) -> Result<()> {
+    let path = app_config_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    }
+    let temp = path.with_extension("json.tmp");
+    let bytes = serde_json::to_vec_pretty(config).context("serializing app config")?;
+    fs::write(&temp, bytes).with_context(|| format!("writing {}", temp.display()))?;
+    fs::rename(&temp, &path).with_context(|| format!("saving {}", path.display()))?;
+    Ok(())
+}
+
+fn app_config_path() -> Result<PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        use directories::UserDirs;
+        let home = UserDirs::new()
+            .ok_or_else(|| anyhow!("user home directory unavailable"))?
+            .home_dir()
+            .to_path_buf();
+        return Ok(home
+            .join("Library/Application Support/SyncMyFonts")
+            .join("config.json"));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use directories::BaseDirs;
+        let base = BaseDirs::new().ok_or_else(|| anyhow!("APPDATA unavailable"))?;
+        return Ok(base.config_dir().join("SyncMyFonts").join("config.json"));
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        use directories::BaseDirs;
+        let base = BaseDirs::new().ok_or_else(|| anyhow!("user config directory unavailable"))?;
+        Ok(base.config_dir().join("syncmyfonts").join("config.json"))
+    }
+}
+
+fn normalize_peer_url(url: &str) -> String {
+    url.trim().trim_end_matches('/').to_string()
 }
 
 fn inspect_font(path: &Path, file_name: String, format: FontFormat) -> Result<LocalFont> {
