@@ -1,0 +1,79 @@
+name: Cross-Platform Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        if: runner.os != 'Windows'
+        run: cargo fmt --check
+
+      - name: Check
+        run: cargo check --workspace
+
+      - name: Test
+        run: cargo test --workspace
+
+      - name: Build agent release
+        run: cargo build --release -p syncmyfonts-agent
+
+      - name: Verify macOS launcher scripts
+        if: runner.os == 'macOS'
+        run: |
+          sh -n packaging/macos/install-launchagent.sh
+          sh -n packaging/macos/uninstall-launchagent.sh
+          sed -e 's|{{SYNCMYFONTS_RUNNER_PATH}}|/tmp/syncmyfonts-runner.sh|g' \
+              -e 's|{{SYNCMYFONTS_LOG_DIR}}|/tmp|g' \
+              -e 's|{{SYNCMYFONTS_WORKING_DIR}}|/tmp|g' \
+              packaging/macos/com.syncmyfonts.lan-serve.plist.template > /tmp/syncmyfonts-serve.plist
+          sed -e 's|{{SYNCMYFONTS_RUNNER_PATH}}|/tmp/syncmyfonts-runner.sh|g' \
+              -e 's|{{SYNCMYFONTS_SYNC_INTERVAL_SECONDS}}|14400|g' \
+              -e 's|{{SYNCMYFONTS_LOG_DIR}}|/tmp|g' \
+              -e 's|{{SYNCMYFONTS_WORKING_DIR}}|/tmp|g' \
+              packaging/macos/com.syncmyfonts.lan-sync.plist.template > /tmp/syncmyfonts-sync.plist
+          plutil -lint /tmp/syncmyfonts-serve.plist /tmp/syncmyfonts-sync.plist
+
+      - name: Verify PowerShell launcher scripts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          [System.Management.Automation.PSParser]::Tokenize((Get-Content packaging/windows/install-startup-task.ps1 -Raw), [ref]$null) | Out-Null
+          [System.Management.Automation.PSParser]::Tokenize((Get-Content packaging/windows/uninstall-startup-task.ps1 -Raw), [ref]$null) | Out-Null
+          [System.Management.Automation.PSParser]::Tokenize((Get-Content packaging/windows/create-startup-shortcut.ps1 -Raw), [ref]$null) | Out-Null
+
+      - name: Build macOS archive
+        if: runner.os == 'macOS'
+        run: scripts/release/build-macos.sh
+
+      - name: Build Windows archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\scripts\release\build-windows.ps1

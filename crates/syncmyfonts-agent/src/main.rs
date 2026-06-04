@@ -1081,6 +1081,7 @@ fn platform_post_install(path: &Path) -> Result<()> {
         if !status.success() {
             bail!("RegistryWriteFailed: reg.exe returned {}", status);
         }
+        notify_windows_font_change();
     }
     #[cfg(target_os = "macos")]
     {
@@ -1090,6 +1091,27 @@ fn platform_post_install(path: &Path) -> Result<()> {
         );
     }
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn notify_windows_font_change() {
+    use windows_sys::Win32::Foundation::{HWND_BROADCAST, LPARAM, WPARAM};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SMTO_ABORTIFHUNG, SendMessageTimeoutW, WM_FONTCHANGE,
+    };
+
+    let mut result = 0;
+    unsafe {
+        SendMessageTimeoutW(
+            HWND_BROADCAST,
+            WM_FONTCHANGE,
+            WPARAM::default(),
+            LPARAM::default(),
+            SMTO_ABORTIFHUNG,
+            5000,
+            &mut result,
+        );
+    }
 }
 
 fn api_url(server: &str, path: &str) -> Result<String> {

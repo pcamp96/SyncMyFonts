@@ -119,6 +119,7 @@ The app MVP should reuse the current agent commands:
 
 - [ ] `cargo build` succeeds on macOS.
 - [ ] `cargo build` succeeds on Windows.
+- [ ] GitHub Actions proves macOS and Windows build/test/release packaging.
 - [ ] `cargo run -p syncmyfonts-agent -- scan` returns JSON inventory on macOS.
 - [ ] `cargo run -p syncmyfonts-agent -- scan` returns JSON inventory on
   Windows.
@@ -194,6 +195,7 @@ Already present in the repo:
 - Windows per-user install path under
   `%LOCALAPPDATA%\Microsoft\Windows\Fonts`.
 - Windows `HKCU` font registry registration through `reg.exe`.
+- Windows `WM_FONTCHANGE` broadcast after user font registry registration.
 - Deterministic same-name different-content suffixing.
 - Docker Compose server startup.
 - Per-user JSON config with a stable local device ID and saved LAN peers.
@@ -201,6 +203,7 @@ Already present in the repo:
 - Windows current-user Scheduled Task and Startup shortcut helpers.
 - macOS release helper that packages the agent, docs, and launcher helpers.
 - Windows release helper script for PowerShell-based packaging.
+- GitHub Actions workflow for macOS and Windows build/test/package checks.
 
 ## Remaining Gaps
 
@@ -218,7 +221,7 @@ Already present in the repo:
 - [ ] Pairing-code flow from the protocol doc.
 - [ ] Firewall/network-profile detection for hosted Windows peer mode.
 - [ ] macOS bundled-app Local Network permission testing.
-- [ ] Windows `WM_FONTCHANGE` notification after registry writes.
+- [x] Windows `WM_FONTCHANGE` notification after registry writes.
 - [ ] Automated cross-platform LAN test fixture.
 
 ## MVP Acceptance
