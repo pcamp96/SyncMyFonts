@@ -1108,9 +1108,9 @@ fn platform_post_install(path: &Path) -> Result<()> {
 
 #[cfg(target_os = "windows")]
 fn notify_windows_font_change() {
-    use windows_sys::Win32::Foundation::{HWND_BROADCAST, LPARAM, WPARAM};
+    use windows_sys::Win32::Foundation::{LPARAM, WPARAM};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        SMTO_ABORTIFHUNG, SendMessageTimeoutW, WM_FONTCHANGE,
+        HWND_BROADCAST, SMTO_ABORTIFHUNG, SendMessageTimeoutW, WM_FONTCHANGE,
     };
 
     let mut result = 0;
