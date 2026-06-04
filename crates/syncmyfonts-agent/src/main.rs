@@ -872,6 +872,10 @@ fn save_app_config(config: &AppConfig) -> Result<()> {
 }
 
 fn app_config_path() -> Result<PathBuf> {
+    if let Ok(config_dir) = std::env::var("SYNCMYFONTS_CONFIG_DIR") {
+        return Ok(PathBuf::from(config_dir).join("config.json"));
+    }
+
     #[cfg(target_os = "macos")]
     {
         use directories::UserDirs;
@@ -1011,6 +1015,10 @@ fn safe_file_name(remote_file_name: &str, expected_sha256: &str) -> String {
 }
 
 fn user_font_dir() -> Result<PathBuf> {
+    if let Ok(font_dir) = std::env::var("SYNCMYFONTS_USER_FONT_DIR") {
+        return Ok(PathBuf::from(font_dir));
+    }
+
     #[cfg(target_os = "macos")]
     {
         use directories::UserDirs;
@@ -1054,6 +1062,11 @@ fn managed_install_dir() -> Result<PathBuf> {
 }
 
 fn platform_post_install(path: &Path) -> Result<()> {
+    if std::env::var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION").as_deref() == Ok("1") {
+        let _ = path;
+        return Ok(());
+    }
+
     #[cfg(target_os = "windows")]
     {
         let stem = path

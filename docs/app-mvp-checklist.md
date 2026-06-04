@@ -25,8 +25,8 @@ The app MVP should reuse the current agent commands:
 
 ## Must-Have Product Behavior
 
-- [ ] Sync only current-user fonts and SyncMyFonts-managed fonts.
-- [ ] Never scan, copy, install, delete, or mutate system font directories.
+- [x] Sync only current-user fonts and SyncMyFonts-managed fonts.
+- [x] Never scan, copy, install, delete, or mutate system font directories.
 - [ ] Install synced fonts without administrator privileges.
 - [ ] Treat SHA-256 as the font identity and deduplicate identical bytes across
   macOS and Windows.
@@ -207,6 +207,7 @@ Already present in the repo:
 - Windows release helper script for PowerShell-based packaging.
 - GitHub Actions workflow for macOS and Windows build/test/package checks.
 - Unit tests for core helper behavior used by the local app and LAN sync flow.
+- Integration test for saved LAN peer sync using two isolated user font roots.
 
 ## Remaining Gaps
 
@@ -225,7 +226,7 @@ Already present in the repo:
 - [ ] Firewall/network-profile detection for hosted Windows peer mode.
 - [ ] macOS bundled-app Local Network permission testing.
 - [x] Windows `WM_FONTCHANGE` notification after registry writes.
-- [ ] Automated cross-platform LAN test fixture.
+- [x] Automated LAN test fixture for saved-peer pull/install behavior.
 
 ## MVP Acceptance
 
