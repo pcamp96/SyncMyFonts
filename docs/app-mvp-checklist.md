@@ -166,6 +166,8 @@ The app MVP should reuse the current agent commands:
 - [ ] Same file name with different bytes creates a deterministic suffixed file
   or another documented non-overwrite outcome.
 - [ ] Hash mismatch fails before final install.
+- [x] Unit tests cover filename sanitization, stable hash IDs, peer URL
+  normalization, and diagnostics secret redaction.
 
 ### App UX
 
@@ -204,6 +206,7 @@ Already present in the repo:
 - macOS release helper that packages the agent, docs, and launcher helpers.
 - Windows release helper script for PowerShell-based packaging.
 - GitHub Actions workflow for macOS and Windows build/test/package checks.
+- Unit tests for core helper behavior used by the local app and LAN sync flow.
 
 ## Remaining Gaps
 

@@ -1481,3 +1481,62 @@ const APP_HTML: &str = r#"<!doctype html>
   </script>
 </body>
 </html>"#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn safe_file_name_removes_path_and_reserved_characters() {
+        let name = safe_file_name(
+            "../Fancy Font:*?<>.ttf",
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        );
+
+        assert_eq!(name, "Fancy-Font-----.ttf");
+    }
+
+    #[test]
+    fn safe_file_name_falls_back_for_empty_names() {
+        let name = safe_file_name(
+            "",
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        );
+
+        assert_eq!(name, "font.ttf");
+    }
+
+    #[test]
+    fn stable_font_id_uses_first_16_hash_bytes() {
+        let id = stable_font_id("00112233445566778899aabbccddeeff0123456789abcdef0123456789abcdef");
+
+        assert_eq!(id.to_string(), "00112233-4455-6677-8899-aabbccddeeff");
+    }
+
+    #[test]
+    fn normalize_peer_url_trims_whitespace_and_trailing_slashes() {
+        assert_eq!(
+            normalize_peer_url("  http://192.168.1.50:7370///  "),
+            "http://192.168.1.50:7370"
+        );
+    }
+
+    #[test]
+    fn diagnostics_peer_redaction_reports_presence_not_secret() {
+        let peer = LanPeerConfig {
+            name: "Workshop".to_string(),
+            url: "http://192.168.1.50:7370".to_string(),
+            lan_key: Some("super-secret".to_string()),
+        };
+
+        let redacted = RedactedPeer {
+            name: peer.name,
+            url: peer.url,
+            has_lan_key: peer.lan_key.is_some(),
+        };
+        let json = serde_json::to_string(&redacted).unwrap();
+
+        assert!(json.contains("\"has_lan_key\":true"));
+        assert!(!json.contains("super-secret"));
+    }
+}
