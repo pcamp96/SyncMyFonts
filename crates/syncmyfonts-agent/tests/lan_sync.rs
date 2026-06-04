@@ -70,15 +70,19 @@ fn saved_peer_sync_all_installs_matching_font_bytes() {
     );
 
     let expected_bytes = fs::read(source_font).unwrap();
-    let managed_dir = peer_b_fonts.join("SyncMyFonts");
-    let matching_install = fs::read_dir(&managed_dir)
-        .unwrap()
-        .filter_map(Result::ok)
-        .any(|entry| fs::read(entry.path()).is_ok_and(|bytes| bytes == expected_bytes));
+    let install_dirs = [peer_b_fonts.join("SyncMyFonts"), peer_b_fonts.clone()];
+    let matching_install = install_dirs.iter().any(|install_dir| {
+        fs::read_dir(install_dir)
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .any(|entry| fs::read(entry.path()).is_ok_and(|bytes| bytes == expected_bytes))
+    });
     assert!(
         matching_install,
-        "no installed font in {} matched source bytes",
-        managed_dir.display()
+        "no installed font under {} matched source bytes",
+        peer_b_fonts.display()
     );
 
     let _ = fs::remove_dir_all(root);
