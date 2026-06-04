@@ -18,6 +18,22 @@ if the filename differs.
 Local font deletion does not delete the global library. This is deliberate:
 removing a font from one computer should not surprise-remove it everywhere.
 
+## System Font Exclusion Policy
+
+SyncMyFonts only syncs fonts installed in the current user's font directory. It
+does not scan, upload, copy, install, delete, or manage operating-system font
+directories.
+
+Excluded system locations include:
+
+- macOS: `/System/Library/Fonts`, `/Library/Fonts`, and `/Network/Library/Fonts`
+- Windows: `%WINDIR%\Fonts` and machine-wide registry font entries under `HKLM`
+
+This is both a licensing and safety rule. System fonts may have OS-specific
+licenses, and mutating them can require administrator privileges or destabilize
+applications. SyncMyFonts is intended for fonts the user intentionally installed
+for their own design/workshop workflow.
+
 ## Run the Server
 
 ```bash
