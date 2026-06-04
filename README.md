@@ -32,6 +32,25 @@ Set an API key before exposing it beyond localhost:
 SYNCMYFONTS_API_KEY=change-me docker compose up --build
 ```
 
+## Pull the Published Container
+
+The GitHub Actions workflow publishes multi-architecture images to GHCR:
+
+```bash
+docker pull ghcr.io/pcamp96/syncmyfonts:latest
+```
+
+Run it directly:
+
+```bash
+docker run -d \
+  --name syncmyfonts \
+  -p 7368:7368 \
+  -e SYNCMYFONTS_API_KEY=change-me \
+  -v syncmyfonts-data:/data \
+  ghcr.io/pcamp96/syncmyfonts:latest
+```
+
 ## Build Locally
 
 ```bash
