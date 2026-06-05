@@ -86,8 +86,8 @@ cargo run -p syncmyfonts-agent -- app
 The command opens the local control surface in your browser. The app can scan
 fonts, discover sharing LAN peers, test a LAN peer, preview missing fonts from
 a peer, install missing fonts, save LAN peers, sync all saved peers, start/stop
-LAN sharing, show the copyable LAN URL for this device, and produce a redacted
-diagnostics report.
+LAN sharing, show the copyable LAN URL for this device, verify managed font
+installs, and produce a redacted diagnostics report.
 When SyncMyFonts installs a font, it records that install in a local managed
 font manifest so future tooling can distinguish SyncMyFonts-managed fonts from
 other user-installed fonts.
@@ -113,6 +113,12 @@ Sync missing server fonts onto the current machine:
 
 ```bash
 cargo run -p syncmyfonts-agent -- sync --server http://localhost:7368
+```
+
+Verify SyncMyFonts-managed font installs:
+
+```bash
+cargo run -p syncmyfonts-agent -- verify-managed
 ```
 
 With auth:

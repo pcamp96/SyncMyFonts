@@ -1,8 +1,7 @@
 # App MVP Checklist
 
 Scope: concrete MVP checklist for a macOS plus Windows local sync app built on
-the existing Rust CLI agent and LAN engine. This checklist intentionally does
-not require Rust source changes for the current documentation pass.
+the existing Rust CLI agent and LAN engine.
 
 ## MVP Goal
 
@@ -22,6 +21,7 @@ The app MVP should reuse the current agent commands:
 - `syncmyfonts-agent lan-add-peer --name <name> --url <url>`
 - `syncmyfonts-agent lan-peers`
 - `syncmyfonts-agent lan-sync-all`
+- `syncmyfonts-agent verify-managed`
 
 ## Must-Have Product Behavior
 
@@ -29,15 +29,15 @@ The app MVP should reuse the current agent commands:
 - [x] Never scan, copy, install, delete, or mutate system font directories.
 - [x] Skip installs whose filename conflicts with known system font directories.
 - [ ] Install synced fonts without administrator privileges.
-- [ ] Treat SHA-256 as the font identity and deduplicate identical bytes across
+- [x] Treat SHA-256 as the font identity and deduplicate identical bytes across
   macOS and Windows.
-- [ ] Preserve pull-only LAN semantics: one device serves, the other pulls.
-- [ ] Support bidirectional LAN sync by running pull once in each direction.
-- [ ] Verify downloaded font bytes against the expected SHA-256 before final
+- [x] Preserve pull-only LAN semantics: one device serves, the other pulls.
+- [x] Support bidirectional LAN sync by running pull once in each direction.
+- [x] Verify downloaded font bytes against the expected SHA-256 before final
   install.
-- [ ] Skip unsupported font formats with a visible result.
-- [ ] Avoid deletion propagation in the MVP.
-- [ ] Show clear installed, skipped, dry-run, and failure counts.
+- [x] Skip unsupported font formats with a visible result.
+- [x] Avoid deletion propagation in the MVP.
+- [x] Show clear installed, skipped, dry-run, and failure counts.
 
 ## Must-Have Commands And Wrappers
 
@@ -55,6 +55,7 @@ The app MVP should reuse the current agent commands:
 - [x] `Pair Peer` exchanges an 8-digit pairing code for a saved LAN token.
 - [x] `Sync Saved Peers` wraps `syncmyfonts-agent lan-sync-all`.
 - [x] `Diagnostics` wraps `syncmyfonts-agent diagnostics`.
+- [x] `Verify Managed Fonts` wraps `syncmyfonts-agent verify-managed`.
 - [x] `Open Control Surface` wraps `syncmyfonts-agent app`.
 - [x] `Share Fonts On This Network` starts
   `syncmyfonts-agent lan-serve --listen 0.0.0.0:7370`.

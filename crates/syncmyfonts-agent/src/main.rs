@@ -109,6 +109,8 @@ enum Commands {
     },
     /// Print a redacted support report for troubleshooting.
     Diagnostics,
+    /// Verify SyncMyFonts-managed installed font files still match the manifest.
+    VerifyManaged,
     /// Run the local desktop control surface.
     App {
         #[arg(long, default_value = "127.0.0.1:7380")]
@@ -206,6 +208,9 @@ fn main() -> Result<()> {
         }
         Commands::Diagnostics => {
             print_json(&diagnostics()?)?;
+        }
+        Commands::VerifyManaged => {
+            print_json(&verify_managed_fonts()?)?;
         }
         Commands::App { listen, no_open } => {
             let runtime = tokio::runtime::Runtime::new().context("starting app runtime")?;
@@ -637,6 +642,24 @@ struct ManagedFontRecord {
     size_bytes: u64,
 }
 
+#[derive(Debug, Serialize)]
+struct ManagedVerifyReport {
+    manifest_path: PathBuf,
+    total: usize,
+    ok: usize,
+    missing: Vec<ManagedVerifyIssue>,
+    modified: Vec<ManagedVerifyIssue>,
+    unreadable: Vec<ManagedVerifyIssue>,
+}
+
+#[derive(Debug, Serialize)]
+struct ManagedVerifyIssue {
+    sha256: String,
+    file_name: String,
+    path: PathBuf,
+    message: String,
+}
+
 async fn lan_serve(
     listen: SocketAddr,
     lan_key: Option<String>,
@@ -1030,6 +1053,7 @@ async fn app_serve(listen: SocketAddr, open_browser_on_start: bool) -> Result<()
         .route("/api/status", get(app_status))
         .route("/api/scan", get(app_scan))
         .route("/api/diagnostics", get(app_diagnostics))
+        .route("/api/managed/verify", get(app_verify_managed))
         .route("/api/peers", get(app_peers).post(app_add_peer))
         .route("/api/peers/forget", post(app_forget_peer))
         .route("/api/peers/discover", post(app_discover_peers))
@@ -1076,6 +1100,12 @@ async fn app_scan() -> Result<Json<ScanOutput>, LanApiError> {
 
 async fn app_diagnostics() -> Result<Json<DiagnosticsReport>, LanApiError> {
     diagnostics().map(Json).map_err(LanApiError::internal)
+}
+
+async fn app_verify_managed() -> Result<Json<ManagedVerifyReport>, LanApiError> {
+    verify_managed_fonts()
+        .map(Json)
+        .map_err(LanApiError::internal)
 }
 
 async fn app_peers() -> Result<Json<Vec<LanPeerConfig>>, LanApiError> {
@@ -1458,6 +1488,76 @@ fn record_managed_install(
         .installed
         .sort_by(|a, b| a.file_name.cmp(&b.file_name));
     save_managed_manifest(&manifest)
+}
+
+fn verify_managed_fonts() -> Result<ManagedVerifyReport> {
+    let manifest_path = managed_manifest_path()?;
+    let manifest = load_managed_manifest()?;
+    let total = manifest.installed.len();
+    let mut report = ManagedVerifyReport {
+        manifest_path,
+        total,
+        ok: 0,
+        missing: Vec::new(),
+        modified: Vec::new(),
+        unreadable: Vec::new(),
+    };
+
+    for record in manifest.installed {
+        if !record.path.exists() {
+            report.missing.push(managed_verify_issue(
+                &record,
+                "managed font file is missing",
+            ));
+            continue;
+        }
+
+        let bytes = match fs::read(&record.path) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                report.unreadable.push(managed_verify_issue(
+                    &record,
+                    &format!("managed font file could not be read: {error}"),
+                ));
+                continue;
+            }
+        };
+        let actual_sha256 = hex::encode(Sha256::digest(&bytes));
+        if actual_sha256 != record.sha256 {
+            report.modified.push(managed_verify_issue(
+                &record,
+                &format!(
+                    "managed font hash changed from {} to {}",
+                    record.sha256, actual_sha256
+                ),
+            ));
+            continue;
+        }
+        if bytes.len() as u64 != record.size_bytes {
+            report.modified.push(managed_verify_issue(
+                &record,
+                &format!(
+                    "managed font size changed from {} to {} bytes",
+                    record.size_bytes,
+                    bytes.len()
+                ),
+            ));
+            continue;
+        }
+
+        report.ok += 1;
+    }
+
+    Ok(report)
+}
+
+fn managed_verify_issue(record: &ManagedFontRecord, message: &str) -> ManagedVerifyIssue {
+    ManagedVerifyIssue {
+        sha256: record.sha256.clone(),
+        file_name: record.file_name.clone(),
+        path: record.path.clone(),
+        message: message.to_string(),
+    }
 }
 
 fn diagnostics_warnings(
@@ -2110,6 +2210,7 @@ const APP_HTML: &str = r#"<!doctype html>
       <h2>Local Font Library</h2>
       <div class="row">
         <button onclick="scanFonts()">Scan Fonts</button>
+        <button onclick="verifyManaged()">Verify Managed Fonts</button>
         <button onclick="diagnostics()">Diagnostics</button>
         <button class="primary" onclick="syncAll(false)">Sync Saved Peers</button>
         <button onclick="syncAll(true)">Dry Run</button>
@@ -2176,6 +2277,11 @@ const APP_HTML: &str = r#"<!doctype html>
       if (!value || typeof value !== 'object') return;
       if (Array.isArray(value.fonts)) {
         summary.innerHTML = metric('fonts found', value.fonts.length) + metric('warnings', value.warnings?.length ?? 0);
+      } else if (typeof value.total === 'number' && Array.isArray(value.missing) && Array.isArray(value.modified)) {
+        summary.innerHTML =
+          metric('managed', value.total) +
+          metric('ok', value.ok ?? 0) +
+          metric('issues', (value.missing?.length ?? 0) + (value.modified?.length ?? 0) + (value.unreadable?.length ?? 0));
       } else if (Array.isArray(value.peers)) {
         const installed = value.peers.reduce((count, peer) => count + (peer.installed?.length ?? 0), 0);
         const failed = value.peers.filter(peer => !peer.ok).length;
@@ -2224,6 +2330,16 @@ const APP_HTML: &str = r#"<!doctype html>
     }
     async function diagnostics() {
       try { showResult(await request('/api/diagnostics')); } catch (error) { show(error.message); }
+    }
+    async function verifyManaged() {
+      try {
+        const result = await request('/api/managed/verify');
+        showResult(result);
+        const issues = (result.missing?.length ?? 0) + (result.modified?.length ?? 0) + (result.unreadable?.length ?? 0);
+        setNextStep(issues
+          ? `${issues} managed font issue${issues === 1 ? '' : 's'} found. Review the report before syncing more fonts.`
+          : 'All SyncMyFonts-managed fonts still match the local manifest.');
+      } catch (error) { show(error.message); }
     }
     async function loadPeers() {
       try { showResult(await request('/api/peers')); } catch (error) { show(error.message); }
@@ -2576,5 +2692,70 @@ mod tests {
         assert_eq!(manifest.installed[0].file_name, "Example.ttf");
         assert_eq!(manifest.installed[0].source, "server:http://127.0.0.1:7368");
         assert_eq!(manifest.installed[0].size_bytes, 1234);
+    }
+
+    #[test]
+    fn verify_managed_fonts_reports_ok_missing_and_modified_files() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let config_dir = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+        }
+
+        let fonts_dir = config_dir.join("fonts");
+        fs::create_dir_all(&fonts_dir).unwrap();
+        let ok_path = fonts_dir.join("ok.ttf");
+        let ok_bytes = b"stable managed font";
+        let ok_sha = hex::encode(Sha256::digest(ok_bytes));
+        fs::write(&ok_path, ok_bytes).unwrap();
+        let modified_path = fonts_dir.join("modified.ttf");
+        let original_bytes = b"original managed font";
+        let modified_sha = hex::encode(Sha256::digest(original_bytes));
+        fs::write(&modified_path, b"changed managed font").unwrap();
+        let missing_path = fonts_dir.join("missing.ttf");
+        let manifest = ManagedManifest {
+            schema: 1,
+            installed: vec![
+                ManagedFontRecord {
+                    sha256: ok_sha,
+                    file_name: "Ok.ttf".to_string(),
+                    path: ok_path,
+                    source: "lan:http://127.0.0.1:7370".to_string(),
+                    installed_at: Utc::now().to_rfc3339(),
+                    size_bytes: ok_bytes.len() as u64,
+                },
+                ManagedFontRecord {
+                    sha256: modified_sha,
+                    file_name: "Modified.ttf".to_string(),
+                    path: modified_path,
+                    source: "lan:http://127.0.0.1:7370".to_string(),
+                    installed_at: Utc::now().to_rfc3339(),
+                    size_bytes: original_bytes.len() as u64,
+                },
+                ManagedFontRecord {
+                    sha256: "00112233445566778899aabbccddeeff0123456789abcdef0123456789abcdef"
+                        .to_string(),
+                    file_name: "Missing.ttf".to_string(),
+                    path: missing_path,
+                    source: "lan:http://127.0.0.1:7370".to_string(),
+                    installed_at: Utc::now().to_rfc3339(),
+                    size_bytes: 10,
+                },
+            ],
+        };
+        save_managed_manifest(&manifest).unwrap();
+
+        let report = verify_managed_fonts().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+        }
+
+        assert_eq!(report.total, 3);
+        assert_eq!(report.ok, 1);
+        assert_eq!(report.missing.len(), 1);
+        assert_eq!(report.modified.len(), 1);
+        assert!(report.unreadable.is_empty());
+        assert_eq!(report.missing[0].file_name, "Missing.ttf");
+        assert_eq!(report.modified[0].file_name, "Modified.ttf");
     }
 }
