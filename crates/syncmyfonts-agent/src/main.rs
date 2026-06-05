@@ -4435,6 +4435,7 @@ fn install_font(remote_file_name: &str, expected_sha256: &str, bytes: &[u8]) -> 
     fs::create_dir_all(&install_dir)
         .with_context(|| format!("creating {}", install_dir.display()))?;
     let destination = unique_destination(&install_dir, &safe_name, expected_sha256)?;
+    let destination_existed_before_install = destination.exists();
     let temp = destination.with_extension(format!(
         "{}.tmp",
         destination
@@ -4451,7 +4452,22 @@ fn install_font(remote_file_name: &str, expected_sha256: &str, bytes: &[u8]) -> 
     }
     fs::rename(&temp, &destination)
         .with_context(|| format!("installing {}", destination.display()))?;
-    platform_post_install(&destination)?;
+    if let Err(error) = platform_post_install(&destination) {
+        if !destination_existed_before_install {
+            fs::remove_file(&destination).with_context(|| {
+                format!(
+                    "platform registration failed and cleanup could not remove {}",
+                    destination.display()
+                )
+            })?;
+        }
+        return Err(error).with_context(|| {
+            format!(
+                "platform registration failed after installing {}; rolled back newly installed file",
+                destination.display()
+            )
+        });
+    }
     Ok(destination)
 }
 
@@ -4624,6 +4640,11 @@ fn platform_post_install(path: &Path) -> Result<()> {
     if std::env::var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION").as_deref() == Ok("1") {
         let _ = path;
         return Ok(());
+    }
+    #[cfg(test)]
+    if std::env::var("SYNCMYFONTS_FAIL_PLATFORM_POST_INSTALL").as_deref() == Ok("1") {
+        let _ = path;
+        bail!("simulated-platform-post-install-failure");
     }
 
     #[cfg(target_os = "windows")]
@@ -5772,6 +5793,39 @@ mod tests {
         assert!(managed_dir.starts_with(&user_dir));
         assert_eq!(fs::read(installed).unwrap(), bytes);
         assert!(!system_dir.exists());
+    }
+
+    #[test]
+    fn install_font_rolls_back_new_file_when_platform_registration_fails() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let user_dir = root.join("user-fonts");
+        let config_dir = root.join("config");
+        let system_dir = root.join("system-fonts");
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", &user_dir);
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+            std::env::set_var("SYNCMYFONTS_SYSTEM_FONT_DIRS", &system_dir);
+            std::env::set_var("SYNCMYFONTS_FAIL_PLATFORM_POST_INSTALL", "1");
+            std::env::remove_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION");
+        }
+
+        let bytes = b"syncmyfonts rollback font bytes";
+        let sha256 = hex::encode(Sha256::digest(bytes));
+        let error = install_font("Rollback.ttf", &sha256, bytes).unwrap_err();
+        let managed_dir = managed_font_dir().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_SYSTEM_FONT_DIRS");
+            std::env::remove_var("SYNCMYFONTS_FAIL_PLATFORM_POST_INSTALL");
+        }
+
+        let error_text = error.to_string();
+        assert!(error_text.contains("platform registration failed"));
+        assert!(error_text.contains("rolled back"));
+        assert!(!managed_dir.join("Rollback.ttf").exists());
+        assert!(!config_dir.join("managed-fonts.json").exists());
     }
 
     #[test]
