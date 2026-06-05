@@ -1488,6 +1488,7 @@ async fn app_serve(listen: SocketAddr, open_browser_on_start: bool) -> Result<()
         .route("/api/managed/verify", get(app_verify_managed))
         .route("/api/managed/open", post(app_open_managed_folder))
         .route("/api/logs/open", post(app_open_logs_folder))
+        .route("/api/support/open", post(app_open_app_support_folder))
         .route("/api/peers", get(app_peers).post(app_add_peer))
         .route("/api/peers/forget", post(app_forget_peer))
         .route("/api/peers/discover", post(app_discover_peers))
@@ -1676,6 +1677,34 @@ async fn app_open_logs_folder() -> Result<Json<OpenFolderResponse>, LanApiError>
         }
         Err(error) => {
             record_action_best_effort("Browser Open Logs", "failed", 1, &error.to_string());
+            Err(LanApiError::internal(error))
+        }
+    }
+}
+
+async fn app_open_app_support_folder() -> Result<Json<OpenFolderResponse>, LanApiError> {
+    let result = tokio::task::spawn_blocking(|| -> Result<OpenFolderResponse> {
+        let folder = app_data_dir().and_then(|path| {
+            fs::create_dir_all(&path)
+                .with_context(|| format!("creating app support folder {}", path.display()))?;
+            Ok(path)
+        })?;
+        let path = open_path(folder)?;
+        Ok(OpenFolderResponse {
+            opened: true,
+            path,
+            message: "Opened the SyncMyFonts app support folder.".to_string(),
+        })
+    })
+    .await
+    .map_err(LanApiError::internal)?;
+    match result {
+        Ok(response) => {
+            record_action_best_effort("Browser Open App Support", "success", 0, &response.message);
+            Ok(Json(response))
+        }
+        Err(error) => {
+            record_action_best_effort("Browser Open App Support", "failed", 1, &error.to_string());
             Err(LanApiError::internal(error))
         }
     }
@@ -2383,6 +2412,20 @@ impl SyncMyFontsGui {
         );
     }
 
+    fn open_app_support_folder(&mut self) {
+        let folder = app_data_dir().and_then(|path| {
+            fs::create_dir_all(&path)
+                .with_context(|| format!("creating app support folder {}", path.display()))?;
+            Ok(path)
+        });
+        self.open_folder_action(
+            "Open App Support",
+            folder,
+            "This folder contains SyncMyFonts config, saved peers, preferences, and managed manifest files.",
+            "SyncMyFonts could not open the app support folder. Diagnostics will show the config path.",
+        );
+    }
+
     fn open_folder_action(
         &mut self,
         action: &str,
@@ -2872,6 +2915,9 @@ impl eframe::App for SyncMyFontsGui {
                 }
                 if ui.button("Open Logs").clicked() {
                     self.open_logs_folder();
+                }
+                if ui.button("Open App Support").clicked() {
+                    self.open_app_support_folder();
                 }
                 if ui.button("Sync Saved Peers").clicked() {
                     self.sync_saved_peers(false);
@@ -4851,6 +4897,7 @@ const APP_HTML: &str = r#"<!doctype html>
         <button onclick="diagnostics()">Diagnostics</button>
         <button onclick="openManagedFolder()">Open Managed Folder</button>
         <button onclick="openLogsFolder()">Open Logs</button>
+        <button onclick="openAppSupportFolder()">Open App Support</button>
         <button class="primary" onclick="syncAll(false)">Sync Saved Peers</button>
         <button onclick="syncAll(true)">Dry Run</button>
       </div>
@@ -5013,6 +5060,13 @@ const APP_HTML: &str = r#"<!doctype html>
         const result = await request('/api/logs/open', { method: 'POST' });
         showResult(result);
         setNextStep('This folder contains SyncMyFonts action history and support logs.');
+      } catch (error) { show(error.message); }
+    }
+    async function openAppSupportFolder() {
+      try {
+        const result = await request('/api/support/open', { method: 'POST' });
+        showResult(result);
+        setNextStep('This folder contains SyncMyFonts config, saved peers, preferences, and managed manifest files.');
       } catch (error) { show(error.message); }
     }
     async function loadPeers() {
@@ -6004,6 +6058,13 @@ mod tests {
         assert!(!support_report.contains("super-secret-lan-key"));
         assert!(gui.output.contains("\"support_report_text\""));
         assert!(!gui.output.contains("super-secret-lan-key"));
+    }
+
+    #[test]
+    fn browser_surface_exposes_app_support_folder_action() {
+        assert!(APP_HTML.contains("Open App Support"));
+        assert!(APP_HTML.contains("openAppSupportFolder()"));
+        assert!(APP_HTML.contains("/api/support/open"));
     }
 
     #[test]

@@ -6,6 +6,14 @@ not install a Windows service and do not require administrator rights.
 For the normal desktop MVP, double-click `Start-SyncMyFonts.cmd` from the
 release folder. It launches the native GUI with `syncmyfonts-agent gui`.
 
+If you are running from the portable release archive, the bundled agent path is
+`$PWD\bin\syncmyfonts-agent.exe`. If you are working from a source checkout
+after `cargo build --release`, the agent path is
+`$PWD\target\release\syncmyfonts-agent.exe`.
+
+The native app's `Enable Sign-In Sync` button is the recommended path after
+pairing peers in the GUI. The scripts below are advanced/manual-key helpers.
+
 ## Scheduled Task
 
 Use this path when there is no tray app yet and you want sync at sign-in plus a
@@ -14,7 +22,7 @@ repeat interval.
 ```powershell
 .\packaging\windows\install-startup-task.ps1 `
   -Mode Sync `
-  -AgentPath "$PWD\target\release\syncmyfonts-agent.exe" `
+  -AgentPath "$PWD\bin\syncmyfonts-agent.exe" `
   -LanKey "choose-a-shared-key" `
   -Peer "http://192.168.1.50:7370" `
   -RepeatHours 4
@@ -25,7 +33,7 @@ To host fonts from this Windows account:
 ```powershell
 .\packaging\windows\install-startup-task.ps1 `
   -Mode Serve `
-  -AgentPath "$PWD\target\release\syncmyfonts-agent.exe" `
+  -AgentPath "$PWD\bin\syncmyfonts-agent.exe" `
   -LanKey "choose-a-shared-key"
 ```
 
@@ -36,7 +44,7 @@ Use this path for the lightest MVP shape:
 ```powershell
 .\packaging\windows\create-startup-shortcut.ps1 `
   -Mode Sync `
-  -AgentPath "$PWD\target\release\syncmyfonts-agent.exe" `
+  -AgentPath "$PWD\bin\syncmyfonts-agent.exe" `
   -LanKey "choose-a-shared-key" `
   -Peer "http://192.168.1.50:7370"
 ```

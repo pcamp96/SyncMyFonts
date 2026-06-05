@@ -7,11 +7,19 @@ sudo.
 For the normal desktop MVP, double-click `Start-SyncMyFonts.command` from the
 release folder. It launches the native GUI with `syncmyfonts-agent gui`.
 
+If you are running from the portable release archive, the bundled agent path is
+`$PWD/bin/syncmyfonts-agent`. If you are working from a source checkout after
+`cargo build --release`, the agent path is
+`$PWD/target/release/syncmyfonts-agent`.
+
+The native app's `Enable Sign-In Sync` button is the recommended path after
+pairing peers in the GUI. The scripts below are advanced/manual-key helpers.
+
 ## Install LAN Sharing
 
 ```sh
 packaging/macos/install-launchagent.sh serve \
-  --agent-path "$PWD/target/release/syncmyfonts-agent" \
+  --agent-path "$PWD/bin/syncmyfonts-agent" \
   --lan-key "choose-a-shared-key"
 ```
 
@@ -22,7 +30,7 @@ signs in and restarts it if the listener exits unexpectedly.
 
 ```sh
 packaging/macos/install-launchagent.sh sync \
-  --agent-path "$PWD/target/release/syncmyfonts-agent" \
+  --agent-path "$PWD/bin/syncmyfonts-agent" \
   --lan-key "choose-a-shared-key" \
   --peer "http://192.168.1.50:7370" \
   --interval 14400

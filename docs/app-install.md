@@ -31,6 +31,8 @@ the per-user config so it survives relaunches.
 Use `Diagnostics` for a copyable support report, `Open Managed Folder` to see
 fonts installed by SyncMyFonts, and `Open Logs` to open the per-user action
 history folder.
+Use `Open App Support` to inspect the per-user config, saved peers,
+preferences, and managed-font manifest location.
 After running `Diagnostics`, use `Copy Support Report` to copy the redacted
 support text without selecting JSON by hand.
 Use `Readiness Check` before live two-machine testing to confirm local app
@@ -75,24 +77,30 @@ cargo build --release -p syncmyfonts-agent --bins
 
 The launcher helpers expect the built binary:
 
-- macOS: `target/release/syncmyfonts-agent`
-- Windows: `target\release\syncmyfonts-agent.exe`
+- Portable macOS archive: `bin/syncmyfonts-agent`
+- Portable Windows archive: `bin\syncmyfonts-agent.exe`
+- Source checkout on macOS: `target/release/syncmyfonts-agent`
+- Source checkout on Windows: `target\release\syncmyfonts-agent.exe`
 
 The portable GUI launchers are:
 
-- macOS: `target/release/syncmyfonts-gui`, wrapped as `SyncMyFonts.app`
-- Windows: `target\release\syncmyfonts-gui.exe`
+- Portable macOS archive: `SyncMyFonts.app` or `bin/syncmyfonts-gui`
+- Portable Windows archive: `bin\syncmyfonts-gui.exe`
+- Source checkout on macOS: `target/release/syncmyfonts-gui`
+- Source checkout on Windows: `target\release\syncmyfonts-gui.exe`
 
 ## macOS
 
 Use a per-user LaunchAgent. It runs in the signed-in user's session, can access
 that user's font folders, and does not require sudo.
+After pairing peers in the GUI, prefer the native app's `Enable Sign-In Sync`
+button. The LaunchAgent scripts below are advanced/manual-key helpers.
 
 Serve fonts on the LAN:
 
 ```sh
 packaging/macos/install-launchagent.sh serve \
-  --agent-path "$PWD/target/release/syncmyfonts-agent" \
+  --agent-path "$PWD/bin/syncmyfonts-agent" \
   --lan-key "choose-a-shared-key"
 ```
 
@@ -100,14 +108,15 @@ Pull fonts from another LAN peer at sign-in and every 4 hours:
 
 ```sh
 packaging/macos/install-launchagent.sh sync \
-  --agent-path "$PWD/target/release/syncmyfonts-agent" \
+  --agent-path "$PWD/bin/syncmyfonts-agent" \
   --lan-key "choose-a-shared-key" \
   --peer "http://192.168.1.50:7370" \
   --interval 14400
 ```
 
-Logs are written to `~/Library/Logs/SyncMyFonts`. The native app's `Open Logs`
-button opens this folder.
+Logs are written to `~/Library/Logs/SyncMyFonts`. App support data is stored in
+`~/Library/Application Support/SyncMyFonts`. The native app's `Open Logs` and
+`Open App Support` buttons open those folders.
 
 ## Windows
 
@@ -117,14 +126,15 @@ install context.
 
 The app's `Enable Sign-In Sync` button writes a current-user Startup folder
 helper that runs `lan-sync-all` against saved peers. The PowerShell helpers
-below remain available for scheduled repeat sync or explicit serve mode.
+below remain available for scheduled repeat sync or explicit serve mode with a
+manual LAN key.
 
 Scheduled sync:
 
 ```powershell
 .\packaging\windows\install-startup-task.ps1 `
   -Mode Sync `
-  -AgentPath "$PWD\target\release\syncmyfonts-agent.exe" `
+  -AgentPath "$PWD\bin\syncmyfonts-agent.exe" `
   -LanKey "choose-a-shared-key" `
   -Peer "http://192.168.1.50:7370" `
   -RepeatHours 4
@@ -135,13 +145,13 @@ Startup shortcut:
 ```powershell
 .\packaging\windows\create-startup-shortcut.ps1 `
   -Mode Sync `
-  -AgentPath "$PWD\target\release\syncmyfonts-agent.exe" `
+  -AgentPath "$PWD\bin\syncmyfonts-agent.exe" `
   -LanKey "choose-a-shared-key" `
   -Peer "http://192.168.1.50:7370"
 ```
 
-Generated wrappers and logs live under `%LOCALAPPDATA%\SyncMyFonts`. The native
-app's `Open Logs` button opens the log folder.
+Generated wrappers, config, and logs live under `%LOCALAPPDATA%\SyncMyFonts`.
+The native app's `Open Logs` and `Open App Support` buttons open those folders.
 
 ## Recommendations
 

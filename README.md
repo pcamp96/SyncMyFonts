@@ -14,6 +14,23 @@ Windows machines. The current build provides:
 The browser control surface is for development and future self-hosted/server
 workflows. The user-facing MVP is the native app.
 
+## Download The Desktop MVP
+
+For the current native-app MVP, use the latest successful
+`Cross-Platform Build` workflow artifacts on GitHub Actions:
+
+- `syncmyfonts-macos` contains the macOS portable app archive.
+- `syncmyfonts-windows` contains the Windows portable app archive.
+
+GitHub downloads each artifact as an outer ZIP. Open that ZIP first, then
+extract the inner `syncmyfonts-macos-<version>.tar.gz` or
+`syncmyfonts-windows-<version>.zip`. The extracted folder includes
+`START-HERE.txt`, the native GUI, helper scripts, and the docs needed for a
+Mac-to-Windows LAN sync test.
+
+The GHCR image below is only for the optional self-hosted server, not the normal
+desktop app.
+
 ## MVP Behavior
 
 The sync engine treats font files as immutable blobs identified by SHA-256. If
@@ -34,7 +51,7 @@ name conflicts with a file already present in a known system font directory.
 Excluded system locations include:
 
 - macOS: `/System/Library/Fonts`, `/Library/Fonts`, and `/Network/Library/Fonts`
-- Windows: `%WINDIR%\Fonts` and machine-wide registry font entries under `HKLM`
+- Windows: `%WINDIR%\Fonts`
 
 This is both a licensing and safety rule. System fonts may have OS-specific
 licenses, and mutating them can require administrator privileges or destabilize
@@ -103,7 +120,8 @@ peers, start/stop LAN sharing, show the copyable LAN URL for this device, set a
 friendly device name, verify managed font installs, and produce a redacted
 diagnostics report. It can also install a per-user sign-in helper that runs
 saved-peer sync without putting LAN keys in shortcut or plist arguments, and
-run a readiness check before live two-machine testing.
+run a readiness check before live two-machine testing. Folder shortcuts open
+the managed font folder, action logs, and app support/config folder.
 When multiple computers are saved, the GUI includes a saved-peer selector so a
 user can load the exact Mac or Windows PC they want to test, preview, sync, or
 forget.

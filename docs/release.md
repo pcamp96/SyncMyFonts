@@ -59,6 +59,8 @@ testing. If more than one peer is saved, the GUI lets the user choose which
 saved computer to load before testing, previewing, syncing, or forgetting it.
 The result panel can copy the current result and the latest redacted support
 report for clean-machine validation or troubleshooting.
+The app can also open its app support/config folder so saved peers,
+preferences, and managed manifests are easy to inspect during MVP testing.
 
 The browser control surface remains available through `syncmyfonts-agent app`
 for development and future self-hosted/server-adjacent workflows.

@@ -123,6 +123,8 @@ The app MVP should reuse the current agent commands:
 - [x] Optional user LaunchAgent in `~/Library/LaunchAgents` for saved-peer
   sync at sign-in.
 - [x] App action to open the managed font folder.
+- [x] App action to open the per-user log folder.
+- [x] App action to open the app support/config folder.
 
 ### Windows
 
