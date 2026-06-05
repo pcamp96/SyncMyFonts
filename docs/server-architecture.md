@@ -101,7 +101,7 @@ All endpoints are under `/api/v1`. Use `Authorization: Bearer <token>`.
 Returns process health and does not require auth.
 
 ```json
-{ "status": "ok" }
+{ "ok": true, "api_version": "v1" }
 ```
 
 ### Current User

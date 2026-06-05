@@ -55,6 +55,7 @@ async fn main() -> Result<()> {
 
     let app = Router::new()
         .route("/health", get(health))
+        .route("/healthz", get(health))
         .route("/api/v1/fonts", get(list_fonts).post(register_font))
         .route(
             "/api/v1/fonts/{sha256}/blob",

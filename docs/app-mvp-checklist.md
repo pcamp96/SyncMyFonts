@@ -147,7 +147,7 @@ The app MVP should reuse the current agent commands:
 ### Server Sync
 
 - [ ] `docker compose up --build` starts the server on `http://localhost:7368`.
-- [ ] `GET /healthz` succeeds from the app host.
+- [x] `GET /healthz` succeeds from the app host.
 - [ ] `push --server http://<server>:7368` uploads current-user fonts.
 - [ ] `sync --server http://<server>:7368 --dry-run` previews missing fonts.
 - [ ] `sync --server http://<server>:7368` installs missing fonts.
@@ -156,6 +156,8 @@ The app MVP should reuse the current agent commands:
   diagnostics output.
 
 ### Platform Safety
+
+- [x] SyncMyFonts writes a local managed-font manifest for fonts it installs.
 
 - [ ] macOS scan excludes `/System/Library/Fonts`, `/Library/Fonts`, and
   `/Network/Library/Fonts`.

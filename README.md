@@ -85,6 +85,9 @@ The command opens the local control surface in your browser. The app can scan
 fonts, test a LAN peer, preview missing fonts from a peer, install missing
 fonts, save LAN peers, sync all saved peers, start/stop LAN sharing, show the
 copyable LAN URL for this device, and produce a redacted diagnostics report.
+When SyncMyFonts installs a font, it records that install in a local managed
+font manifest so future tooling can distinguish SyncMyFonts-managed fonts from
+other user-installed fonts.
 
 For scripts or headless runs, use `syncmyfonts-agent app --no-open` and open
 the printed localhost URL manually.

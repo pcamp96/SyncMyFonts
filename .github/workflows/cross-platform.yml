@@ -47,6 +47,7 @@ jobs:
       - name: Verify macOS launcher scripts
         if: runner.os == 'macOS'
         run: |
+          sh -n packaging/macos/Start-SyncMyFonts.command
           sh -n packaging/macos/install-launchagent.sh
           sh -n packaging/macos/uninstall-launchagent.sh
           sed -e 's|{{SYNCMYFONTS_RUNNER_PATH}}|/tmp/syncmyfonts-runner.sh|g' \
@@ -68,6 +69,7 @@ jobs:
           [System.Management.Automation.PSParser]::Tokenize((Get-Content packaging/windows/install-startup-task.ps1 -Raw), [ref]$null) | Out-Null
           [System.Management.Automation.PSParser]::Tokenize((Get-Content packaging/windows/uninstall-startup-task.ps1 -Raw), [ref]$null) | Out-Null
           [System.Management.Automation.PSParser]::Tokenize((Get-Content packaging/windows/create-startup-shortcut.ps1 -Raw), [ref]$null) | Out-Null
+          if (-not (Test-Path packaging/windows/Start-SyncMyFonts.cmd)) { throw "Windows app launcher is missing" }
 
       - name: Build macOS archive
         if: runner.os == 'macOS'

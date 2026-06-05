@@ -401,6 +401,13 @@ fn sync(server: &str, api_key: Option<&str>, dry_run: bool) -> Result<SyncReport
         .bytes()
         .context("reading font bytes")?;
         let path = install_font(&font.file_name, &font.sha256, &bytes)?;
+        record_managed_install(
+            &font.file_name,
+            &font.sha256,
+            &path,
+            &format!("server:{server}"),
+            bytes.len() as u64,
+        )?;
         installed.push(path);
     }
 
@@ -519,11 +526,13 @@ struct DiagnosticsReport {
     platform: &'static str,
     device_name: String,
     config_path: PathBuf,
+    managed_manifest_path: PathBuf,
     user_font_dir: PathBuf,
     managed_font_dir: PathBuf,
     saved_peer_count: usize,
     saved_peers: Vec<RedactedPeer>,
     user_font_count: usize,
+    managed_manifest_count: usize,
     warnings: Vec<String>,
 }
 
@@ -532,6 +541,22 @@ struct RedactedPeer {
     name: String,
     url: String,
     has_lan_key: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct ManagedManifest {
+    schema: u8,
+    installed: Vec<ManagedFontRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ManagedFontRecord {
+    sha256: String,
+    file_name: String,
+    path: PathBuf,
+    source: String,
+    installed_at: String,
+    size_bytes: u64,
 }
 
 async fn lan_serve(listen: SocketAddr, lan_key: Option<String>) -> Result<()> {
@@ -650,6 +675,13 @@ fn lan_sync(peer: &str, lan_key: Option<&str>, dry_run: bool) -> Result<LanSyncR
         .bytes()
         .context("reading LAN peer font bytes")?;
         let path = install_font(&font.file_name, &font.sha256, &bytes)?;
+        record_managed_install(
+            &font.file_name,
+            &font.sha256,
+            &path,
+            &format!("lan:{peer}"),
+            bytes.len() as u64,
+        )?;
         installed.push(path);
     }
 
@@ -711,6 +743,11 @@ fn lan_sync_all(dry_run: bool) -> Result<LanSyncAllReport> {
 fn diagnostics() -> Result<DiagnosticsReport> {
     let config = load_app_config()?;
     let scan = scan(true)?;
+    let manifest_result = load_managed_manifest();
+    let managed_manifest_count = manifest_result
+        .as_ref()
+        .map(|manifest| manifest.installed.len())
+        .unwrap_or(0);
     let saved_peers = config
         .peers
         .iter()
@@ -725,12 +762,14 @@ fn diagnostics() -> Result<DiagnosticsReport> {
         platform: platform_name(),
         device_name: device_name(),
         config_path: app_config_path()?,
+        managed_manifest_path: managed_manifest_path()?,
         user_font_dir: user_font_dir()?,
         managed_font_dir: managed_font_dir()?,
         saved_peer_count: config.peers.len(),
         saved_peers,
         user_font_count: scan.fonts.len(),
-        warnings: scan.warnings,
+        managed_manifest_count,
+        warnings: diagnostics_warnings(scan.warnings, manifest_result),
     })
 }
 
@@ -957,6 +996,17 @@ fn find_local_font_by_hash(sha256: &str) -> Result<Option<LocalFont>> {
 fn load_app_config() -> Result<AppConfig> {
     let path = app_config_path()?;
     if !path.exists() {
+        if let Some(legacy_path) = legacy_app_config_path()? {
+            if legacy_path.exists() {
+                let bytes = fs::read(&legacy_path)
+                    .with_context(|| format!("reading {}", legacy_path.display()))?;
+                let mut config: AppConfig = serde_json::from_slice(&bytes)
+                    .with_context(|| format!("parsing {}", legacy_path.display()))?;
+                normalize_app_config(&mut config);
+                save_app_config(&config)?;
+                return Ok(config);
+            }
+        }
         return Ok(AppConfig {
             schema: 1,
             device_id: Some(Uuid::new_v4()),
@@ -966,14 +1016,23 @@ fn load_app_config() -> Result<AppConfig> {
     let bytes = fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
     let mut config: AppConfig =
         serde_json::from_slice(&bytes).with_context(|| format!("parsing {}", path.display()))?;
-    if config.schema == 0 {
-        config.schema = 1;
-    }
-    if config.device_id.is_none() {
-        config.device_id = Some(Uuid::new_v4());
+    if normalize_app_config(&mut config) {
         save_app_config(&config)?;
     }
     Ok(config)
+}
+
+fn normalize_app_config(config: &mut AppConfig) -> bool {
+    let mut changed = false;
+    if config.schema == 0 {
+        config.schema = 1;
+        changed = true;
+    }
+    if config.device_id.is_none() {
+        config.device_id = Some(Uuid::new_v4());
+        changed = true;
+    }
+    changed
 }
 
 fn save_app_config(config: &AppConfig) -> Result<()> {
@@ -989,8 +1048,16 @@ fn save_app_config(config: &AppConfig) -> Result<()> {
 }
 
 fn app_config_path() -> Result<PathBuf> {
+    Ok(app_data_dir()?.join("config.json"))
+}
+
+fn managed_manifest_path() -> Result<PathBuf> {
+    Ok(app_data_dir()?.join("managed-fonts.json"))
+}
+
+fn app_data_dir() -> Result<PathBuf> {
     if let Ok(config_dir) = std::env::var("SYNCMYFONTS_CONFIG_DIR") {
-        return Ok(PathBuf::from(config_dir).join("config.json"));
+        return Ok(PathBuf::from(config_dir));
     }
 
     #[cfg(target_os = "macos")]
@@ -1000,22 +1067,108 @@ fn app_config_path() -> Result<PathBuf> {
             .ok_or_else(|| anyhow!("user home directory unavailable"))?
             .home_dir()
             .to_path_buf();
-        return Ok(home
-            .join("Library/Application Support/SyncMyFonts")
-            .join("config.json"));
+        return Ok(home.join("Library/Application Support/SyncMyFonts"));
     }
     #[cfg(target_os = "windows")]
     {
         use directories::BaseDirs;
-        let base = BaseDirs::new().ok_or_else(|| anyhow!("APPDATA unavailable"))?;
-        return Ok(base.config_dir().join("SyncMyFonts").join("config.json"));
+        let base = BaseDirs::new().ok_or_else(|| anyhow!("LOCALAPPDATA unavailable"))?;
+        return Ok(base.data_local_dir().join("SyncMyFonts"));
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         use directories::BaseDirs;
         let base = BaseDirs::new().ok_or_else(|| anyhow!("user config directory unavailable"))?;
-        Ok(base.config_dir().join("syncmyfonts").join("config.json"))
+        Ok(base.config_dir().join("syncmyfonts"))
     }
+}
+
+fn legacy_app_config_path() -> Result<Option<PathBuf>> {
+    #[cfg(target_os = "windows")]
+    {
+        if std::env::var("SYNCMYFONTS_CONFIG_DIR").is_ok() {
+            return Ok(None);
+        }
+        use directories::BaseDirs;
+        let base = BaseDirs::new().ok_or_else(|| anyhow!("APPDATA unavailable"))?;
+        return Ok(Some(
+            base.config_dir().join("SyncMyFonts").join("config.json"),
+        ));
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(None)
+    }
+}
+
+fn load_managed_manifest() -> Result<ManagedManifest> {
+    let path = managed_manifest_path()?;
+    if !path.exists() {
+        return Ok(ManagedManifest {
+            schema: 1,
+            installed: Vec::new(),
+        });
+    }
+    let bytes = fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
+    let mut manifest: ManagedManifest =
+        serde_json::from_slice(&bytes).with_context(|| format!("parsing {}", path.display()))?;
+    if manifest.schema == 0 {
+        manifest.schema = 1;
+    }
+    Ok(manifest)
+}
+
+fn save_managed_manifest(manifest: &ManagedManifest) -> Result<()> {
+    let path = managed_manifest_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    }
+    let temp = path.with_extension("json.tmp");
+    let bytes = serde_json::to_vec_pretty(manifest).context("serializing managed font manifest")?;
+    fs::write(&temp, bytes).with_context(|| format!("writing {}", temp.display()))?;
+    fs::rename(&temp, &path).with_context(|| format!("saving {}", path.display()))?;
+    Ok(())
+}
+
+fn record_managed_install(
+    file_name: &str,
+    sha256: &str,
+    path: &Path,
+    source: &str,
+    size_bytes: u64,
+) -> Result<()> {
+    let mut manifest = load_managed_manifest()?;
+    let record = ManagedFontRecord {
+        sha256: sha256.to_string(),
+        file_name: file_name.to_string(),
+        path: path.to_path_buf(),
+        source: source.to_string(),
+        installed_at: Utc::now().to_rfc3339(),
+        size_bytes,
+    };
+    if let Some(existing) = manifest
+        .installed
+        .iter_mut()
+        .find(|existing| existing.sha256 == sha256)
+    {
+        *existing = record;
+    } else {
+        manifest.installed.push(record);
+    }
+    manifest
+        .installed
+        .sort_by(|a, b| a.file_name.cmp(&b.file_name));
+    save_managed_manifest(&manifest)
+}
+
+fn diagnostics_warnings(
+    mut warnings: Vec<String>,
+    manifest_result: Result<ManagedManifest>,
+) -> Vec<String> {
+    if let Err(error) = manifest_result {
+        warnings.push(format!("managed manifest unavailable: {error}"));
+    }
+    warnings
 }
 
 fn normalize_peer_url(url: &str) -> String {
@@ -1742,6 +1895,9 @@ const APP_HTML: &str = r#"<!doctype html>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn safe_file_name_removes_path_and_reserved_characters() {
@@ -1795,5 +1951,43 @@ mod tests {
 
         assert!(json.contains("\"has_lan_key\":true"));
         assert!(!json.contains("super-secret"));
+    }
+
+    #[test]
+    fn managed_manifest_records_and_updates_installed_fonts() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let config_dir = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+        }
+
+        let font_path = config_dir.join("fonts/example.ttf");
+        record_managed_install(
+            "Example.ttf",
+            "00112233445566778899aabbccddeeff0123456789abcdef0123456789abcdef",
+            &font_path,
+            "lan:http://127.0.0.1:7370",
+            1234,
+        )
+        .unwrap();
+        record_managed_install(
+            "Example.ttf",
+            "00112233445566778899aabbccddeeff0123456789abcdef0123456789abcdef",
+            &font_path,
+            "server:http://127.0.0.1:7368",
+            1234,
+        )
+        .unwrap();
+
+        let manifest = load_managed_manifest().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+        }
+
+        assert_eq!(manifest.schema, 1);
+        assert_eq!(manifest.installed.len(), 1);
+        assert_eq!(manifest.installed[0].file_name, "Example.ttf");
+        assert_eq!(manifest.installed[0].source, "server:http://127.0.0.1:7368");
+        assert_eq!(manifest.installed[0].size_bytes, 1234);
     }
 }
