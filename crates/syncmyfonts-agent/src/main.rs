@@ -1203,6 +1203,11 @@ fn doctor() -> Result<DoctorReport> {
     checks.push(directory_ready_check("managed-font-dir", &managed_font_dir));
 
     let config = load_app_config()?;
+    checks.push(doctor_check(
+        "lan-sharing-guidance",
+        true,
+        platform_lan_sharing_guidance(),
+    ));
     checks.push(if config.peers.is_empty() {
         doctor_check(
             "saved-peers",
@@ -2161,8 +2166,10 @@ impl SyncMyFontsGui {
                         "Enter the pairing code shown on that computer, then click Pair Peer."
                             .to_string()
                 } else {
-                        "No sharing peers answered. Make sure the other computer is sharing and on the same trusted LAN."
-                            .to_string()
+                    format!(
+                        "No sharing peers answered. Make sure the other computer is sharing and on the same trusted LAN. {}",
+                        platform_manual_peer_fallback_guidance()
+                    )
                 };
                 gui_ok_with_updates(&peers, next_step, None, discovered_peer, false, false, 0)
             }
@@ -2395,12 +2402,15 @@ impl SyncMyFontsGui {
                     pairing_code,
                 };
                 if let Some(code) = &response.pairing_code {
-                    self.next_step =
-                        format!("Pairing code {code} is ready. Enter it on the other computer.");
+                    self.next_step = format!(
+                        "Pairing code {code} is ready. Enter it on the other computer. {}",
+                        platform_lan_sharing_guidance()
+                    );
                 } else {
-                    self.next_step =
-                        "Sharing is on. Use the shown LAN URL and shared key from another computer."
-                            .to_string();
+                    self.next_step = format!(
+                        "Sharing is on. Use the shown LAN URL and shared key from another computer. {}",
+                        platform_lan_sharing_guidance()
+                    );
                 }
                 self.output =
                     serde_json::to_string_pretty(&response).unwrap_or_else(|_| "ok".to_string());
@@ -2413,9 +2423,10 @@ impl SyncMyFontsGui {
             }
             Err(error) => {
                 self.output = error.to_string();
-                self.next_step =
-                    "Sharing failed to start. Check whether another SyncMyFonts share is already using that port."
-                        .to_string();
+                self.next_step = format!(
+                    "Sharing failed to start. Check whether another SyncMyFonts share is already using that port. {}",
+                    platform_lan_sharing_guidance()
+                );
                 self.last_result = "Share Fonts On LAN failed.".to_string();
                 self.warning_count = 1;
                 let _ = record_action("Share Fonts On LAN", "failed", 1, &self.next_step);
@@ -2648,9 +2659,10 @@ fn gui_ok_with_updates<T: Serialize>(
 fn gui_error(error: anyhow::Error) -> GuiTaskResult {
     GuiTaskResult {
         output: error.to_string(),
-        next_step:
-            "That action failed. Review the output, then check the peer URL, pairing code, or network access."
-                .to_string(),
+        next_step: format!(
+            "That action failed. Review the output, then check the peer URL, pairing code, or network access. {}",
+            platform_manual_peer_fallback_guidance()
+        ),
         peer: None,
         discovered_peer: None,
         clear_peer_key: false,
@@ -2664,6 +2676,36 @@ fn redacted_peer_config(peer: &LanPeerConfig) -> RedactedPeer {
         name: peer.name.clone(),
         url: peer.url.clone(),
         has_lan_key: peer.lan_key.is_some(),
+    }
+}
+
+fn platform_lan_sharing_guidance() -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        "If Windows Firewall asks, allow SyncMyFonts on Private networks only. No port forwarding is needed."
+    }
+    #[cfg(target_os = "macos")]
+    {
+        "If macOS asks for Local Network access, allow it for SyncMyFonts. No port forwarding is needed."
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        "Allow local network access if your OS asks. No port forwarding is needed."
+    }
+}
+
+fn platform_manual_peer_fallback_guidance() -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        "Client-only sync should not need an inbound firewall prompt; if discovery fails, paste the sharing computer's LAN URL manually."
+    }
+    #[cfg(target_os = "macos")]
+    {
+        "If Local Network discovery is denied or unavailable, paste the sharing computer's LAN URL manually."
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        "If discovery fails, paste the sharing computer's LAN URL manually."
     }
 }
 
@@ -4743,6 +4785,40 @@ mod tests {
                 .any(|check| check.name == "saved-peers" && !check.ok)
         );
         assert!(report.next_step.contains("Pair or save a LAN peer"));
+    }
+
+    #[test]
+    fn doctor_includes_lan_sharing_guidance() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", root.join("config"));
+            std::env::set_var("SYNCMYFONTS_LOG_DIR", root.join("logs"));
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", root.join("fonts"));
+        }
+
+        let report = doctor().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_LOG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+        }
+
+        let guidance = report
+            .checks
+            .iter()
+            .find(|check| check.name == "lan-sharing-guidance")
+            .expect("doctor should include LAN sharing guidance");
+        assert!(guidance.ok);
+        assert!(guidance.message.contains("No port forwarding is needed"));
+    }
+
+    #[test]
+    fn gui_network_errors_include_manual_peer_fallback() {
+        let result = gui_error(anyhow!("simulated network failure"));
+
+        assert!(result.next_step.contains("paste the sharing computer"));
+        assert!(result.next_step.contains("manually"));
     }
 
     #[test]
