@@ -546,6 +546,17 @@ struct AddPeerRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct ForgetPeerRequest {
+    name: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ForgetPeerResponse {
+    removed: bool,
+    saved_peer_count: usize,
+}
+
+#[derive(Debug, Deserialize)]
 struct PairPeerRequest {
     name: String,
     url: String,
@@ -864,6 +875,20 @@ fn add_lan_peer(name: String, url: String, lan_key: Option<String>) -> Result<La
     Ok(peer)
 }
 
+fn forget_lan_peer(name: &str) -> Result<ForgetPeerResponse> {
+    let mut config = load_app_config()?;
+    let before = config.peers.len();
+    config.peers.retain(|peer| peer.name != name);
+    let removed = config.peers.len() != before;
+    if removed {
+        save_app_config(&config)?;
+    }
+    Ok(ForgetPeerResponse {
+        removed,
+        saved_peer_count: config.peers.len(),
+    })
+}
+
 fn pair_lan_peer(name: String, url: String, pairing_code: String) -> Result<LanPeerConfig> {
     let url = normalize_peer_url(&url);
     let response: LanPairResponse = http_client()?
@@ -1006,6 +1031,7 @@ async fn app_serve(listen: SocketAddr, open_browser_on_start: bool) -> Result<()
         .route("/api/scan", get(app_scan))
         .route("/api/diagnostics", get(app_diagnostics))
         .route("/api/peers", get(app_peers).post(app_add_peer))
+        .route("/api/peers/forget", post(app_forget_peer))
         .route("/api/peers/discover", post(app_discover_peers))
         .route("/api/peer/pair", post(app_pair_peer))
         .route("/api/peer/test", post(app_peer_test))
@@ -1062,6 +1088,14 @@ async fn app_add_peer(
     Json(request): Json<AddPeerRequest>,
 ) -> Result<Json<LanPeerConfig>, LanApiError> {
     add_lan_peer(request.name, request.url, request.lan_key)
+        .map(Json)
+        .map_err(LanApiError::internal)
+}
+
+async fn app_forget_peer(
+    Json(request): Json<ForgetPeerRequest>,
+) -> Result<Json<ForgetPeerResponse>, LanApiError> {
+    forget_lan_peer(&request.name)
         .map(Json)
         .map_err(LanApiError::internal)
 }
@@ -2024,6 +2058,7 @@ const APP_HTML: &str = r#"<!doctype html>
         <button onclick="syncPeer(true)">Preview From Peer</button>
         <button onclick="syncPeer(false)">Get Missing Fonts</button>
         <button onclick="savePeer()">Save Peer</button>
+        <button onclick="forgetPeer()">Forget Peer</button>
         <button onclick="loadPeers()">List Peers</button>
       </p>
       <div id="discoveredPeers" class="statusline muted">No peers discovered yet.</div>
@@ -2225,6 +2260,23 @@ const APP_HTML: &str = r#"<!doctype html>
         setNextStep(`${peer.name} is saved. Use Sync Saved Peers for repeat syncs.`);
       } catch (error) { show(error.message); }
     }
+    async function forgetPeer() {
+      try {
+        const name = document.getElementById('peerName').value;
+        const result = await request('/api/peers/forget', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        if (result.removed) {
+          document.getElementById('peerKey').value = '';
+          setNextStep(`${name} was removed from saved peers. Pair or save it again if you still need it.`);
+        } else {
+          setNextStep(`${name || 'That peer'} was not found in saved peers.`);
+        }
+        showResult(result);
+      } catch (error) { show(error.message); }
+    }
     async function syncAll(dryRun) {
       try {
         const result = await request(dryRun ? '/api/sync-all/dry-run' : '/api/sync-all', { method: 'POST' });
@@ -2338,6 +2390,31 @@ mod tests {
 
         assert!(json.contains("\"has_lan_key\":true"));
         assert!(!json.contains("super-secret"));
+    }
+
+    #[test]
+    fn forget_lan_peer_removes_saved_peer_by_name() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let config_dir = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+        }
+
+        add_lan_peer(
+            "Workshop".to_string(),
+            "http://127.0.0.1:7370".to_string(),
+            Some("key".to_string()),
+        )
+        .unwrap();
+        let result = forget_lan_peer("Workshop").unwrap();
+        let config = load_app_config().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+        }
+
+        assert!(result.removed);
+        assert_eq!(result.saved_peer_count, 0);
+        assert!(config.peers.is_empty());
     }
 
     #[test]
