@@ -53,7 +53,8 @@ sharing, show a copyable LAN URL and pairing code, discover sharing LAN peers,
 pair with a peer, test a LAN peer, preview missing fonts, install missing
 fonts, save LAN peers, sync all saved peers, stop LAN sharing, verify managed
 font installs, set a friendly device name, open managed/log folders, and
-produce a redacted diagnostics report.
+produce a redacted diagnostics report. It can also install per-user sign-in
+sync for saved peers.
 
 The browser control surface remains available through `syncmyfonts-agent app`
 for development and future self-hosted/server-adjacent workflows.

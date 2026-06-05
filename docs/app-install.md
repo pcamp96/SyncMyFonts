@@ -26,6 +26,8 @@ still match the local manifest.
 Use `Diagnostics` for a copyable support report, `Open Managed Folder` to see
 fonts installed by SyncMyFonts, and `Open Logs` to open the per-user action
 history folder.
+Use `Enable Sign-In Sync` after pairing peers if this computer should pull
+missing fonts from saved peers whenever the user signs in.
 Set `Device Name` in the app header before pairing if the default computer name
 is unclear. This name appears in LAN discovery, pairing, diagnostics, and
 support reports.
@@ -88,6 +90,10 @@ button opens this folder.
 Prefer a current-user Scheduled Task or Startup folder shortcut. Do not use a
 Windows service for the MVP because services run outside the user's normal font
 install context.
+
+The app's `Enable Sign-In Sync` button writes a current-user Startup folder
+helper that runs `lan-sync-all` against saved peers. The PowerShell helpers
+below remain available for scheduled repeat sync or explicit serve mode.
 
 Scheduled sync:
 

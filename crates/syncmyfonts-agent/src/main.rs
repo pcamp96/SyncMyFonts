@@ -111,6 +111,8 @@ enum Commands {
     Diagnostics,
     /// Verify SyncMyFonts-managed installed font files still match the manifest.
     VerifyManaged,
+    /// Install a per-user sign-in helper that syncs saved LAN peers.
+    InstallStartupSync,
     /// Run the native desktop GUI.
     Gui,
     /// Run the local desktop control surface.
@@ -213,6 +215,9 @@ fn main() -> Result<()> {
         }
         Commands::VerifyManaged => {
             print_json(&verify_managed_fonts()?)?;
+        }
+        Commands::InstallStartupSync => {
+            print_json(&install_startup_sync()?)?;
         }
         Commands::Gui => {
             run_gui()?;
@@ -658,6 +663,17 @@ struct PeerTestResponse {
 struct OpenFolderResponse {
     opened: bool,
     path: PathBuf,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+struct StartupSyncReport {
+    installed: bool,
+    platform: &'static str,
+    agent_path: PathBuf,
+    helper_path: PathBuf,
+    registration_path: PathBuf,
+    saved_peer_count: usize,
     message: String,
 }
 
@@ -2142,6 +2158,22 @@ impl SyncMyFontsGui {
         });
     }
 
+    fn install_startup_sync(&mut self) {
+        self.start_task("Enabling sign-in sync", || match install_startup_sync() {
+            Ok(report) => {
+                let next_step = if report.saved_peer_count == 0 {
+                    "Sign-in sync is installed, but no peers are saved yet. Pair or save a peer next."
+                        .to_string()
+                } else {
+                    "Saved peers will sync when you sign in. Reopen design apps after new fonts install."
+                        .to_string()
+                };
+                gui_ok(&report, next_step)
+            }
+            Err(error) => gui_error(error),
+        });
+    }
+
     fn start_share(&mut self) {
         if self.share.is_some() {
             self.next_step = "Sharing is already on.".to_string();
@@ -2321,6 +2353,9 @@ impl eframe::App for SyncMyFontsGui {
                 }
                 if ui.button("Dry Run Saved Peers").clicked() {
                     self.sync_saved_peers(true);
+                }
+                if ui.button("Enable Sign-In Sync").clicked() {
+                    self.install_startup_sync();
                 }
             });
         });
@@ -2803,6 +2838,17 @@ fn app_action_log_path() -> Result<PathBuf> {
     Ok(app_log_dir()?.join("action-history.jsonl"))
 }
 
+fn startup_sync_helper_path() -> Result<PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(app_data_dir()?.join("run-sign-in-sync.cmd"))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(app_data_dir()?.join("run-sign-in-sync.sh"))
+    }
+}
+
 fn managed_manifest_path() -> Result<PathBuf> {
     Ok(app_data_dir()?.join("managed-fonts.json"))
 }
@@ -2857,6 +2903,262 @@ fn app_log_dir() -> Result<PathBuf> {
     {
         Ok(app_data_dir()?.join("logs"))
     }
+}
+
+fn install_startup_sync() -> Result<StartupSyncReport> {
+    let agent_path = agent_command_exe()?;
+    let config = load_app_config()?;
+    let saved_peer_count = config.peers.len();
+    let helper_path = startup_sync_helper_path()?;
+    let helper_parent = helper_path
+        .parent()
+        .ok_or_else(|| anyhow!("startup helper parent unavailable"))?;
+    fs::create_dir_all(helper_parent)
+        .with_context(|| format!("creating {}", helper_parent.display()))?;
+    let log_dir = app_log_dir()?;
+    fs::create_dir_all(&log_dir).with_context(|| format!("creating {}", log_dir.display()))?;
+
+    #[cfg(target_os = "macos")]
+    {
+        let registration_path = macos_startup_sync_plist_path()?;
+        write_macos_startup_sync_helper(&helper_path, &agent_path, &log_dir)?;
+        let plist = render_macos_startup_sync_plist(&helper_path, &log_dir, app_data_dir()?);
+        if let Some(parent) = registration_path.parent() {
+            fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+        }
+        fs::write(&registration_path, plist)
+            .with_context(|| format!("writing {}", registration_path.display()))?;
+
+        if std::env::var("SYNCMYFONTS_SKIP_STARTUP_REGISTRATION").as_deref() != Ok("1") {
+            let _ = Command::new("launchctl")
+                .args(["bootout", &format!("gui/{}", unsafe { libc_uid() })])
+                .arg(&registration_path)
+                .status();
+            let status = Command::new("launchctl")
+                .args(["bootstrap", &format!("gui/{}", unsafe { libc_uid() })])
+                .arg(&registration_path)
+                .status()
+                .context("registering SyncMyFonts LaunchAgent")?;
+            if !status.success() {
+                bail!("registering SyncMyFonts LaunchAgent failed with {status}");
+            }
+            let _ = Command::new("launchctl")
+                .args([
+                    "enable",
+                    &format!("gui/{}/com.syncmyfonts.signin-sync", unsafe { libc_uid() }),
+                ])
+                .status();
+        }
+
+        return Ok(StartupSyncReport {
+            installed: true,
+            platform: platform_name(),
+            agent_path,
+            helper_path,
+            registration_path,
+            saved_peer_count,
+            message: "Installed a per-user LaunchAgent for saved-peer sync at sign-in.".to_string(),
+        });
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let registration_path = windows_startup_sync_shortcut_path()?;
+        write_windows_startup_sync_helper(&helper_path, &agent_path, &log_dir)?;
+        if let Some(parent) = registration_path.parent() {
+            fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+        }
+        let launcher = render_windows_startup_sync_launcher(&helper_path);
+        fs::write(&registration_path, launcher)
+            .with_context(|| format!("writing {}", registration_path.display()))?;
+
+        return Ok(StartupSyncReport {
+            installed: true,
+            platform: platform_name(),
+            agent_path,
+            helper_path,
+            registration_path,
+            saved_peer_count,
+            message: "Installed a per-user Startup folder helper for saved-peer sync at sign-in."
+                .to_string(),
+        });
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        write_unix_startup_sync_helper(&helper_path, &agent_path, &log_dir)?;
+        Ok(StartupSyncReport {
+            installed: false,
+            platform: platform_name(),
+            agent_path,
+            helper_path: helper_path.clone(),
+            registration_path: helper_path,
+            saved_peer_count,
+            message: "Wrote a saved-peer sync helper, but automatic sign-in registration is not supported on this platform yet."
+                .to_string(),
+        })
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_startup_sync_plist_path() -> Result<PathBuf> {
+    use directories::UserDirs;
+    let home = UserDirs::new()
+        .ok_or_else(|| anyhow!("user home directory unavailable"))?
+        .home_dir()
+        .to_path_buf();
+    Ok(home
+        .join("Library/LaunchAgents")
+        .join("com.syncmyfonts.signin-sync.plist"))
+}
+
+#[cfg(target_os = "windows")]
+fn windows_startup_sync_shortcut_path() -> Result<PathBuf> {
+    let appdata = std::env::var("APPDATA").context("APPDATA unavailable")?;
+    Ok(PathBuf::from(appdata)
+        .join("Microsoft/Windows/Start Menu/Programs/Startup")
+        .join("SyncMyFonts Sign-In Sync.cmd"))
+}
+
+fn render_unix_startup_sync_helper(agent_path: &Path, log_dir: &Path) -> String {
+    format!(
+        "#!/bin/sh\nset -eu\n{} lan-sync-all >> {} 2>> {}\n",
+        shell_quote(&agent_path.display().to_string()),
+        shell_quote(&log_dir.join("signin-sync.log").display().to_string()),
+        shell_quote(&log_dir.join("signin-sync.err.log").display().to_string())
+    )
+}
+
+fn write_unix_startup_sync_helper(
+    helper_path: &Path,
+    agent_path: &Path,
+    log_dir: &Path,
+) -> Result<()> {
+    fs::write(
+        helper_path,
+        render_unix_startup_sync_helper(agent_path, log_dir),
+    )
+    .with_context(|| format!("writing {}", helper_path.display()))?;
+    make_executable(helper_path)
+}
+
+#[cfg(target_os = "macos")]
+fn write_macos_startup_sync_helper(
+    helper_path: &Path,
+    agent_path: &Path,
+    log_dir: &Path,
+) -> Result<()> {
+    write_unix_startup_sync_helper(helper_path, agent_path, log_dir)
+}
+
+#[cfg(target_os = "macos")]
+fn render_macos_startup_sync_plist(
+    helper_path: &Path,
+    log_dir: &Path,
+    working_dir: PathBuf,
+) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.syncmyfonts.signin-sync</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{}</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>{}</string>
+  <key>StandardErrorPath</key>
+  <string>{}</string>
+  <key>WorkingDirectory</key>
+  <string>{}</string>
+</dict>
+</plist>
+"#,
+        xml_escape(&helper_path.display().to_string()),
+        xml_escape(
+            &log_dir
+                .join("signin-sync.launchd.log")
+                .display()
+                .to_string()
+        ),
+        xml_escape(
+            &log_dir
+                .join("signin-sync.launchd.err.log")
+                .display()
+                .to_string()
+        ),
+        xml_escape(&working_dir.display().to_string())
+    )
+}
+
+#[cfg(target_os = "windows")]
+fn render_windows_startup_sync_helper(agent_path: &Path, log_dir: &Path) -> String {
+    format!(
+        "@echo off\r\n\"{}\" lan-sync-all >> \"{}\" 2>> \"{}\"\r\n",
+        agent_path.display(),
+        log_dir.join("signin-sync.log").display(),
+        log_dir.join("signin-sync.err.log").display()
+    )
+}
+
+#[cfg(target_os = "windows")]
+fn render_windows_startup_sync_launcher(helper_path: &Path) -> String {
+    format!("@echo off\r\ncall \"{}\"\r\n", helper_path.display())
+}
+
+#[cfg(target_os = "windows")]
+fn write_windows_startup_sync_helper(
+    helper_path: &Path,
+    agent_path: &Path,
+    log_dir: &Path,
+) -> Result<()> {
+    fs::write(
+        helper_path,
+        render_windows_startup_sync_helper(agent_path, log_dir),
+    )
+    .with_context(|| format!("writing {}", helper_path.display()))
+}
+
+#[cfg(unix)]
+fn make_executable(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut permissions = fs::metadata(path)
+        .with_context(|| format!("reading permissions for {}", path.display()))?
+        .permissions();
+    permissions.set_mode(0o700);
+    fs::set_permissions(path, permissions)
+        .with_context(|| format!("setting executable bit on {}", path.display()))
+}
+
+#[cfg(not(unix))]
+fn make_executable(_path: &Path) -> Result<()> {
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+unsafe fn libc_uid() -> u32 {
+    unsafe extern "C" {
+        fn getuid() -> u32;
+    }
+    unsafe { getuid() }
+}
+
+fn xml_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 fn legacy_app_config_path() -> Result<Option<PathBuf>> {
@@ -4232,6 +4534,27 @@ mod tests {
                 .fonts
                 .iter()
                 .any(|font| font.file_name == "ManagedFont.ttf")
+        );
+    }
+
+    #[test]
+    fn startup_sync_helper_uses_saved_peers_without_embedding_keys() {
+        let agent_path =
+            PathBuf::from("/Applications/SyncMyFonts.app/Contents/MacOS/syncmyfonts-agent");
+        let log_dir = PathBuf::from("/Users/example/Library/Logs/SyncMyFonts");
+        let helper = render_unix_startup_sync_helper(&agent_path, &log_dir);
+
+        assert!(helper.contains("lan-sync-all"));
+        assert!(helper.contains("signin-sync.log"));
+        assert!(!helper.contains("SYNCMYFONTS_LAN_KEY"));
+        assert!(!helper.contains("--lan-key"));
+    }
+
+    #[test]
+    fn xml_escape_escapes_plist_sensitive_characters() {
+        assert_eq!(
+            xml_escape("/Users/A&B/Sync<My>\"Fonts\"'"),
+            "/Users/A&amp;B/Sync&lt;My&gt;&quot;Fonts&quot;&apos;"
         );
     }
 

@@ -90,7 +90,8 @@ The GUI can scan fonts, discover sharing LAN peers, test a LAN peer, preview
 missing fonts from a peer, install missing fonts, save LAN peers, sync all saved
 peers, start/stop LAN sharing, show the copyable LAN URL for this device, set a
 friendly device name, verify managed font installs, and produce a redacted
-diagnostics report.
+diagnostics report. It can also install a per-user sign-in helper that runs
+saved-peer sync without putting LAN keys in shortcut or plist arguments.
 When SyncMyFonts installs a font, it records that install in a local managed
 font manifest so future tooling can distinguish SyncMyFonts-managed fonts from
 other user-installed fonts.

@@ -105,7 +105,8 @@ The app MVP should reuse the current agent commands:
   `~/Library/Application Support/SyncMyFonts`.
 - [x] Log folder:
   `~/Library/Logs/SyncMyFonts`.
-- [ ] Optional user LaunchAgent in `~/Library/LaunchAgents` for scheduled sync.
+- [x] Optional user LaunchAgent in `~/Library/LaunchAgents` for saved-peer
+  sync at sign-in.
 - [x] App action to open the managed font folder.
 
 ### Windows
@@ -117,7 +118,7 @@ The app MVP should reuse the current agent commands:
 - [x] App config and logs under `%LOCALAPPDATA%\SyncMyFonts`.
 - [ ] Start Menu shortcuts for `Sync Now`, `Send My Fonts`,
   `Get Missing Fonts`, and `Diagnostics` if there is no full tray UI yet.
-- [ ] Per-user startup option through a tray app, Startup folder, `HKCU\Run`, or
+- [x] Per-user startup option through a tray app, Startup folder, `HKCU\Run`, or
   a current-user Scheduled Task.
 - [ ] Plain guidance for firewall prompts when Windows is intentionally hosting:
   allow Private networks only.
