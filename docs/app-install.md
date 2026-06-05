@@ -15,9 +15,9 @@ syncmyfonts-agent app
 The command opens the local control surface in your browser. Use `--no-open`
 when a script should start the app without launching a browser.
 
-The local app can start LAN sharing, show the URL to paste into another
-computer, test a peer, preview missing fonts, install missing fonts, save peers,
-and run diagnostics.
+The local app can start LAN sharing, find sharing peers on the LAN, show the
+URL to paste into another computer, test a peer, preview missing fonts, install
+missing fonts, save peers, and run diagnostics.
 
 Installed fonts are tracked in a local managed-font manifest next to the app
 config. This record only includes fonts installed by SyncMyFonts and keeps

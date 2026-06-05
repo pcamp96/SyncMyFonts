@@ -10,6 +10,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+const LAN_DISCOVERY_REQUEST: &[u8] = b"SYNCMYFONTS_DISCOVER_V1";
+const LAN_DISCOVERY_TIMEOUT: Duration = Duration::from_millis(1400);
+
 use anyhow::{Context, Result, anyhow, bail};
 use axum::{
     Json, Router,
@@ -91,6 +94,11 @@ enum Commands {
     },
     /// List saved LAN peers.
     LanPeers,
+    /// Discover SyncMyFonts peers sharing fonts on this LAN.
+    LanDiscover {
+        #[arg(long, default_value = "7370")]
+        port: u16,
+    },
     /// Pull missing fonts from every saved LAN peer.
     LanSyncAll {
         #[arg(long)]
@@ -181,6 +189,9 @@ fn main() -> Result<()> {
         }
         Commands::LanPeers => {
             print_json(&load_app_config()?.peers)?;
+        }
+        Commands::LanDiscover { port } => {
+            print_json(&discover_lan_peers(port)?)?;
         }
         Commands::LanSyncAll { dry_run } => {
             let report = lan_sync_all(dry_run)?;
@@ -448,6 +459,22 @@ struct LanPeerConfig {
     lan_key: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LanDiscoveryWireResponse {
+    schema: u8,
+    api_version: String,
+    device_name: String,
+    port: u16,
+    requires_lan_key: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct LanDiscoveredPeer {
+    name: String,
+    url: String,
+    requires_lan_key: bool,
+}
+
 #[derive(Debug, Serialize)]
 struct LanSyncAllReport {
     peers: Vec<LanPeerSyncReport>,
@@ -512,6 +539,11 @@ struct ShareResponse {
     urls: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct DiscoverPeersRequest {
+    port: Option<u16>,
+}
+
 #[derive(Debug, Serialize)]
 struct PeerTestResponse {
     ok: bool,
@@ -568,6 +600,7 @@ async fn lan_serve(listen: SocketAddr, lan_key: Option<String>) -> Result<()> {
         .init();
 
     let state = Arc::new(LanState { lan_key });
+    spawn_lan_discovery_responder(listen, state.clone());
     let app = Router::new()
         .route("/health", get(lan_health))
         .route("/api/lan/v1/health", get(lan_health))
@@ -583,6 +616,42 @@ async fn lan_serve(listen: SocketAddr, lan_key: Option<String>) -> Result<()> {
     tracing::info!("syncmyfonts LAN peer listening on http://{listen}");
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+fn spawn_lan_discovery_responder(listen: SocketAddr, state: Arc<LanState>) {
+    tokio::spawn(async move {
+        if let Err(error) = lan_discovery_responder(listen, state).await {
+            tracing::warn!("LAN discovery responder stopped: {error}");
+        }
+    });
+}
+
+async fn lan_discovery_responder(listen: SocketAddr, state: Arc<LanState>) -> Result<()> {
+    let socket = tokio::net::UdpSocket::bind(listen)
+        .await
+        .with_context(|| format!("binding LAN discovery responder at {listen}"))?;
+    let mut buffer = [0_u8; 512];
+    loop {
+        let (length, sender) = socket
+            .recv_from(&mut buffer)
+            .await
+            .context("receiving LAN discovery packet")?;
+        if &buffer[..length] != LAN_DISCOVERY_REQUEST {
+            continue;
+        }
+        let response = LanDiscoveryWireResponse {
+            schema: 1,
+            api_version: API_VERSION.to_string(),
+            device_name: device_name(),
+            port: listen.port(),
+            requires_lan_key: state.lan_key.is_some(),
+        };
+        let bytes = serde_json::to_vec(&response).context("serializing LAN discovery response")?;
+        socket
+            .send_to(&bytes, sender)
+            .await
+            .context("sending LAN discovery response")?;
+    }
 }
 
 async fn lan_health() -> Json<HealthResponse> {
@@ -740,6 +809,57 @@ fn lan_sync_all(dry_run: bool) -> Result<LanSyncAllReport> {
     Ok(LanSyncAllReport { peers, dry_run })
 }
 
+fn discover_lan_peers(port: u16) -> Result<Vec<LanDiscoveredPeer>> {
+    let socket = UdpSocket::bind("0.0.0.0:0").context("binding LAN discovery socket")?;
+    socket
+        .set_broadcast(true)
+        .context("enabling LAN discovery broadcast")?;
+    socket
+        .set_read_timeout(Some(LAN_DISCOVERY_TIMEOUT))
+        .context("setting LAN discovery timeout")?;
+    socket
+        .send_to(LAN_DISCOVERY_REQUEST, ("255.255.255.255", port))
+        .with_context(|| format!("broadcasting LAN discovery on UDP port {port}"))?;
+
+    let started = Instant::now();
+    let mut peers = BTreeMap::new();
+    let mut buffer = [0_u8; 1024];
+    while started.elapsed() < LAN_DISCOVERY_TIMEOUT {
+        match socket.recv_from(&mut buffer) {
+            Ok((length, sender)) => {
+                let response =
+                    match serde_json::from_slice::<LanDiscoveryWireResponse>(&buffer[..length]) {
+                        Ok(response) => response,
+                        Err(_) => continue,
+                    };
+                if response.schema != 1 || response.api_version != API_VERSION {
+                    continue;
+                }
+                let url = format!("http://{}:{}", sender.ip(), response.port);
+                peers.insert(
+                    url.clone(),
+                    LanDiscoveredPeer {
+                        name: response.device_name,
+                        url,
+                        requires_lan_key: response.requires_lan_key,
+                    },
+                );
+            }
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                break;
+            }
+            Err(error) => return Err(error).context("receiving LAN discovery response"),
+        }
+    }
+
+    Ok(peers.into_values().collect())
+}
+
 fn diagnostics() -> Result<DiagnosticsReport> {
     let config = load_app_config()?;
     let scan = scan(true)?;
@@ -783,6 +903,7 @@ async fn app_serve(listen: SocketAddr, open_browser_on_start: bool) -> Result<()
         .route("/api/scan", get(app_scan))
         .route("/api/diagnostics", get(app_diagnostics))
         .route("/api/peers", get(app_peers).post(app_add_peer))
+        .route("/api/peers/discover", post(app_discover_peers))
         .route("/api/peer/test", post(app_peer_test))
         .route("/api/peer/sync", post(app_peer_sync))
         .route("/api/sync-all", post(app_sync_all))
@@ -837,6 +958,17 @@ async fn app_add_peer(
     Json(request): Json<AddPeerRequest>,
 ) -> Result<Json<LanPeerConfig>, LanApiError> {
     add_lan_peer(request.name, request.url, request.lan_key)
+        .map(Json)
+        .map_err(LanApiError::internal)
+}
+
+async fn app_discover_peers(
+    Json(request): Json<DiscoverPeersRequest>,
+) -> Result<Json<Vec<LanDiscoveredPeer>>, LanApiError> {
+    let port = request.port.unwrap_or(7370);
+    tokio::task::spawn_blocking(move || discover_lan_peers(port))
+        .await
+        .map_err(LanApiError::internal)?
         .map(Json)
         .map_err(LanApiError::internal)
 }
@@ -1734,12 +1866,14 @@ const APP_HTML: &str = r#"<!doctype html>
         <label>Shared Key <input id="peerKey" placeholder="choose-a-shared-key"></label>
       </div>
       <p class="row">
+        <button onclick="discoverPeers()">Find LAN Peers</button>
         <button onclick="testPeer()">Test Peer</button>
         <button onclick="syncPeer(true)">Preview From Peer</button>
         <button class="primary" onclick="syncPeer(false)">Get Missing Fonts</button>
         <button onclick="savePeer()">Save Peer</button>
         <button onclick="loadPeers()">List Peers</button>
       </p>
+      <div id="discoveredPeers" class="statusline muted">No peers discovered yet.</div>
     </section>
 
     <section>
@@ -1816,6 +1950,36 @@ const APP_HTML: &str = r#"<!doctype html>
     }
     async function loadPeers() {
       try { showResult(await request('/api/peers')); } catch (error) { show(error.message); }
+    }
+    async function discoverPeers() {
+      try {
+        const listen = document.getElementById('listen').value || '0.0.0.0:7370';
+        const port = Number(listen.split(':').pop()) || 7370;
+        const peers = await request('/api/peers/discover', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ port })
+        });
+        const box = document.getElementById('discoveredPeers');
+        if (!peers.length) {
+          box.textContent = 'No sharing SyncMyFonts peers answered on this LAN.';
+        } else {
+          box.textContent = '';
+          for (const peer of peers) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = `${peer.name} · ${peer.url}${peer.requires_lan_key ? ' · key required' : ''}`;
+            button.addEventListener('click', () => useDiscoveredPeer(peer.name, peer.url));
+            box.appendChild(button);
+            box.appendChild(document.createTextNode(' '));
+          }
+        }
+        showResult(peers);
+      } catch (error) { show(error.message); }
+    }
+    function useDiscoveredPeer(name, url) {
+      document.getElementById('peerName').value = name;
+      document.getElementById('peerUrl').value = url;
     }
     function peerPayload(dryRun) {
       return {

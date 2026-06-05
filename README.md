@@ -82,9 +82,10 @@ cargo run -p syncmyfonts-agent -- app
 ```
 
 The command opens the local control surface in your browser. The app can scan
-fonts, test a LAN peer, preview missing fonts from a peer, install missing
-fonts, save LAN peers, sync all saved peers, start/stop LAN sharing, show the
-copyable LAN URL for this device, and produce a redacted diagnostics report.
+fonts, discover sharing LAN peers, test a LAN peer, preview missing fonts from
+a peer, install missing fonts, save LAN peers, sync all saved peers, start/stop
+LAN sharing, show the copyable LAN URL for this device, and produce a redacted
+diagnostics report.
 When SyncMyFonts installs a font, it records that install in a local managed
 font manifest so future tooling can distinguish SyncMyFonts-managed fonts from
 other user-installed fonts.
@@ -139,6 +140,12 @@ SYNCMYFONTS_LAN_KEY=choose-a-shared-key \
   cargo run -p syncmyfonts-agent -- lan-sync --peer http://<peer-lan-ip>:7370
 ```
 
+To find peers sharing on the default LAN port:
+
+```bash
+cargo run -p syncmyfonts-agent -- lan-discover
+```
+
 For a dry run:
 
 ```bash
@@ -148,9 +155,9 @@ cargo run -p syncmyfonts-agent -- lan-sync \
   --dry-run
 ```
 
-The first LAN MVP uses manual peer URLs. Bonjour/mDNS discovery, QR-code
-pairing, tray apps, and background startup wrappers are planned next-layer app
-features.
+The first LAN MVP has lightweight UDP peer discovery plus manual peer URLs.
+Bonjour/mDNS discovery, QR-code pairing, tray apps, and background startup
+wrappers are planned next-layer app features.
 
 Save a peer for repeated sync:
 
