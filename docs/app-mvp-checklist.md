@@ -42,19 +42,20 @@ The app MVP should reuse the current agent commands:
 
 ### CLI Surface
 
-- [ ] `Scan Local Fonts` wraps `syncmyfonts-agent scan`.
-- [ ] `Preview From Peer` wraps
+- [x] `Scan Local Fonts` wraps `syncmyfonts-agent scan`.
+- [x] `Test Peer` validates a peer by running a dry-run LAN sync.
+- [x] `Preview From Peer` wraps
   `syncmyfonts-agent lan-sync --peer http://<peer-lan-ip>:7370 --dry-run`.
-- [ ] `Get Missing Fonts From Peer` wraps
+- [x] `Get Missing Fonts From Peer` wraps
   `syncmyfonts-agent lan-sync --peer http://<peer-lan-ip>:7370`.
-- [ ] `Save Peer` wraps
+- [x] `Save Peer` wraps
   `syncmyfonts-agent lan-add-peer --name <name> --url http://<peer-lan-ip>:7370`.
-- [ ] `Sync Saved Peers` wraps `syncmyfonts-agent lan-sync-all`.
-- [ ] `Diagnostics` wraps `syncmyfonts-agent diagnostics`.
-- [ ] `Open Control Surface` wraps `syncmyfonts-agent app`.
-- [ ] `Share Fonts On This Network` starts
+- [x] `Sync Saved Peers` wraps `syncmyfonts-agent lan-sync-all`.
+- [x] `Diagnostics` wraps `syncmyfonts-agent diagnostics`.
+- [x] `Open Control Surface` wraps `syncmyfonts-agent app`.
+- [x] `Share Fonts On This Network` starts
   `syncmyfonts-agent lan-serve --listen 0.0.0.0:7370`.
-- [ ] `Stop Sharing` terminates the running `lan-serve` process cleanly.
+- [x] `Stop Sharing` terminates the running `lan-serve` process cleanly.
 - [ ] `Preview From Server` wraps
   `syncmyfonts-agent sync --server http://<server>:7368 --dry-run`.
 - [ ] `Get Missing Fonts From Server` wraps
@@ -71,6 +72,7 @@ The app MVP should reuse the current agent commands:
 - [ ] Optional server API key, passed through `SYNCMYFONTS_API_KEY` or a
   per-user secret store.
 - [ ] Friendly device name for UI, logs, and diagnostics.
+- [x] Copyable LAN URL is shown after sharing starts.
 
 ## Must-Have Artifacts
 

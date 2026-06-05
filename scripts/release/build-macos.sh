@@ -16,19 +16,27 @@ cargo build --release -p syncmyfonts-agent
 
 cp "$repo_root/target/release/syncmyfonts-agent" "$dist_dir/bin/"
 cp -R "$repo_root/packaging/macos" "$dist_dir/packaging/"
+cp "$repo_root/packaging/macos/Start-SyncMyFonts.command" "$dist_dir/"
 cp "$repo_root/README.md" "$dist_dir/"
 cp "$repo_root/docs/app-install.md" "$dist_dir/docs/"
 cp "$repo_root/docs/desktop-app-surface.md" "$dist_dir/docs/" 2>/dev/null || true
+chmod +x "$dist_dir/Start-SyncMyFonts.command"
 
 cat > "$dist_dir/START-HERE.txt" <<'EOF'
 SyncMyFonts macOS MVP
 
-1. Run the local control app:
+1. Double-click:
+   Start-SyncMyFonts.command
+
+2. Your browser should open automatically. If it does not, run:
    ./bin/syncmyfonts-agent app
+   Then open the printed
+   localhost URL manually.
 
-2. Open the shown localhost URL in your browser.
+3. Use the app to Share Fonts On LAN, Test Peer, Preview From Peer, and Get
+   Missing Fonts.
 
-3. To install launch-at-login helpers, see:
+4. To install launch-at-login helpers, see:
    packaging/macos/README.md
 EOF
 

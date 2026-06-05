@@ -2,11 +2,12 @@ use std::{
     collections::BTreeMap,
     fs,
     io::Write,
-    net::SocketAddr,
+    net::{SocketAddr, TcpStream, UdpSocket},
     path::{Path, PathBuf},
     process::{Child, Command},
     sync::{Arc, Mutex},
-    time::Duration,
+    thread,
+    time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -101,6 +102,8 @@ enum Commands {
     App {
         #[arg(long, default_value = "127.0.0.1:7380")]
         listen: SocketAddr,
+        #[arg(long)]
+        no_open: bool,
     },
 }
 
@@ -186,9 +189,9 @@ fn main() -> Result<()> {
         Commands::Diagnostics => {
             print_json(&diagnostics()?)?;
         }
-        Commands::App { listen } => {
+        Commands::App { listen, no_open } => {
             let runtime = tokio::runtime::Runtime::new().context("starting app runtime")?;
-            runtime.block_on(app_serve(listen))?;
+            runtime.block_on(app_serve(listen, !no_open))?;
         }
     }
     Ok(())
@@ -456,7 +459,12 @@ struct LanPeerSyncReport {
 
 #[derive(Clone)]
 struct AppState {
-    share_child: Arc<Mutex<Option<Child>>>,
+    share: Arc<Mutex<Option<RunningShare>>>,
+}
+
+struct RunningShare {
+    child: Child,
+    listen: SocketAddr,
 }
 
 #[derive(Debug, Serialize)]
@@ -467,6 +475,7 @@ struct AppStatus {
     user_font_dir: PathBuf,
     managed_font_dir: PathBuf,
     sharing: bool,
+    share_urls: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -474,6 +483,13 @@ struct AddPeerRequest {
     name: String,
     url: String,
     lan_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PeerSyncRequest {
+    url: String,
+    lan_key: Option<String>,
+    dry_run: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -486,6 +502,15 @@ struct ShareRequest {
 struct ShareResponse {
     sharing: bool,
     message: String,
+    urls: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct PeerTestResponse {
+    ok: bool,
+    message: String,
+    peer_fonts: usize,
+    would_install_or_skip: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -709,9 +734,9 @@ fn diagnostics() -> Result<DiagnosticsReport> {
     })
 }
 
-async fn app_serve(listen: SocketAddr) -> Result<()> {
+async fn app_serve(listen: SocketAddr, open_browser_on_start: bool) -> Result<()> {
     let state = AppState {
-        share_child: Arc::new(Mutex::new(None)),
+        share: Arc::new(Mutex::new(None)),
     };
     let app = Router::new()
         .route("/", get(app_index))
@@ -719,6 +744,8 @@ async fn app_serve(listen: SocketAddr) -> Result<()> {
         .route("/api/scan", get(app_scan))
         .route("/api/diagnostics", get(app_diagnostics))
         .route("/api/peers", get(app_peers).post(app_add_peer))
+        .route("/api/peer/test", post(app_peer_test))
+        .route("/api/peer/sync", post(app_peer_sync))
         .route("/api/sync-all", post(app_sync_all))
         .route("/api/sync-all/dry-run", post(app_sync_all_dry_run))
         .route("/api/share/start", post(app_share_start))
@@ -729,6 +756,9 @@ async fn app_serve(listen: SocketAddr) -> Result<()> {
         .await
         .with_context(|| format!("binding app control surface at {listen}"))?;
     eprintln!("SyncMyFonts app running at http://{listen}");
+    if open_browser_on_start {
+        open_browser(&format!("http://{listen}"));
+    }
     axum::serve(listener, app).await?;
     Ok(())
 }
@@ -738,17 +768,15 @@ async fn app_index() -> Html<&'static str> {
 }
 
 async fn app_status(State(state): State<AppState>) -> Result<Json<AppStatus>, LanApiError> {
+    let share_listen = current_share_listen(&state)?;
     Ok(Json(AppStatus {
         platform: platform_name(),
         device_name: device_name(),
         config_path: app_config_path().map_err(LanApiError::internal)?,
         user_font_dir: user_font_dir().map_err(LanApiError::internal)?,
         managed_font_dir: managed_font_dir().map_err(LanApiError::internal)?,
-        sharing: state
-            .share_child
-            .lock()
-            .map_err(|_| LanApiError::internal("share state lock poisoned"))?
-            .is_some(),
+        sharing: share_listen.is_some(),
+        share_urls: share_listen.map(share_urls).unwrap_or_default(),
     }))
 }
 
@@ -774,12 +802,50 @@ async fn app_add_peer(
         .map_err(LanApiError::internal)
 }
 
+async fn app_peer_test(
+    Json(request): Json<PeerSyncRequest>,
+) -> Result<Json<PeerTestResponse>, LanApiError> {
+    let url = request.url;
+    let lan_key = request.lan_key;
+    let report = tokio::task::spawn_blocking(move || lan_sync(&url, lan_key.as_deref(), true))
+        .await
+        .map_err(LanApiError::internal)?
+        .map_err(LanApiError::internal)?;
+    Ok(Json(PeerTestResponse {
+        ok: true,
+        message: format!("Connected. Peer reported {} fonts.", report.peer_fonts),
+        peer_fonts: report.peer_fonts,
+        would_install_or_skip: report.skipped.len(),
+    }))
+}
+
+async fn app_peer_sync(
+    Json(request): Json<PeerSyncRequest>,
+) -> Result<Json<LanSyncReport>, LanApiError> {
+    let url = request.url;
+    let lan_key = request.lan_key;
+    let dry_run = request.dry_run.unwrap_or(false);
+    tokio::task::spawn_blocking(move || lan_sync(&url, lan_key.as_deref(), dry_run))
+        .await
+        .map_err(LanApiError::internal)?
+        .map(Json)
+        .map_err(LanApiError::internal)
+}
+
 async fn app_sync_all() -> Result<Json<LanSyncAllReport>, LanApiError> {
-    lan_sync_all(false).map(Json).map_err(LanApiError::internal)
+    tokio::task::spawn_blocking(|| lan_sync_all(false))
+        .await
+        .map_err(LanApiError::internal)?
+        .map(Json)
+        .map_err(LanApiError::internal)
 }
 
 async fn app_sync_all_dry_run() -> Result<Json<LanSyncAllReport>, LanApiError> {
-    lan_sync_all(true).map(Json).map_err(LanApiError::internal)
+    tokio::task::spawn_blocking(|| lan_sync_all(true))
+        .await
+        .map_err(LanApiError::internal)?
+        .map(Json)
+        .map_err(LanApiError::internal)
 }
 
 async fn app_share_start(
@@ -787,47 +853,98 @@ async fn app_share_start(
     Json(request): Json<ShareRequest>,
 ) -> Result<Json<ShareResponse>, LanApiError> {
     let mut guard = state
-        .share_child
+        .share
         .lock()
         .map_err(|_| LanApiError::internal("share state lock poisoned"))?;
     if guard.is_some() {
+        let urls = guard
+            .as_ref()
+            .map(|share| share_urls(share.listen))
+            .unwrap_or_default();
         return Ok(Json(ShareResponse {
             sharing: true,
             message: "Already sharing fonts on the LAN.".to_string(),
+            urls,
         }));
     }
     let exe = std::env::current_exe().map_err(LanApiError::internal)?;
-    let listen = request.listen.unwrap_or_else(|| "0.0.0.0:7370".to_string());
+    let listen: SocketAddr = request
+        .listen
+        .unwrap_or_else(|| "0.0.0.0:7370".to_string())
+        .parse()
+        .map_err(LanApiError::bad_request)?;
     let mut command = Command::new(exe);
-    command.args(["lan-serve", "--listen", &listen]);
+    command.args(["lan-serve", "--listen", &listen.to_string()]);
     if let Some(lan_key) = request.lan_key {
         command.env("SYNCMYFONTS_LAN_KEY", lan_key);
     }
     let child = command.spawn().map_err(LanApiError::internal)?;
-    *guard = Some(child);
+    let child = wait_for_share_start(child, listen).map_err(LanApiError::internal)?;
+    let urls = share_urls(listen);
+    *guard = Some(RunningShare { child, listen });
     Ok(Json(ShareResponse {
         sharing: true,
-        message: format!("Sharing fonts at {listen}."),
+        message: format!("Sharing fonts at {}.", urls.join(", ")),
+        urls,
     }))
 }
 
 async fn app_share_stop(State(state): State<AppState>) -> Result<Json<ShareResponse>, LanApiError> {
     let mut guard = state
-        .share_child
+        .share
         .lock()
         .map_err(|_| LanApiError::internal("share state lock poisoned"))?;
-    let Some(mut child) = guard.take() else {
+    let Some(mut share) = guard.take() else {
         return Ok(Json(ShareResponse {
             sharing: false,
             message: "Sharing was not running.".to_string(),
+            urls: Vec::new(),
         }));
     };
-    let _ = child.kill();
-    let _ = child.wait();
+    let _ = share.child.kill();
+    let _ = share.child.wait();
     Ok(Json(ShareResponse {
         sharing: false,
         message: "Stopped sharing fonts.".to_string(),
+        urls: Vec::new(),
     }))
+}
+
+fn current_share_listen(state: &AppState) -> Result<Option<SocketAddr>, LanApiError> {
+    let mut guard = state
+        .share
+        .lock()
+        .map_err(|_| LanApiError::internal("share state lock poisoned"))?;
+    let Some(share) = guard.as_mut() else {
+        return Ok(None);
+    };
+    if let Ok(Some(_status)) = share.child.try_wait() {
+        *guard = None;
+        return Ok(None);
+    }
+    Ok(guard.as_ref().map(|share| share.listen))
+}
+
+fn wait_for_share_start(mut child: Child, listen: SocketAddr) -> Result<Child> {
+    let probe = SocketAddr::from(([127, 0, 0, 1], listen.port()));
+    let started = Instant::now();
+    loop {
+        if let Some(status) = child
+            .try_wait()
+            .context("checking LAN share child status")?
+        {
+            bail!("LAN share exited before it was ready: {status}");
+        }
+        if TcpStream::connect_timeout(&probe, Duration::from_millis(150)).is_ok() {
+            return Ok(child);
+        }
+        if started.elapsed() > Duration::from_secs(3) {
+            let _ = child.kill();
+            let _ = child.wait();
+            bail!("LAN share did not answer at {probe}");
+        }
+        thread::sleep(Duration::from_millis(75));
+    }
 }
 
 fn find_local_font_by_hash(sha256: &str) -> Result<Option<LocalFont>> {
@@ -1253,6 +1370,43 @@ fn device_name() -> String {
         .unwrap_or_else(|_| "unknown-device".to_string())
 }
 
+fn share_urls(listen: SocketAddr) -> Vec<String> {
+    let port = listen.port();
+    let ip = listen.ip();
+    if ip.is_unspecified() {
+        let mut urls = Vec::new();
+        if let Some(local_ip) = likely_lan_ip() {
+            urls.push(format!("http://{local_ip}:{port}"));
+        }
+        urls.push(format!("http://127.0.0.1:{port}"));
+        urls
+    } else {
+        vec![format!("http://{listen}")]
+    }
+}
+
+fn likely_lan_ip() -> Option<std::net::IpAddr> {
+    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    let ip = socket.local_addr().ok()?.ip();
+    if ip.is_loopback() { None } else { Some(ip) }
+}
+
+fn open_browser(url: &str) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("open").arg(url).spawn();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("cmd").args(["/C", "start", "", url]).spawn();
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = Command::new("xdg-open").arg(url).spawn();
+    }
+}
+
 fn is_hidden(path: &Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())
@@ -1359,6 +1513,32 @@ const APP_HTML: &str = r#"<!doctype html>
       gap: 10px;
       align-items: center;
     }
+    .stack {
+      display: grid;
+      gap: 10px;
+    }
+    .statusline {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 6px;
+      background: color-mix(in oklab, CanvasText 7%, Canvas);
+      overflow-wrap: anywhere;
+    }
+    .result {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .metric {
+      padding: 10px;
+      border: 1px solid color-mix(in oklab, CanvasText 16%, Canvas);
+      border-radius: 6px;
+    }
+    .metric strong {
+      display: block;
+      font-size: 22px;
+    }
     pre {
       white-space: pre-wrap;
       overflow-wrap: anywhere;
@@ -1401,6 +1581,9 @@ const APP_HTML: &str = r#"<!doctype html>
         <label>Shared Key <input id="peerKey" placeholder="choose-a-shared-key"></label>
       </div>
       <p class="row">
+        <button onclick="testPeer()">Test Peer</button>
+        <button onclick="syncPeer(true)">Preview From Peer</button>
+        <button class="primary" onclick="syncPeer(false)">Get Missing Fonts</button>
         <button onclick="savePeer()">Save Peer</button>
         <button onclick="loadPeers()">List Peers</button>
       </p>
@@ -1416,18 +1599,43 @@ const APP_HTML: &str = r#"<!doctype html>
         <button class="primary" onclick="startShare()">Share Fonts On LAN</button>
         <button class="danger" onclick="stopShare()">Stop Sharing</button>
       </p>
+      <div id="shareUrls" class="statusline muted">Sharing is off.</div>
       <p class="muted">Only use sharing on trusted local networks. No port forwarding is required.</p>
     </section>
 
     <section>
       <h2>Result</h2>
+      <div id="summary" class="result"></div>
       <pre id="output">Ready.</pre>
     </section>
   </main>
   <script>
     const out = document.getElementById('output');
+    const summary = document.getElementById('summary');
     function show(value) {
       out.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    }
+    function metric(label, value) {
+      return `<div class="metric"><strong>${value}</strong>${label}</div>`;
+    }
+    function summarize(value) {
+      summary.innerHTML = '';
+      if (!value || typeof value !== 'object') return;
+      if (Array.isArray(value.fonts)) {
+        summary.innerHTML = metric('fonts found', value.fonts.length) + metric('warnings', value.warnings?.length ?? 0);
+      } else if (Array.isArray(value.peers)) {
+        const installed = value.peers.reduce((count, peer) => count + (peer.installed?.length ?? 0), 0);
+        const failed = value.peers.filter(peer => !peer.ok).length;
+        summary.innerHTML = metric('peers', value.peers.length) + metric('installed', installed) + metric('failed', failed);
+      } else if (Array.isArray(value.installed)) {
+        summary.innerHTML = metric('peer fonts', value.peer_fonts ?? 0) + metric('installed', value.installed.length) + metric('skipped', value.skipped?.length ?? 0);
+      } else if (typeof value.peer_fonts === 'number') {
+        summary.innerHTML = metric('peer fonts', value.peer_fonts) + metric('results', value.would_install_or_skip ?? 0);
+      }
+    }
+    function showResult(value) {
+      summarize(value);
+      show(value);
     }
     async function request(path, options = {}) {
       const response = await fetch(path, options);
@@ -1442,20 +1650,52 @@ const APP_HTML: &str = r#"<!doctype html>
         const status = await request('/api/status');
         document.getElementById('status').textContent =
           `${status.device_name} · ${status.platform} · sharing: ${status.sharing ? 'on' : 'off'}`;
+        document.getElementById('shareUrls').textContent = status.share_urls.length
+          ? `Use this URL from another computer: ${status.share_urls.join(' or ')}`
+          : 'Sharing is off.';
       } catch (error) { show(error.message); }
     }
     async function scanFonts() {
-      try { show(await request('/api/scan')); } catch (error) { show(error.message); }
+      try { showResult(await request('/api/scan')); } catch (error) { show(error.message); }
     }
     async function diagnostics() {
-      try { show(await request('/api/diagnostics')); } catch (error) { show(error.message); }
+      try { showResult(await request('/api/diagnostics')); } catch (error) { show(error.message); }
     }
     async function loadPeers() {
-      try { show(await request('/api/peers')); } catch (error) { show(error.message); }
+      try { showResult(await request('/api/peers')); } catch (error) { show(error.message); }
+    }
+    function peerPayload(dryRun) {
+      return {
+        url: document.getElementById('peerUrl').value,
+        lan_key: document.getElementById('peerKey').value || null,
+        dry_run: dryRun
+      };
+    }
+    async function testPeer() {
+      try {
+        showResult(await request('/api/peer/test', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(peerPayload(true))
+        }));
+      } catch (error) { show(error.message); }
+    }
+    async function syncPeer(dryRun) {
+      try {
+        const result = await request('/api/peer/sync', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(peerPayload(dryRun))
+        });
+        showResult(result);
+        if (!dryRun && result.installed?.length) {
+          out.textContent += '\n\nInstalled fonts are ready. Reopen design apps if they do not appear yet.';
+        }
+      } catch (error) { show(error.message); }
     }
     async function savePeer() {
       try {
-        show(await request('/api/peers', {
+        showResult(await request('/api/peers', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -1468,12 +1708,16 @@ const APP_HTML: &str = r#"<!doctype html>
     }
     async function syncAll(dryRun) {
       try {
-        show(await request(dryRun ? '/api/sync-all/dry-run' : '/api/sync-all', { method: 'POST' }));
+        const result = await request(dryRun ? '/api/sync-all/dry-run' : '/api/sync-all', { method: 'POST' });
+        showResult(result);
+        if (!dryRun && result.peers?.some(peer => peer.installed?.length)) {
+          out.textContent += '\n\nInstalled fonts are ready. Reopen design apps if they do not appear yet.';
+        }
       } catch (error) { show(error.message); }
     }
     async function startShare() {
       try {
-        show(await request('/api/share/start', {
+        showResult(await request('/api/share/start', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -1486,7 +1730,7 @@ const APP_HTML: &str = r#"<!doctype html>
     }
     async function stopShare() {
       try {
-        show(await request('/api/share/stop', { method: 'POST' }));
+        showResult(await request('/api/share/stop', { method: 'POST' }));
         refresh();
       } catch (error) { show(error.message); }
     }

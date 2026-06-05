@@ -4,6 +4,21 @@ SyncMyFonts is currently a CLI-first MVP. The launcher artifacts in
 `packaging/macos` and `packaging/windows` make it behave like a small local app
 without changing the Rust agent.
 
+## Start The Local App
+
+Run the agent app command from the release folder or a local build:
+
+```sh
+syncmyfonts-agent app
+```
+
+The command opens the local control surface in your browser. Use `--no-open`
+when a script should start the app without launching a browser.
+
+The local app can start LAN sharing, show the URL to paste into another
+computer, test a peer, preview missing fonts, install missing fonts, save peers,
+and run diagnostics.
+
 ## Build the Agent
 
 ```sh

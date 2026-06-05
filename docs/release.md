@@ -40,5 +40,7 @@ syncmyfonts-agent app
 ```
 
 That command launches the local browser-based control surface. It can scan
-fonts, save LAN peers, dry-run syncs, sync all saved peers, start LAN sharing,
-stop LAN sharing, and produce a redacted diagnostics report.
+fonts, test a LAN peer, preview missing fonts from a peer, install missing
+fonts, save LAN peers, sync all saved peers, start LAN sharing, show a copyable
+LAN URL for the other computer, stop LAN sharing, and produce a redacted
+diagnostics report.

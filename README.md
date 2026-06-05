@@ -81,9 +81,13 @@ The agent includes a small browser-based desktop control surface:
 cargo run -p syncmyfonts-agent -- app
 ```
 
-Open the shown localhost URL. The app can scan fonts, save LAN peers, dry-run
-syncs, sync all saved peers, start/stop LAN sharing, and produce a redacted
-diagnostics report.
+The command opens the local control surface in your browser. The app can scan
+fonts, test a LAN peer, preview missing fonts from a peer, install missing
+fonts, save LAN peers, sync all saved peers, start/stop LAN sharing, show the
+copyable LAN URL for this device, and produce a redacted diagnostics report.
+
+For scripts or headless runs, use `syncmyfonts-agent app --no-open` and open
+the printed localhost URL manually.
 
 ## Client Commands
 

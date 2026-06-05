@@ -26,6 +26,7 @@ try {
 
 Copy-Item (Join-Path $RepoRoot "target/release/syncmyfonts-agent.exe") (Join-Path $DistDir "bin/")
 Copy-Item -Recurse (Join-Path $RepoRoot "packaging/windows") (Join-Path $DistDir "packaging/")
+Copy-Item (Join-Path $RepoRoot "packaging/windows/Start-SyncMyFonts.cmd") $DistDir
 Copy-Item (Join-Path $RepoRoot "README.md") $DistDir
 Copy-Item (Join-Path $RepoRoot "docs/app-install.md") (Join-Path $DistDir "docs/")
 if (Test-Path (Join-Path $RepoRoot "docs/desktop-app-surface.md")) {
@@ -35,12 +36,18 @@ if (Test-Path (Join-Path $RepoRoot "docs/desktop-app-surface.md")) {
 Set-Content -Path (Join-Path $DistDir "START-HERE.txt") -Encoding UTF8 -Value @"
 SyncMyFonts Windows MVP
 
-1. Run the local control app:
+1. Double-click:
+   Start-SyncMyFonts.cmd
+
+2. Your browser should open automatically. If it does not, run:
    .\bin\syncmyfonts-agent.exe app
+   Then open the printed
+   localhost URL manually.
 
-2. Open the shown localhost URL in your browser.
+3. Use the app to Share Fonts On LAN, Test Peer, Preview From Peer, and Get
+   Missing Fonts.
 
-3. To install startup helpers, see:
+4. To install startup helpers, see:
    packaging\windows\README.md
 "@
 
