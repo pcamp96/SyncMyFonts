@@ -28,10 +28,8 @@ SyncMyFonts macOS MVP
 1. Double-click:
    Start-SyncMyFonts.command
 
-2. Your browser should open automatically. If it does not, run:
-   ./bin/syncmyfonts-agent app
-   Then open the printed
-   localhost URL manually.
+2. The native SyncMyFonts window should open. If it does not, run:
+   ./bin/syncmyfonts-agent gui
 
 3. On the computer with fonts, click Share Fonts On LAN. Leave Shared Key blank
    for the easiest setup and copy the pairing code.

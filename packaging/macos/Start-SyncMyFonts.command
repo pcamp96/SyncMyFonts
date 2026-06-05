@@ -14,4 +14,4 @@ else
   exit 1
 fi
 
-"$agent" app
+"$agent" gui

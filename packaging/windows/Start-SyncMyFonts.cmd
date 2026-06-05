@@ -14,4 +14,4 @@ pause
 exit /b 1
 
 :run
-"%AGENT%" app
+"%AGENT%" gui

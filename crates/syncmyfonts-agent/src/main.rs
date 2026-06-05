@@ -111,6 +111,8 @@ enum Commands {
     Diagnostics,
     /// Verify SyncMyFonts-managed installed font files still match the manifest.
     VerifyManaged,
+    /// Run the native desktop GUI.
+    Gui,
     /// Run the local desktop control surface.
     App {
         #[arg(long, default_value = "127.0.0.1:7380")]
@@ -211,6 +213,9 @@ fn main() -> Result<()> {
         }
         Commands::VerifyManaged => {
             print_json(&verify_managed_fonts()?)?;
+        }
+        Commands::Gui => {
+            run_gui()?;
         }
         Commands::App { listen, no_open } => {
             let runtime = tokio::runtime::Runtime::new().context("starting app runtime")?;
@@ -1050,6 +1055,7 @@ async fn app_serve(listen: SocketAddr, open_browser_on_start: bool) -> Result<()
     };
     let app = Router::new()
         .route("/", get(app_index))
+        .route("/favicon.ico", get(app_favicon))
         .route("/api/status", get(app_status))
         .route("/api/scan", get(app_scan))
         .route("/api/diagnostics", get(app_diagnostics))
@@ -1079,6 +1085,10 @@ async fn app_serve(listen: SocketAddr, open_browser_on_start: bool) -> Result<()
 
 async fn app_index() -> Html<&'static str> {
     Html(APP_HTML)
+}
+
+async fn app_favicon() -> StatusCode {
+    StatusCode::NO_CONTENT
 }
 
 async fn app_status(State(state): State<AppState>) -> Result<Json<AppStatus>, LanApiError> {
@@ -1276,6 +1286,486 @@ async fn app_share_stop(State(state): State<AppState>) -> Result<Json<ShareRespo
         pairing_code: None,
         pairing_expires_seconds: None,
     }))
+}
+
+fn run_gui() -> Result<()> {
+    let options = eframe::NativeOptions {
+        viewport: eframe::egui::ViewportBuilder::default().with_inner_size([980.0, 760.0]),
+        ..Default::default()
+    };
+    eframe::run_native(
+        "SyncMyFonts",
+        options,
+        Box::new(|_cc| Ok(Box::new(SyncMyFontsGui::new()))),
+    )
+    .map_err(|error| anyhow!("running SyncMyFonts GUI: {error}"))
+}
+
+struct SyncMyFontsGui {
+    status: String,
+    next_step: String,
+    output: String,
+    peer_name: String,
+    peer_url: String,
+    peer_key: String,
+    pairing_code: String,
+    listen: String,
+    share_key: String,
+    share: Option<RunningShare>,
+    share_urls: Vec<String>,
+}
+
+impl SyncMyFontsGui {
+    fn new() -> Self {
+        let mut app = Self {
+            status: "Loading...".to_string(),
+            next_step: "Start by sharing fonts on one computer, then pair from the other computer."
+                .to_string(),
+            output: "Ready.".to_string(),
+            peer_name: String::new(),
+            peer_url: String::new(),
+            peer_key: String::new(),
+            pairing_code: String::new(),
+            listen: "0.0.0.0:7370".to_string(),
+            share_key: String::new(),
+            share: None,
+            share_urls: Vec::new(),
+        };
+        app.refresh_status();
+        app
+    }
+
+    fn refresh_status(&mut self) {
+        self.prune_stopped_share();
+        self.status = format!(
+            "{} · {} · sharing: {}",
+            device_name(),
+            platform_name(),
+            if self.share.is_some() { "on" } else { "off" }
+        );
+        self.share_urls = self
+            .share
+            .as_ref()
+            .map(|share| share_urls(share.listen))
+            .unwrap_or_default();
+    }
+
+    fn set_result<T: Serialize>(&mut self, result: Result<T>) {
+        match result {
+            Ok(value) => {
+                self.output =
+                    serde_json::to_string_pretty(&value).unwrap_or_else(|_| "ok".to_string());
+            }
+            Err(error) => {
+                self.output = error.to_string();
+                self.next_step =
+                    "That action failed. Review the output, then check the peer URL, pairing code, or network access."
+                        .to_string();
+            }
+        }
+    }
+
+    fn scan_fonts(&mut self) {
+        match scan(true) {
+            Ok(report) => {
+                self.next_step = format!(
+                    "Found {} local fonts. Share this device if another computer needs these fonts.",
+                    report.fonts.len()
+                );
+                self.set_result(Ok(report));
+            }
+            Err(error) => self.set_result::<ScanOutput>(Err(error)),
+        }
+    }
+
+    fn verify_managed(&mut self) {
+        match verify_managed_fonts() {
+            Ok(report) => {
+                let issues = report.missing.len() + report.modified.len() + report.unreadable.len();
+                self.next_step = if issues == 0 {
+                    "All SyncMyFonts-managed fonts still match the local manifest.".to_string()
+                } else {
+                    format!("{issues} managed font issue(s) found. Review before syncing more.")
+                };
+                self.set_result(Ok(report));
+            }
+            Err(error) => self.set_result::<ManagedVerifyReport>(Err(error)),
+        }
+    }
+
+    fn run_diagnostics(&mut self) {
+        self.set_result(diagnostics());
+        self.next_step =
+            "Diagnostics are redacted and safe to paste into a support issue.".to_string();
+    }
+
+    fn discover_peers(&mut self) {
+        let port = self
+            .listen
+            .rsplit_once(':')
+            .and_then(|(_, port)| port.parse::<u16>().ok())
+            .unwrap_or(7370);
+        match discover_lan_peers(port) {
+            Ok(peers) => {
+                if let Some(peer) = peers.first() {
+                    self.peer_name = peer.name.clone();
+                    self.peer_url = peer.url.clone();
+                    self.next_step =
+                        "Enter the pairing code shown on that computer, then click Pair Peer."
+                            .to_string();
+                } else {
+                    self.next_step =
+                        "No sharing peers answered. Make sure the other computer is sharing and on the same trusted LAN."
+                            .to_string();
+                }
+                self.set_result(Ok(peers));
+            }
+            Err(error) => self.set_result::<Vec<LanDiscoveredPeer>>(Err(error)),
+        }
+    }
+
+    fn pair_peer(&mut self) {
+        match pair_lan_peer(
+            self.peer_name.clone(),
+            self.peer_url.clone(),
+            self.pairing_code.clone(),
+        ) {
+            Ok(peer) => {
+                self.peer_name = peer.name.clone();
+                self.peer_url = peer.url.clone();
+                self.peer_key = peer.lan_key.clone().unwrap_or_default();
+                self.next_step = format!(
+                    "{} is paired and saved. Preview from the peer before installing.",
+                    peer.name
+                );
+                self.set_result(Ok(peer));
+            }
+            Err(error) => self.set_result::<LanPeerConfig>(Err(error)),
+        }
+    }
+
+    fn save_peer(&mut self) {
+        match add_lan_peer(
+            self.peer_name.clone(),
+            self.peer_url.clone(),
+            empty_to_none(&self.peer_key),
+        ) {
+            Ok(peer) => {
+                self.next_step = format!(
+                    "{} is saved. Use Sync Saved Peers for repeat syncs.",
+                    peer.name
+                );
+                self.set_result(Ok(peer));
+            }
+            Err(error) => self.set_result::<LanPeerConfig>(Err(error)),
+        }
+    }
+
+    fn forget_peer(&mut self) {
+        match forget_lan_peer(&self.peer_name) {
+            Ok(result) => {
+                if result.removed {
+                    self.peer_key.clear();
+                    self.next_step =
+                        "Peer removed. Pair or save it again if you still need it.".to_string();
+                } else {
+                    self.next_step = "No saved peer matched that name.".to_string();
+                }
+                self.set_result(Ok(result));
+            }
+            Err(error) => self.set_result::<ForgetPeerResponse>(Err(error)),
+        }
+    }
+
+    fn test_peer(&mut self) {
+        match lan_sync(
+            &self.peer_url,
+            empty_to_none(&self.peer_key).as_deref(),
+            true,
+        ) {
+            Ok(report) => {
+                self.next_step = format!(
+                    "Connected. Peer reports {} fonts. Preview or install missing fonts next.",
+                    report.peer_fonts
+                );
+                self.set_result(Ok(report));
+            }
+            Err(error) => self.set_result::<LanSyncReport>(Err(error)),
+        }
+    }
+
+    fn sync_peer(&mut self, dry_run: bool) {
+        match lan_sync(
+            &self.peer_url,
+            empty_to_none(&self.peer_key).as_deref(),
+            dry_run,
+        ) {
+            Ok(report) => {
+                if dry_run {
+                    let would_install = report
+                        .skipped
+                        .iter()
+                        .filter(|line| line.starts_with("would install "))
+                        .count();
+                    self.next_step = if would_install == 0 {
+                        "No missing installable fonts were found from this peer.".to_string()
+                    } else {
+                        format!("{would_install} missing font(s) can be installed from this peer.")
+                    };
+                } else if report.installed.is_empty() {
+                    self.next_step = "No new fonts were installed.".to_string();
+                } else {
+                    self.next_step =
+                        "Installed fonts are ready. Reopen design apps if they do not appear yet."
+                            .to_string();
+                }
+                self.set_result(Ok(report));
+            }
+            Err(error) => self.set_result::<LanSyncReport>(Err(error)),
+        }
+    }
+
+    fn sync_saved_peers(&mut self, dry_run: bool) {
+        match lan_sync_all(dry_run) {
+            Ok(report) => {
+                let installed = report
+                    .peers
+                    .iter()
+                    .map(|peer| peer.installed.len())
+                    .sum::<usize>();
+                self.next_step = if dry_run {
+                    "Dry run complete. Review the peer results before syncing.".to_string()
+                } else if installed == 0 {
+                    "Saved peer sync finished. No new fonts were installed.".to_string()
+                } else {
+                    format!(
+                        "Installed {installed} font(s). Reopen design apps if they do not appear yet."
+                    )
+                };
+                self.set_result(Ok(report));
+            }
+            Err(error) => self.set_result::<LanSyncAllReport>(Err(error)),
+        }
+    }
+
+    fn start_share(&mut self) {
+        if self.share.is_some() {
+            self.next_step = "Sharing is already on.".to_string();
+            return;
+        }
+        let listen: SocketAddr = match self.listen.parse() {
+            Ok(listen) => listen,
+            Err(error) => {
+                self.output = format!("invalid listen address: {error}");
+                return;
+            }
+        };
+        let exe = match std::env::current_exe() {
+            Ok(exe) => exe,
+            Err(error) => {
+                self.output = format!("locating current executable failed: {error}");
+                return;
+            }
+        };
+        let mut command = Command::new(exe);
+        command.args(["lan-serve", "--listen", &listen.to_string()]);
+        let provided_key = empty_to_none(&self.share_key);
+        let pairing_code = if provided_key.is_some() {
+            None
+        } else {
+            generate_pairing_code()
+        };
+        let lan_key = provided_key.unwrap_or_else(generate_lan_token);
+        command.env("SYNCMYFONTS_LAN_KEY", lan_key);
+        if let Some(code) = &pairing_code {
+            command.env("SYNCMYFONTS_PAIRING_CODE", code);
+        }
+        match command
+            .spawn()
+            .map_err(anyhow::Error::from)
+            .and_then(|child| wait_for_share_start(child, listen))
+        {
+            Ok(child) => {
+                self.share = Some(RunningShare { child, listen });
+                self.refresh_status();
+                let response = ShareResponse {
+                    sharing: true,
+                    message: format!("Sharing fonts at {}.", self.share_urls.join(", ")),
+                    urls: self.share_urls.clone(),
+                    pairing_expires_seconds: pairing_code
+                        .as_ref()
+                        .map(|_| PAIRING_CODE_TTL.as_secs()),
+                    pairing_code,
+                };
+                if let Some(code) = &response.pairing_code {
+                    self.next_step =
+                        format!("Pairing code {code} is ready. Enter it on the other computer.");
+                } else {
+                    self.next_step =
+                        "Sharing is on. Use the shown LAN URL and shared key from another computer."
+                            .to_string();
+                }
+                self.set_result(Ok(response));
+            }
+            Err(error) => {
+                self.output = error.to_string();
+                self.next_step =
+                    "Sharing failed to start. Check whether another SyncMyFonts share is already using that port."
+                        .to_string();
+            }
+        }
+    }
+
+    fn stop_share(&mut self) {
+        let Some(mut share) = self.share.take() else {
+            self.next_step = "Sharing is already off.".to_string();
+            return;
+        };
+        let _ = share.child.kill();
+        let _ = share.child.wait();
+        self.refresh_status();
+        self.next_step =
+            "Sharing is off. Start sharing again when another computer needs fonts.".to_string();
+        self.output = "Stopped sharing fonts.".to_string();
+    }
+
+    fn prune_stopped_share(&mut self) {
+        let stopped = self
+            .share
+            .as_mut()
+            .and_then(|share| share.child.try_wait().ok().flatten())
+            .is_some();
+        if stopped {
+            self.share = None;
+        }
+    }
+}
+
+impl Drop for SyncMyFontsGui {
+    fn drop(&mut self) {
+        if let Some(mut share) = self.share.take() {
+            let _ = share.child.kill();
+            let _ = share.child.wait();
+        }
+    }
+}
+
+impl eframe::App for SyncMyFontsGui {
+    fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
+        self.prune_stopped_share();
+        ui.horizontal(|ui| {
+            ui.heading("SyncMyFonts");
+            if ui.button("Refresh").clicked() {
+                self.refresh_status();
+            }
+        });
+        ui.label(&self.status);
+
+        ui.separator();
+        ui.heading("Local Font Library");
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Scan Fonts").clicked() {
+                self.scan_fonts();
+            }
+            if ui.button("Verify Managed Fonts").clicked() {
+                self.verify_managed();
+            }
+            if ui.button("Diagnostics").clicked() {
+                self.run_diagnostics();
+            }
+            if ui.button("Sync Saved Peers").clicked() {
+                self.sync_saved_peers(false);
+            }
+            if ui.button("Dry Run Saved Peers").clicked() {
+                self.sync_saved_peers(true);
+            }
+        });
+
+        ui.separator();
+        ui.heading("Saved LAN Peer");
+        ui.horizontal(|ui| {
+            ui.label("Name");
+            ui.text_edit_singleline(&mut self.peer_name);
+            ui.label("URL");
+            ui.text_edit_singleline(&mut self.peer_url);
+        });
+        ui.horizontal(|ui| {
+            ui.label("Shared Key");
+            ui.text_edit_singleline(&mut self.peer_key);
+            ui.label("Pairing Code");
+            ui.text_edit_singleline(&mut self.pairing_code);
+        });
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Find LAN Peers").clicked() {
+                self.discover_peers();
+            }
+            if ui.button("Pair Peer").clicked() {
+                self.pair_peer();
+            }
+            if ui.button("Test Peer").clicked() {
+                self.test_peer();
+            }
+            if ui.button("Preview From Peer").clicked() {
+                self.sync_peer(true);
+            }
+            if ui.button("Get Missing Fonts").clicked() {
+                self.sync_peer(false);
+            }
+            if ui.button("Save Peer").clicked() {
+                self.save_peer();
+            }
+            if ui.button("Forget Peer").clicked() {
+                self.forget_peer();
+            }
+        });
+
+        ui.separator();
+        ui.heading("Share This Device");
+        ui.horizontal(|ui| {
+            ui.label("Listen Address");
+            ui.text_edit_singleline(&mut self.listen);
+            ui.label("Shared Key");
+            ui.text_edit_singleline(&mut self.share_key);
+        });
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Share Fonts On LAN").clicked() {
+                self.start_share();
+            }
+            if ui.button("Stop Sharing").clicked() {
+                self.stop_share();
+            }
+        });
+        if self.share_urls.is_empty() {
+            ui.label("Sharing is off. No port forwarding is required.");
+        } else {
+            ui.label(format!(
+                "Use this URL from another computer: {}",
+                self.share_urls.join(" or ")
+            ));
+        }
+
+        ui.separator();
+        ui.heading("Result");
+        ui.label(&self.next_step);
+        eframe::egui::ScrollArea::vertical()
+            .max_height(260.0)
+            .show(ui, |ui| {
+                ui.add(
+                    eframe::egui::TextEdit::multiline(&mut self.output)
+                        .desired_width(f32::INFINITY)
+                        .desired_rows(14),
+                );
+            });
+    }
+}
+
+fn empty_to_none(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }
 
 fn current_share_listen(state: &AppState) -> Result<Option<SocketAddr>, LanApiError> {

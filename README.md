@@ -75,25 +75,28 @@ docker run -d \
 cargo build
 ```
 
-## Run the Local App
+## Run the Native Desktop App
 
-The agent includes a small browser-based desktop control surface:
+The agent includes a native cross-platform desktop GUI:
 
 ```bash
-cargo run -p syncmyfonts-agent -- app
+cargo run -p syncmyfonts-agent -- gui
 ```
 
-The command opens the local control surface in your browser. The app can scan
-fonts, discover sharing LAN peers, test a LAN peer, preview missing fonts from
-a peer, install missing fonts, save LAN peers, sync all saved peers, start/stop
-LAN sharing, show the copyable LAN URL for this device, verify managed font
-installs, and produce a redacted diagnostics report.
+The GUI can scan fonts, discover sharing LAN peers, test a LAN peer, preview
+missing fonts from a peer, install missing fonts, save LAN peers, sync all saved
+peers, start/stop LAN sharing, show the copyable LAN URL for this device, verify
+managed font installs, and produce a redacted diagnostics report.
 When SyncMyFonts installs a font, it records that install in a local managed
 font manifest so future tooling can distinguish SyncMyFonts-managed fonts from
 other user-installed fonts.
 
-For scripts or headless runs, use `syncmyfonts-agent app --no-open` and open
-the printed localhost URL manually.
+The browser control surface is still available for development and future
+self-hosted/server-adjacent workflows:
+
+```bash
+cargo run -p syncmyfonts-agent -- app
+```
 
 ## Client Commands
 
@@ -142,7 +145,7 @@ SYNCMYFONTS_LAN_KEY=choose-a-shared-key \
 ```
 
 If you omit `SYNCMYFONTS_LAN_KEY`, `lan-serve` generates a private token and
-prints an 8-digit pairing code. In the local app, leaving `Shared Key` blank
+prints an 8-digit pairing code. In the native GUI, leaving `Shared Key` blank
 does the same thing and shows the pairing code in the result panel.
 
 On the device that needs the fonts:
@@ -169,8 +172,8 @@ cargo run -p syncmyfonts-agent -- lan-sync \
 
 The first LAN MVP has lightweight UDP peer discovery, manual peer URLs, and an
 8-digit app pairing code that saves the generated LAN token for future syncs.
-Bonjour/mDNS discovery, QR-code pairing, tray apps, and background startup
-wrappers are planned next-layer app features.
+Bonjour/mDNS discovery, QR-code pairing, and tray/menu background sync are
+planned next-layer app features.
 
 Save a peer for repeated sync:
 
@@ -203,17 +206,19 @@ No port forwarding is required. The peer URL should be a LAN address reachable
 inside the same local network. Windows or macOS may still ask for local network
 or firewall permission when a device is serving fonts.
 
-## App Wrapper Plan
+## App Architecture
 
-The current MVP is a cross-platform agent with a local browser control surface.
-Native tray/menu wrappers should call these same commands instead of
-reimplementing sync logic:
+The current MVP is one cross-platform agent binary with CLI commands, a native
+desktop GUI, and a browser control surface kept for development and future
+self-hosted/server-adjacent workflows. The GUI calls the same sync logic as the
+CLI instead of reimplementing sync behavior:
 
 - "Share fonts on this network" -> `syncmyfonts-agent lan-serve`
 - "Pull fonts from another device" -> `syncmyfonts-agent lan-sync`
 - "Preview what would install" -> `syncmyfonts-agent lan-sync --dry-run`
 - "Sync through my server" -> `syncmyfonts-agent sync`
-- "Open control surface" -> `syncmyfonts-agent app`
+- "Open native GUI" -> `syncmyfonts-agent gui`
+- "Open browser control surface" -> `syncmyfonts-agent app`
 
 See the platform app notes in:
 

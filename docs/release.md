@@ -36,14 +36,17 @@ dist\syncmyfonts-windows-<version>.zip
 Both release folders start from the same command:
 
 ```text
-syncmyfonts-agent app
+syncmyfonts-agent gui
 ```
 
-That command launches the local browser-based control surface. It can scan
-fonts, start LAN sharing, show a copyable LAN URL and pairing code, discover
-sharing LAN peers, pair with a peer, test a LAN peer, preview missing fonts,
-install missing fonts, save LAN peers, sync all saved peers, stop LAN sharing,
-and produce a redacted diagnostics report.
+That command launches the native SyncMyFonts GUI. It can scan fonts, start LAN
+sharing, show a copyable LAN URL and pairing code, discover sharing LAN peers,
+pair with a peer, test a LAN peer, preview missing fonts, install missing
+fonts, save LAN peers, sync all saved peers, stop LAN sharing, verify managed
+font installs, and produce a redacted diagnostics report.
+
+The browser control surface remains available through `syncmyfonts-agent app`
+for development and future self-hosted/server-adjacent workflows.
 
 The release folder's `START-HERE.txt` also calls out the common LAN setup
 checks: both computers need to be on the same trusted LAN/VPN, Windows sharing

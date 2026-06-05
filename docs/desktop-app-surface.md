@@ -2,7 +2,7 @@
 
 Scope: smallest macOS plus Windows desktop control surface that makes the
 existing Rust agent usable by a non-technical person for local font sync. This
-document is UI and wrapper guidance only. It does not require Rust changes.
+document tracks the native one-window GUI and future wrapper/tray guidance.
 
 ## MVP Decision
 
@@ -108,6 +108,7 @@ Use the bundled `syncmyfonts-agent` executable directly.
 | --- | --- |
 | Scan Local Fonts | `syncmyfonts-agent scan` |
 | Scan Including Managed Fonts | `syncmyfonts-agent scan --include-managed` |
+| Verify Managed Fonts | `syncmyfonts-agent verify-managed` |
 | Share | `syncmyfonts-agent lan-serve --listen 0.0.0.0:7370 --lan-key <key>` |
 | Stop | Terminate the running `lan-serve` child process cleanly |
 | Test Peer | `GET <peer>/api/lan/v1/health` or `syncmyfonts-agent lan-sync --peer <peer> --lan-key <key> --dry-run` |
@@ -121,6 +122,7 @@ Use the bundled `syncmyfonts-agent` executable directly.
 | Get Missing Fonts From Server | `syncmyfonts-agent sync --server <url> --api-key <key>` |
 | Send My Fonts To Server | `syncmyfonts-agent push --server <url> --api-key <key>` |
 | Sync Both Ways With Server | Run `push`, then run `sync` |
+| Open Native GUI | `syncmyfonts-agent gui` |
 
 If a secret is already stored in the user config, prefer passing it through the
 environment variables already supported by the agent:
@@ -279,6 +281,6 @@ Windows service for the MVP.
    `lan-sync-all`.
 3. Add diagnostics and secret redaction before wider testing.
 4. Add server mode after LAN peer flow works on both platforms.
-5. Defer Bonjour/mDNS discovery, pairing codes, tray/menu-bar background sync,
-   conflict review, and auto-update until after the MVP path is boringly
+5. Defer Bonjour/mDNS discovery, tray/menu-bar background sync, conflict
+   review, and auto-update until after the MVP path is boringly
    reliable.

@@ -3,6 +3,9 @@
 These PowerShell helpers run `syncmyfonts-agent` for the signed-in user. They do
 not install a Windows service and do not require administrator rights.
 
+For the normal desktop MVP, double-click `Start-SyncMyFonts.cmd` from the
+release folder. It launches the native GUI with `syncmyfonts-agent gui`.
+
 ## Scheduled Task
 
 Use this path when there is no tray app yet and you want sync at sign-in plus a

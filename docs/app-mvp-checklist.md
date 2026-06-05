@@ -22,6 +22,7 @@ The app MVP should reuse the current agent commands:
 - `syncmyfonts-agent lan-peers`
 - `syncmyfonts-agent lan-sync-all`
 - `syncmyfonts-agent verify-managed`
+- `syncmyfonts-agent gui`
 
 ## Must-Have Product Behavior
 
@@ -56,7 +57,8 @@ The app MVP should reuse the current agent commands:
 - [x] `Sync Saved Peers` wraps `syncmyfonts-agent lan-sync-all`.
 - [x] `Diagnostics` wraps `syncmyfonts-agent diagnostics`.
 - [x] `Verify Managed Fonts` wraps `syncmyfonts-agent verify-managed`.
-- [x] `Open Control Surface` wraps `syncmyfonts-agent app`.
+- [x] `Open Native GUI` wraps `syncmyfonts-agent gui`.
+- [x] `Open Browser Control Surface` wraps `syncmyfonts-agent app`.
 - [x] `Share Fonts On This Network` starts
   `syncmyfonts-agent lan-serve --listen 0.0.0.0:7370`.
 - [x] `Stop Sharing` terminates the running `lan-serve` process cleanly.
@@ -196,6 +198,7 @@ Already present in the repo:
 - CLI commands for saved peers: `lan-add-peer`, `lan-peers`, and
   `lan-sync-all`.
 - CLI/app command for redacted diagnostics: `diagnostics`.
+- Native desktop GUI command: `gui`.
 - Local browser control surface command: `app`.
 - LAN peer HTTP endpoints for health, manifest, and blob download.
 - Optional LAN bearer key through `SYNCMYFONTS_LAN_KEY`.
@@ -219,7 +222,8 @@ Already present in the repo:
 
 ## Remaining Gaps
 
-- [x] Local browser app/control surface for macOS and Windows.
+- [x] Native one-window GUI for macOS and Windows.
+- [x] Local browser app/control surface for development and server-adjacent workflows.
 - [ ] Native tray/menu-bar UI for macOS.
 - [ ] Native tray UI for Windows.
 - [x] Basic release archive scripts for macOS and Windows.

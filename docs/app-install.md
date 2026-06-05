@@ -1,25 +1,28 @@
 # App Install MVP
 
-SyncMyFonts is currently a CLI-first MVP. The launcher artifacts in
-`packaging/macos` and `packaging/windows` make it behave like a small local app
-without changing the Rust agent.
+SyncMyFonts is currently a native-GUI MVP backed by the same Rust agent that
+also exposes CLI commands for scripting and diagnostics.
 
 ## Start The Local App
 
-Run the agent app command from the release folder or a local build:
+Run the native GUI from the release folder or a local build:
 
 ```sh
-syncmyfonts-agent app
+syncmyfonts-agent gui
 ```
-
-The command opens the local control surface in your browser. Use `--no-open`
-when a script should start the app without launching a browser.
 
 The local app can start LAN sharing, show an 8-digit pairing code when no
 shared key is provided, find sharing peers on the LAN, pair with a peer, test a
 peer, preview missing fonts, install missing fonts, save peers, and run
 diagnostics. It can also verify that SyncMyFonts-managed installed font files
 still match the local manifest.
+
+The browser control surface is kept as an explicit development and future
+self-hosted/server-adjacent command:
+
+```sh
+syncmyfonts-agent app
+```
 
 Installed fonts are tracked in a local managed-font manifest next to the app
 config. This record only includes fonts installed by SyncMyFonts and keeps

@@ -4,6 +4,9 @@ These files provide per-user LaunchAgent wrappers for the current
 `syncmyfonts-agent` CLI. They do not install a system daemon and do not require
 sudo.
 
+For the normal desktop MVP, double-click `Start-SyncMyFonts.command` from the
+release folder. It launches the native GUI with `syncmyfonts-agent gui`.
+
 ## Install LAN Sharing
 
 ```sh
