@@ -128,6 +128,7 @@ The app MVP should reuse the current agent commands:
 - [x] App config and logs under `%LOCALAPPDATA%\SyncMyFonts`.
 - [x] Start Menu shortcuts for opening SyncMyFonts, saved-peer sync, saved-peer
   preview, diagnostics, and readiness check if there is no full tray UI yet.
+- [x] Optional GUI auto-sync for saved LAN peers while the app is open.
 - [x] Per-user startup option through a tray app, Startup folder, `HKCU\Run`, or
   a current-user Scheduled Task.
 - [x] Plain guidance for firewall prompts when Windows is intentionally hosting:

@@ -1985,6 +1985,9 @@ struct SyncMyFontsGui {
     share: Option<RunningShare>,
     share_urls: Vec<String>,
     last_pairing_code: Option<String>,
+    auto_sync_enabled: bool,
+    auto_sync_interval_minutes: u64,
+    last_auto_sync_at: Option<Instant>,
 }
 
 struct GuiTaskResult {
@@ -2019,6 +2022,9 @@ impl SyncMyFontsGui {
             share: None,
             share_urls: Vec::new(),
             last_pairing_code: None,
+            auto_sync_enabled: false,
+            auto_sync_interval_minutes: 15,
+            last_auto_sync_at: None,
         };
         app.refresh_status();
         app.load_saved_peers_into_form();
@@ -2086,6 +2092,9 @@ impl SyncMyFontsGui {
                 }
                 if result.refresh_saved_peers {
                     self.load_saved_peers_summary();
+                }
+                if action == "Auto-syncing saved peers" {
+                    self.last_auto_sync_at = Some(Instant::now());
                 }
                 self.current_action = None;
             }
@@ -2511,6 +2520,39 @@ impl SyncMyFontsGui {
         });
     }
 
+    fn maybe_auto_sync_saved_peers(&mut self) {
+        if !should_auto_sync_saved_peers(
+            self.auto_sync_enabled,
+            self.task.is_some(),
+            saved_peer_count().unwrap_or(0),
+            self.last_auto_sync_at,
+            self.auto_sync_interval_minutes,
+            Instant::now(),
+        ) {
+            return;
+        }
+
+        self.start_task("Auto-syncing saved peers", || match lan_sync_all(false) {
+            Ok(report) => {
+                let warnings = report.peers.iter().filter(|peer| peer.error.is_some()).count();
+                let installed = report
+                    .peers
+                    .iter()
+                    .map(|peer| peer.installed.len())
+                    .sum::<usize>();
+                let next_step = if installed == 0 {
+                    "Auto sync checked saved peers. No new fonts were installed.".to_string()
+                } else {
+                    format!(
+                        "Auto sync installed {installed} font(s). Reopen design apps if they do not appear yet."
+                    )
+                };
+                gui_ok_with_warning_count(&report, next_step, warnings)
+            }
+            Err(error) => gui_error(error),
+        });
+    }
+
     fn install_startup_sync(&mut self) {
         self.start_task("Enabling sign-in sync", || match install_startup_sync() {
             Ok(report) => {
@@ -2679,9 +2721,12 @@ impl eframe::App for SyncMyFontsGui {
     fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
         self.prune_stopped_share();
         self.poll_task();
+        self.maybe_auto_sync_saved_peers();
         let task_running = self.task.is_some();
         if task_running {
             ui.ctx().request_repaint_after(Duration::from_millis(100));
+        } else if self.auto_sync_enabled {
+            ui.ctx().request_repaint_after(Duration::from_secs(5));
         }
         ui.horizontal(|ui| {
             ui.heading("SyncMyFonts");
@@ -2742,6 +2787,28 @@ impl eframe::App for SyncMyFontsGui {
                 }
                 if ui.button("Install App Shortcuts").clicked() {
                     self.install_app_shortcuts();
+                }
+            });
+            ui.horizontal(|ui| {
+                let changed = ui
+                    .checkbox(&mut self.auto_sync_enabled, "Auto Sync Saved Peers")
+                    .changed();
+                ui.label("Every");
+                ui.add(
+                    eframe::egui::DragValue::new(&mut self.auto_sync_interval_minutes)
+                        .range(1..=1440)
+                        .speed(1.0),
+                );
+                ui.label("minutes while this app is open");
+                if changed {
+                    self.last_auto_sync_at = None;
+                    self.next_step = if self.auto_sync_enabled {
+                        "Auto sync is on. SyncMyFonts will check saved LAN peers while the app stays open."
+                            .to_string()
+                    } else {
+                        "Auto sync is off. Manual saved-peer sync and sign-in sync are still available."
+                            .to_string()
+                    };
                 }
             });
         });
@@ -2932,6 +2999,23 @@ fn platform_manual_peer_fallback_guidance() -> &'static str {
     }
 }
 
+fn should_auto_sync_saved_peers(
+    enabled: bool,
+    task_running: bool,
+    saved_peer_count: usize,
+    last_sync_at: Option<Instant>,
+    interval_minutes: u64,
+    now: Instant,
+) -> bool {
+    if !enabled || task_running || saved_peer_count == 0 {
+        return false;
+    }
+    let interval = Duration::from_secs(interval_minutes.max(1) * 60);
+    last_sync_at
+        .map(|last_sync_at| now.duration_since(last_sync_at) >= interval)
+        .unwrap_or(true)
+}
+
 fn empty_to_none(value: &str) -> Option<String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -3065,6 +3149,10 @@ fn load_app_config() -> Result<AppConfig> {
         save_app_config(&config)?;
     }
     Ok(config)
+}
+
+fn saved_peer_count() -> Result<usize> {
+    Ok(load_app_config()?.peers.len())
 }
 
 fn normalize_app_config(config: &mut AppConfig) -> bool {
@@ -4946,6 +5034,39 @@ mod tests {
         }
 
         assert_eq!(name, "Event MacBook");
+    }
+
+    #[test]
+    fn auto_sync_waits_for_saved_peers_and_idle_gui() {
+        let now = Instant::now();
+
+        assert!(!should_auto_sync_saved_peers(
+            false, false, 1, None, 15, now
+        ));
+        assert!(!should_auto_sync_saved_peers(true, true, 1, None, 15, now));
+        assert!(!should_auto_sync_saved_peers(true, false, 0, None, 15, now));
+        assert!(should_auto_sync_saved_peers(true, false, 1, None, 15, now));
+    }
+
+    #[test]
+    fn auto_sync_respects_interval() {
+        let now = Instant::now();
+        assert!(!should_auto_sync_saved_peers(
+            true,
+            false,
+            1,
+            Some(now - Duration::from_secs(30)),
+            1,
+            now
+        ));
+        assert!(should_auto_sync_saved_peers(
+            true,
+            false,
+            1,
+            Some(now - Duration::from_secs(60)),
+            1,
+            now
+        ));
     }
 
     #[test]
