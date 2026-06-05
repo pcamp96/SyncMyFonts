@@ -30,6 +30,9 @@ Use `Readiness Check` before live two-machine testing to confirm local app
 paths, saved peers, and sign-in sync helper status.
 Use `Enable Sign-In Sync` after pairing peers if this computer should pull
 missing fonts from saved peers whenever the user signs in.
+On Windows, use `Install App Shortcuts` to create current-user Start Menu
+launchers for the native app, saved-peer sync, dry-run preview, diagnostics,
+and readiness check.
 Set `Device Name` in the app header before pairing if the default computer name
 is unclear. This name appears in LAN discovery, pairing, diagnostics, and
 support reports.

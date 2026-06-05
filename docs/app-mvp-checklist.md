@@ -24,6 +24,7 @@ The app MVP should reuse the current agent commands:
 - `syncmyfonts-agent lan-sync-all`
 - `syncmyfonts-agent doctor`
 - `syncmyfonts-agent verify-managed`
+- `syncmyfonts-agent install-app-shortcuts`
 - `syncmyfonts-agent gui`
 
 ## Must-Have Product Behavior
@@ -59,6 +60,8 @@ The app MVP should reuse the current agent commands:
 - [x] `Sync Saved Peers` wraps `syncmyfonts-agent lan-sync-all`.
 - [x] `Diagnostics` wraps `syncmyfonts-agent diagnostics`.
 - [x] `Verify Managed Fonts` wraps `syncmyfonts-agent verify-managed`.
+- [x] `Install App Shortcuts` wraps
+  `syncmyfonts-agent install-app-shortcuts`.
 - [x] `Open Native GUI` wraps `syncmyfonts-agent gui`.
 - [x] `Open Browser Control Surface` wraps `syncmyfonts-agent app`.
 - [x] `Share Fonts On This Network` starts
@@ -119,8 +122,8 @@ The app MVP should reuse the current agent commands:
 - [x] Current-user registry registration under
   `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts`.
 - [x] App config and logs under `%LOCALAPPDATA%\SyncMyFonts`.
-- [ ] Start Menu shortcuts for `Sync Now`, `Send My Fonts`,
-  `Get Missing Fonts`, and `Diagnostics` if there is no full tray UI yet.
+- [x] Start Menu shortcuts for opening SyncMyFonts, saved-peer sync, saved-peer
+  preview, diagnostics, and readiness check if there is no full tray UI yet.
 - [x] Per-user startup option through a tray app, Startup folder, `HKCU\Run`, or
   a current-user Scheduled Task.
 - [x] Plain guidance for firewall prompts when Windows is intentionally hosting:

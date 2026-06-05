@@ -104,6 +104,8 @@ friendly device name, verify managed font installs, and produce a redacted
 diagnostics report. It can also install a per-user sign-in helper that runs
 saved-peer sync without putting LAN keys in shortcut or plist arguments, and
 run a readiness check before live two-machine testing.
+On Windows, the GUI can also install current-user Start Menu shortcuts for the
+native app, saved-peer sync, dry-run preview, diagnostics, and readiness check.
 When SyncMyFonts installs a font, it records that install in a local managed
 font manifest so future tooling can distinguish SyncMyFonts-managed fonts from
 other user-installed fonts.
@@ -139,6 +141,12 @@ Verify SyncMyFonts-managed font installs:
 
 ```bash
 cargo run -p syncmyfonts-agent -- verify-managed
+```
+
+Install current-user app shortcuts for common actions:
+
+```bash
+cargo run -p syncmyfonts-agent -- install-app-shortcuts
 ```
 
 With auth:

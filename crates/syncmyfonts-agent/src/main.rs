@@ -124,6 +124,8 @@ enum Commands {
     VerifyManaged,
     /// Install a per-user sign-in helper that syncs saved LAN peers.
     InstallStartupSync,
+    /// Install per-user app shortcuts for common SyncMyFonts actions.
+    InstallAppShortcuts,
     /// Run the native desktop GUI.
     Gui,
     /// Run the local desktop control surface.
@@ -240,6 +242,9 @@ fn main() -> Result<()> {
         }
         Commands::InstallStartupSync => {
             print_json(&install_startup_sync()?)?;
+        }
+        Commands::InstallAppShortcuts => {
+            print_json(&install_app_shortcuts()?)?;
         }
         Commands::Gui => {
             run_gui()?;
@@ -696,6 +701,15 @@ struct StartupSyncReport {
     helper_path: PathBuf,
     registration_path: PathBuf,
     saved_peer_count: usize,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+struct AppShortcutReport {
+    installed: bool,
+    platform: &'static str,
+    directory: PathBuf,
+    shortcuts: Vec<PathBuf>,
     message: String,
 }
 
@@ -2346,6 +2360,22 @@ impl SyncMyFontsGui {
         });
     }
 
+    fn install_app_shortcuts(&mut self) {
+        self.start_task("Installing app shortcuts", || {
+            match install_app_shortcuts() {
+                Ok(report) => {
+                    let next_step = if report.installed {
+                        "Shortcuts are installed for common SyncMyFonts actions.".to_string()
+                    } else {
+                        report.message.clone()
+                    };
+                    gui_ok(&report, next_step)
+                }
+                Err(error) => gui_error(error),
+            }
+        });
+    }
+
     fn start_share(&mut self) {
         if self.share.is_some() {
             self.next_step = "Sharing is already on.".to_string();
@@ -2535,6 +2565,9 @@ impl eframe::App for SyncMyFontsGui {
                 }
                 if ui.button("Enable Sign-In Sync").clicked() {
                     self.install_startup_sync();
+                }
+                if ui.button("Install App Shortcuts").clicked() {
+                    self.install_app_shortcuts();
                 }
             });
         });
@@ -3210,6 +3243,74 @@ fn install_startup_sync() -> Result<StartupSyncReport> {
     }
 }
 
+fn install_app_shortcuts() -> Result<AppShortcutReport> {
+    #[cfg(target_os = "windows")]
+    {
+        let agent_path = agent_command_exe()?;
+        let directory = windows_app_shortcuts_dir()?;
+        fs::create_dir_all(&directory)
+            .with_context(|| format!("creating {}", directory.display()))?;
+
+        let shortcuts = vec![
+            write_windows_app_shortcut(
+                &directory,
+                "SyncMyFonts.cmd",
+                &agent_path,
+                &["gui"],
+                false,
+            )?,
+            write_windows_app_shortcut(
+                &directory,
+                "Sync Saved Peers.cmd",
+                &agent_path,
+                &["lan-sync-all"],
+                true,
+            )?,
+            write_windows_app_shortcut(
+                &directory,
+                "Preview Saved Peers.cmd",
+                &agent_path,
+                &["lan-sync-all", "--dry-run"],
+                true,
+            )?,
+            write_windows_app_shortcut(
+                &directory,
+                "Diagnostics.cmd",
+                &agent_path,
+                &["diagnostics"],
+                true,
+            )?,
+            write_windows_app_shortcut(
+                &directory,
+                "Readiness Check.cmd",
+                &agent_path,
+                &["doctor"],
+                true,
+            )?,
+        ];
+
+        return Ok(AppShortcutReport {
+            installed: true,
+            platform: platform_name(),
+            directory,
+            shortcuts,
+            message: "Installed current-user Start Menu shortcuts for SyncMyFonts.".to_string(),
+        });
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let directory = app_data_dir()?;
+        Ok(AppShortcutReport {
+            installed: false,
+            platform: platform_name(),
+            directory,
+            shortcuts: Vec::new(),
+            message: "Native app shortcuts are currently only installed on Windows. On macOS, open SyncMyFonts.app from the release folder.".to_string(),
+        })
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn macos_startup_sync_plist_path() -> Result<PathBuf> {
     use directories::UserDirs;
@@ -3228,6 +3329,43 @@ fn windows_startup_sync_shortcut_path() -> Result<PathBuf> {
     Ok(PathBuf::from(appdata)
         .join("Microsoft/Windows/Start Menu/Programs/Startup")
         .join("SyncMyFonts Sign-In Sync.cmd"))
+}
+
+#[cfg(target_os = "windows")]
+fn windows_app_shortcuts_dir() -> Result<PathBuf> {
+    let appdata = std::env::var("APPDATA").context("APPDATA unavailable")?;
+    Ok(PathBuf::from(appdata)
+        .join("Microsoft/Windows/Start Menu/Programs")
+        .join("SyncMyFonts"))
+}
+
+#[cfg(target_os = "windows")]
+fn write_windows_app_shortcut(
+    directory: &Path,
+    file_name: &str,
+    agent_path: &Path,
+    args: &[&str],
+    pause: bool,
+) -> Result<PathBuf> {
+    let path = directory.join(file_name);
+    fs::write(&path, render_windows_app_shortcut(agent_path, args, pause))
+        .with_context(|| format!("writing {}", path.display()))?;
+    Ok(path)
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn render_windows_app_shortcut(agent_path: &Path, args: &[&str], pause: bool) -> String {
+    let rendered_args = args
+        .iter()
+        .map(|arg| format!(" \"{}\"", escape_windows_cmd_arg(arg)))
+        .collect::<String>();
+    let pause_line = if pause { "echo.\r\npause\r\n" } else { "" };
+    format!(
+        "@echo off\r\n\"{}\"{}\r\n{}",
+        agent_path.display(),
+        rendered_args,
+        pause_line
+    )
 }
 
 fn render_unix_startup_sync_helper(agent_path: &Path, log_dir: &Path) -> String {
@@ -3369,6 +3507,11 @@ fn xml_escape(value: &str) -> String {
 
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn escape_windows_cmd_arg(value: &str) -> String {
+    value.replace('"', "\"\"")
 }
 
 fn legacy_app_config_path() -> Result<Option<PathBuf>> {
@@ -4758,6 +4901,20 @@ mod tests {
         assert!(helper.contains("signin-sync.log"));
         assert!(!helper.contains("SYNCMYFONTS_LAN_KEY"));
         assert!(!helper.contains("--lan-key"));
+    }
+
+    #[test]
+    fn windows_app_shortcut_runs_expected_command_without_keys() {
+        let agent_path = PathBuf::from(r"C:\Users\example\SyncMyFonts\syncmyfonts-agent.exe");
+        let shortcut =
+            render_windows_app_shortcut(&agent_path, &["lan-sync-all", "--dry-run"], true);
+
+        assert!(shortcut.contains(
+            r#""C:\Users\example\SyncMyFonts\syncmyfonts-agent.exe" "lan-sync-all" "--dry-run""#
+        ));
+        assert!(shortcut.contains("pause"));
+        assert!(!shortcut.contains("SYNCMYFONTS_LAN_KEY"));
+        assert!(!shortcut.contains("--lan-key"));
     }
 
     #[test]

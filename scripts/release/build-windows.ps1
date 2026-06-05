@@ -62,6 +62,9 @@ SyncMyFonts Windows MVP
    or see:
    packaging\windows\README.md
 
+7. To add Start Menu launchers for SyncMyFonts, saved-peer sync, dry-run
+   preview, diagnostics, and readiness, click Install App Shortcuts.
+
 Validation:
 - For a full Mac-to-Windows and Windows-to-Mac test pass, see:
   docs\app-install.md
