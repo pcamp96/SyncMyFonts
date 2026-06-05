@@ -58,6 +58,8 @@ The app MVP should reuse the current agent commands:
   `syncmyfonts-agent lan-add-peer --name <name> --url http://<peer-lan-ip>:7370`.
 - [x] `Find LAN Peers` wraps `syncmyfonts-agent lan-discover`.
 - [x] `Pair Peer` exchanges an 8-digit pairing code for a saved LAN token.
+- [x] Saved-peer selector loads a chosen saved Mac or Windows PC instead of
+  assuming the first saved peer.
 - [x] `Sync Saved Peers` wraps `syncmyfonts-agent lan-sync-all`.
 - [x] `Diagnostics` wraps `syncmyfonts-agent diagnostics`.
 - [x] `Validation Report` wraps `syncmyfonts-agent validation-report`.

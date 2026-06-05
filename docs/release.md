@@ -55,7 +55,8 @@ fonts, save LAN peers, sync all saved peers, stop LAN sharing, verify managed
 font installs, set a friendly device name, open managed/log folders, and
 produce a redacted diagnostics report. It can also install per-user sign-in
 sync for saved peers and run a local readiness check before live two-machine
-testing.
+testing. If more than one peer is saved, the GUI lets the user choose which
+saved computer to load before testing, previewing, syncing, or forgetting it.
 
 The browser control surface remains available through `syncmyfonts-agent app`
 for development and future self-hosted/server-adjacent workflows.

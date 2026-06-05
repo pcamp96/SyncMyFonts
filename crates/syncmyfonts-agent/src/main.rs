@@ -2006,6 +2006,8 @@ struct SyncMyFontsGui {
     last_result: String,
     warning_count: usize,
     saved_peer_summary: String,
+    saved_peer_names: Vec<String>,
+    selected_peer_name: String,
     device_name_input: String,
     current_action: Option<String>,
     task: Option<mpsc::Receiver<GuiTaskResult>>,
@@ -2046,6 +2048,8 @@ impl SyncMyFontsGui {
             last_result: "No actions yet.".to_string(),
             warning_count: 0,
             saved_peer_summary: "Saved peers: loading...".to_string(),
+            saved_peer_names: Vec::new(),
+            selected_peer_name: String::new(),
             device_name_input: device_name(),
             current_action: None,
             task: None,
@@ -2205,26 +2209,52 @@ impl SyncMyFontsGui {
     }
 
     fn load_saved_peers_summary(&mut self) {
-        self.saved_peer_summary = match load_app_config() {
-            Ok(config) if config.peers.is_empty() => "Saved peers: none yet.".to_string(),
-            Ok(config) => format!(
-                "Saved peers: {} ({})",
-                config.peers.len(),
-                config
-                    .peers
-                    .iter()
-                    .map(|peer| peer.name.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            Err(error) => format!("Saved peers unavailable: {error}"),
-        };
+        match load_app_config() {
+            Ok(config) if config.peers.is_empty() => {
+                self.saved_peer_names.clear();
+                self.selected_peer_name.clear();
+                self.saved_peer_summary = "Saved peers: none yet.".to_string();
+            }
+            Ok(config) => {
+                self.saved_peer_names = config.peers.iter().map(|peer| peer.name.clone()).collect();
+                if !self.saved_peer_names.contains(&self.selected_peer_name) {
+                    self.selected_peer_name =
+                        self.saved_peer_names.first().cloned().unwrap_or_default();
+                }
+                self.saved_peer_summary = format!(
+                    "Saved peers: {} ({})",
+                    config.peers.len(),
+                    config
+                        .peers
+                        .iter()
+                        .map(|peer| peer.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            Err(error) => {
+                self.saved_peer_names.clear();
+                self.selected_peer_name.clear();
+                self.saved_peer_summary = format!("Saved peers unavailable: {error}");
+            }
+        }
     }
 
     fn load_saved_peers_into_form(&mut self) {
+        self.load_selected_saved_peer_into_form();
+    }
+
+    fn load_selected_saved_peer_into_form(&mut self) {
         match load_app_config() {
             Ok(config) => {
-                if let Some(peer) = config.peers.first() {
+                let selected_name = self.selected_peer_name.trim();
+                let selected_peer = config
+                    .peers
+                    .iter()
+                    .find(|peer| !selected_name.is_empty() && peer.name == selected_name)
+                    .or_else(|| config.peers.first());
+                if let Some(peer) = selected_peer {
+                    self.selected_peer_name = peer.name.clone();
                     self.peer_name = peer.name.clone();
                     self.peer_url = peer.url.clone();
                     self.peer_key = peer.lan_key.clone().unwrap_or_default();
@@ -2876,6 +2906,27 @@ impl eframe::App for SyncMyFontsGui {
         ui.separator();
         ui.heading("Saved LAN Peer");
         ui.horizontal(|ui| {
+            ui.label("Saved Peer");
+            eframe::egui::ComboBox::from_id_salt("saved-peer-selector")
+                .selected_text(if self.selected_peer_name.is_empty() {
+                    "No saved peers"
+                } else {
+                    self.selected_peer_name.as_str()
+                })
+                .show_ui(ui, |ui| {
+                    for peer_name in &self.saved_peer_names {
+                        ui.selectable_value(
+                            &mut self.selected_peer_name,
+                            peer_name.clone(),
+                            peer_name,
+                        );
+                    }
+                });
+            if ui.button("Load Saved Peer").clicked() {
+                self.load_selected_saved_peer_into_form();
+            }
+        });
+        ui.horizontal(|ui| {
             ui.label("Name");
             ui.text_edit_singleline(&mut self.peer_name);
             ui.label("URL");
@@ -2891,9 +2942,6 @@ impl eframe::App for SyncMyFontsGui {
             ui.horizontal_wrapped(|ui| {
                 if ui.button("Find LAN Peers").clicked() {
                     self.discover_peers();
-                }
-                if ui.button("Load First Saved Peer").clicked() {
-                    self.load_saved_peers_into_form();
                 }
                 if ui.button("Pair Peer").clicked() {
                     self.pair_peer();
@@ -5278,6 +5326,47 @@ mod tests {
         assert!(loaded.preferences.auto_sync_saved_peers);
         assert_eq!(loaded.preferences.auto_sync_interval_minutes, 20);
         assert_eq!(loaded.preferences.lan_listen_address, "0.0.0.0:7370");
+    }
+
+    #[test]
+    fn gui_loads_selected_saved_peer_instead_of_first_peer() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let config_dir = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+            std::env::remove_var("SYNCMYFONTS_DEVICE_NAME");
+        }
+        save_app_config(&AppConfig {
+            schema: 1,
+            device_id: Some(Uuid::new_v4()),
+            friendly_device_name: None,
+            preferences: AppPreferences::default(),
+            peers: vec![
+                LanPeerConfig {
+                    name: "Office MacBook".to_string(),
+                    url: "http://192.168.1.10:7370".to_string(),
+                    lan_key: Some("office-key".to_string()),
+                },
+                LanPeerConfig {
+                    name: "Shop PC".to_string(),
+                    url: "http://192.168.1.20:7370".to_string(),
+                    lan_key: Some("shop-key".to_string()),
+                },
+            ],
+        })
+        .unwrap();
+
+        let mut app = SyncMyFontsGui::new();
+        app.selected_peer_name = "Shop PC".to_string();
+        app.load_selected_saved_peer_into_form();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+        }
+
+        assert_eq!(app.saved_peer_names, vec!["Office MacBook", "Shop PC"]);
+        assert_eq!(app.peer_name, "Shop PC");
+        assert_eq!(app.peer_url, "http://192.168.1.20:7370");
+        assert_eq!(app.peer_key, "shop-key");
     }
 
     #[test]
