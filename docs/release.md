@@ -75,5 +75,5 @@ Current artifacts are meant for MVP testing:
 The GitHub Actions build proves that the Rust workspace builds/tests on macOS
 and Windows, that portable archives are produced, that the app-style launchers
 are present, and that the packaged agent inside each archive can run
-`diagnostics` with isolated per-user paths. It does not replace a clean-machine
-GUI launch test, code signing, notarization, or installer QA.
+`diagnostics` and `doctor` with isolated per-user paths. It does not replace a
+clean-machine GUI launch test, code signing, notarization, or installer QA.
