@@ -112,7 +112,7 @@ jobs:
           SYNCMYFONTS_CONFIG_DIR="$source_config" \
           SYNCMYFONTS_LOG_DIR="$smoke_root/source-logs" \
           SYNCMYFONTS_USER_FONT_DIR="$source_fonts" \
-          "$package_dir/bin/syncmyfonts-agent" lan-serve --listen "127.0.0.1:$smoke_port" --lan-key smoke-key &
+          "$package_dir/bin/syncmyfonts-agent" lan-serve --listen "127.0.0.1:$smoke_port" --pairing-code 12345678 &
           server_pid=$!
           trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
           for attempt in $(seq 1 60); do
@@ -126,7 +126,13 @@ jobs:
           SYNCMYFONTS_LOG_DIR="$smoke_root/target-logs" \
           SYNCMYFONTS_USER_FONT_DIR="$target_fonts" \
           SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION=1 \
-          "$package_dir/bin/syncmyfonts-agent" lan-sync --peer "http://127.0.0.1:$smoke_port" --lan-key smoke-key > "$smoke_root/lan-sync.json"
+          "$package_dir/bin/syncmyfonts-agent" lan-pair --name "Packaged Peer" --url "http://127.0.0.1:$smoke_port" --pairing-code 12345678 > "$smoke_root/lan-pair.json"
+          grep -q '"has_lan_key": true' "$smoke_root/lan-pair.json"
+          SYNCMYFONTS_CONFIG_DIR="$target_config" \
+          SYNCMYFONTS_LOG_DIR="$smoke_root/target-logs" \
+          SYNCMYFONTS_USER_FONT_DIR="$target_fonts" \
+          SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION=1 \
+          "$package_dir/bin/syncmyfonts-agent" lan-sync-all > "$smoke_root/lan-sync.json"
           grep -q '"peer_fonts": 1' "$smoke_root/lan-sync.json"
           grep -q '"installed"' "$smoke_root/lan-sync.json"
           test -f "$target_fonts/SyncMyFonts/PackagedSmoke.ttf"
@@ -186,7 +192,7 @@ jobs:
           $portListener.Start()
           $smokePort = $portListener.LocalEndpoint.Port
           $portListener.Stop()
-          $serve = Start-Process -FilePath $agent -ArgumentList @("lan-serve", "--listen", "127.0.0.1:$smokePort", "--lan-key", "smoke-key") -Environment $serveEnv -PassThru -WindowStyle Hidden
+          $serve = Start-Process -FilePath $agent -ArgumentList @("lan-serve", "--listen", "127.0.0.1:$smokePort", "--pairing-code", "12345678") -Environment $serveEnv -PassThru -WindowStyle Hidden
           try {
             $ready = $false
             for ($attempt = 0; $attempt -lt 60; $attempt++) {
@@ -203,7 +209,10 @@ jobs:
             $env:SYNCMYFONTS_LOG_DIR = Join-Path $smokeRoot "target-logs"
             $env:SYNCMYFONTS_USER_FONT_DIR = $targetFonts
             $env:SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION = "1"
-            & $agent lan-sync --peer "http://127.0.0.1:$smokePort" --lan-key "smoke-key" | Tee-Object -FilePath (Join-Path $smokeRoot "lan-sync.json")
+            & $agent lan-pair --name "Packaged Peer" --url "http://127.0.0.1:$smokePort" --pairing-code "12345678" | Tee-Object -FilePath (Join-Path $smokeRoot "lan-pair.json")
+            $lanPair = Get-Content (Join-Path $smokeRoot "lan-pair.json") -Raw
+            if (-not $lanPair.Contains('"has_lan_key": true')) { throw "Packaged LAN pair did not save a key" }
+            & $agent lan-sync-all | Tee-Object -FilePath (Join-Path $smokeRoot "lan-sync.json")
             $lanSync = Get-Content (Join-Path $smokeRoot "lan-sync.json") -Raw
             if (-not $lanSync.Contains('"peer_fonts": 1')) { throw "Packaged LAN sync did not see source font" }
             if (-not (Test-Path (Join-Path $targetFonts "PackagedSmoke.ttf"))) { throw "Packaged LAN sync did not install the font" }

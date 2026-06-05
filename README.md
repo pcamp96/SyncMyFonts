@@ -190,6 +190,15 @@ cargo run -p syncmyfonts-agent -- lan-add-peer \
   --lan-key choose-a-shared-key
 ```
 
+Or pair with the code shown on the sharing computer:
+
+```bash
+cargo run -p syncmyfonts-agent -- lan-pair \
+  --name "Workshop PC" \
+  --url http://<peer-lan-ip>:7370 \
+  --pairing-code 12345678
+```
+
 List saved peers:
 
 ```bash

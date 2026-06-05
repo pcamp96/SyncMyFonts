@@ -136,7 +136,7 @@ The app MVP should reuse the current agent commands:
   archive.
 - [x] GitHub Actions verifies the packaged GUI launcher/app wrapper is present.
 - [x] GitHub Actions smoke-tests packaged LAN serve/sync with isolated font
-  roots.
+  roots, pairing code setup, and saved-peer sync.
 - [ ] Clean-machine smoke tests prove the portable archives launch the native
   app on macOS and Windows.
 - [ ] `cargo run -p syncmyfonts-agent -- scan` returns JSON inventory on macOS.

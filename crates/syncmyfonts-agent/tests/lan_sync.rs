@@ -198,6 +198,75 @@ fn lan_sync_dry_run_reports_missing_without_installing_fonts() {
 }
 
 #[test]
+fn lan_pair_saves_key_then_sync_all_installs_font() {
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
+    let root = unique_temp_dir("syncmyfonts-lan-pair");
+    let peer_a_fonts = root.join("peer-a-fonts");
+    let peer_a_config = root.join("peer-a-config");
+    let peer_b_fonts = root.join("peer-b-fonts");
+    let peer_b_config = root.join("peer-b-config");
+    fs::create_dir_all(&peer_a_fonts).unwrap();
+    fs::create_dir_all(&peer_a_config).unwrap();
+    fs::create_dir_all(&peer_b_fonts).unwrap();
+    fs::create_dir_all(&peer_b_config).unwrap();
+    fs::write(peer_a_fonts.join("Pairing Path.ttf"), b"paired font\n").unwrap();
+
+    let listen = free_local_addr();
+    let mut child = Command::new(&bin);
+    child
+        .arg("lan-serve")
+        .arg("--listen")
+        .arg(listen.to_string())
+        .arg("--pairing-code")
+        .arg("1234-5678");
+    apply_isolated_env(&mut child, &peer_a_fonts, &peer_a_config);
+    let server = child.spawn().unwrap();
+    let _server = ChildGuard(server);
+    wait_for_tcp(listen);
+
+    let mut pair = Command::new(&bin);
+    pair.arg("lan-pair")
+        .arg("--name")
+        .arg("Paired Peer")
+        .arg("--url")
+        .arg(format!("http://{listen}"))
+        .arg("--pairing-code")
+        .arg("12345678");
+    apply_isolated_env(&mut pair, &peer_b_fonts, &peer_b_config);
+    let pair_output = pair.output().unwrap();
+    assert!(
+        pair_output.status.success(),
+        "lan-pair failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&pair_output.stdout),
+        String::from_utf8_lossy(&pair_output.stderr)
+    );
+    let pair_json = parse_json(&pair_output);
+    assert_eq!(pair_json["name"], "Paired Peer");
+    assert_eq!(pair_json["has_lan_key"], true);
+    assert!(
+        !String::from_utf8_lossy(&pair_output.stdout).contains("smf-"),
+        "pair output leaked generated LAN key"
+    );
+
+    let mut sync_all = Command::new(&bin);
+    sync_all.arg("lan-sync-all");
+    apply_isolated_env(&mut sync_all, &peer_b_fonts, &peer_b_config);
+    let output = sync_all.output().unwrap();
+    assert!(
+        output.status.success(),
+        "paired lan-sync-all failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json = parse_json(&output);
+    assert_eq!(json["peers"][0]["ok"], true);
+    assert_eq!(json["peers"][0]["installed"].as_array().unwrap().len(), 1);
+    assert_eq!(installed_font_count(&peer_b_fonts), 1);
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn lan_sync_with_wrong_key_fails_without_installing_fonts() {
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
     let root = unique_temp_dir("syncmyfonts-lan-wrong-key");

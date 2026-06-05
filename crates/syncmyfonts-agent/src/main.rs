@@ -95,6 +95,15 @@ enum Commands {
         #[arg(long, env = "SYNCMYFONTS_LAN_KEY")]
         lan_key: Option<String>,
     },
+    /// Pair with a LAN peer using the code shown on the sharing computer.
+    LanPair {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        url: String,
+        #[arg(long)]
+        pairing_code: String,
+    },
     /// List saved LAN peers.
     LanPeers,
     /// Discover SyncMyFonts peers sharing fonts on this LAN.
@@ -201,6 +210,14 @@ fn main() -> Result<()> {
         Commands::LanAddPeer { name, url, lan_key } => {
             let peer = add_lan_peer(name, url, lan_key)?;
             print_json(&peer)?;
+        }
+        Commands::LanPair {
+            name,
+            url,
+            pairing_code,
+        } => {
+            let peer = pair_lan_peer(name, url, pairing_code)?;
+            print_json(&redacted_peer_config(&peer))?;
         }
         Commands::LanPeers => {
             print_json(&load_app_config()?.peers)?;
