@@ -29,7 +29,7 @@ The app MVP should reuse the current agent commands:
 - [x] Sync only current-user fonts and SyncMyFonts-managed fonts.
 - [x] Never scan, copy, install, delete, or mutate system font directories.
 - [x] Skip installs whose filename conflicts with known system font directories.
-- [ ] Install synced fonts without administrator privileges.
+- [x] Install synced fonts without administrator privileges.
 - [x] Treat SHA-256 as the font identity and deduplicate identical bytes across
   macOS and Windows.
 - [x] Preserve pull-only LAN semantics: one device serves, the other pulls.
@@ -72,8 +72,8 @@ The app MVP should reuse the current agent commands:
 
 ### Required Inputs
 
-- [ ] Peer URL for LAN peer mode, for example `http://192.168.0.50:7370`.
-- [ ] Shared LAN key when peer mode uses `SYNCMYFONTS_LAN_KEY`.
+- [x] Peer URL for LAN peer mode, for example `http://192.168.0.50:7370`.
+- [x] Shared LAN key when peer mode uses `SYNCMYFONTS_LAN_KEY`.
 - [ ] Server URL for central server mode, for example `http://192.168.0.50:7368`.
 - [ ] Optional server API key, passed through `SYNCMYFONTS_API_KEY` or a
   per-user secret store.
@@ -89,8 +89,8 @@ The app MVP should reuse the current agent commands:
 - [ ] Per-user config file with server URL, peer URL history, sync mode, and
   startup preference.
 - [ ] Per-user log directory.
-- [ ] Diagnostics output that redacts API keys and LAN keys.
-- [ ] A short first-run setup path for manual peer or server URL entry.
+- [x] Diagnostics output that redacts API keys and LAN keys.
+- [x] A short first-run setup path for manual peer URL entry.
 - [ ] A copyable support report with app version, agent version, platform,
   config paths, font paths, last command, and last result.
 
@@ -98,22 +98,22 @@ The app MVP should reuse the current agent commands:
 
 - [ ] App bundle with Local Network usage copy if Bonjour, discovery, or bundled
   LAN access is used.
-- [ ] Managed install folder:
+- [x] Managed install folder:
   `~/Library/Fonts/SyncMyFonts`.
-- [ ] App support folder:
+- [x] App support folder:
   `~/Library/Application Support/SyncMyFonts`.
 - [ ] Log folder:
   `~/Library/Logs/SyncMyFonts`.
 - [ ] Optional user LaunchAgent in `~/Library/LaunchAgents` for scheduled sync.
-- [ ] App action to open the managed font folder.
+- [x] App action to open the managed font folder.
 
 ### Windows
 
-- [ ] User install folder:
+- [x] User install folder:
   `%LOCALAPPDATA%\Microsoft\Windows\Fonts`.
-- [ ] Current-user registry registration under
+- [x] Current-user registry registration under
   `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts`.
-- [ ] App config and logs under `%LOCALAPPDATA%\SyncMyFonts`.
+- [x] App config under `%LOCALAPPDATA%\SyncMyFonts`.
 - [ ] Start Menu shortcuts for `Sync Now`, `Send My Fonts`,
   `Get Missing Fonts`, and `Diagnostics` if there is no full tray UI yet.
 - [ ] Per-user startup option through a tray app, Startup folder, `HKCU\Run`, or
@@ -127,7 +127,7 @@ The app MVP should reuse the current agent commands:
 
 - [ ] `cargo build` succeeds on macOS.
 - [ ] `cargo build` succeeds on Windows.
-- [ ] GitHub Actions proves macOS and Windows build/test/release packaging.
+- [x] GitHub Actions proves macOS and Windows build/test/release packaging.
 - [ ] `cargo run -p syncmyfonts-agent -- scan` returns JSON inventory on macOS.
 - [ ] `cargo run -p syncmyfonts-agent -- scan` returns JSON inventory on
   Windows.
@@ -146,7 +146,7 @@ The app MVP should reuse the current agent commands:
 - [ ] macOS can run the same `lan-sync` without `--dry-run` and install missing
   fonts under `~/Library/Fonts/SyncMyFonts`.
 - [ ] Running the same LAN sync twice skips already-present fonts.
-- [ ] Wrong LAN key fails without exposing font manifests or blobs.
+- [x] Wrong LAN key fails without exposing font manifests or blobs.
 - [ ] Offline peer or bad peer URL produces a visible failure and keeps local
   fonts untouched.
 
@@ -172,23 +172,23 @@ The app MVP should reuse the current agent commands:
 - [ ] Windows install never writes to `C:\Windows\Fonts`.
 - [ ] Windows install never writes to `HKLM`.
 - [ ] Windows install writes only current-user font registry entries.
-- [ ] Unsupported `.woff`, `.woff2`, or unknown extensions are skipped.
-- [ ] Same file name with different bytes creates a deterministic suffixed file
+- [x] Unsupported `.woff`, `.woff2`, or unknown extensions are skipped.
+- [x] Same file name with different bytes creates a deterministic suffixed file
   or another documented non-overwrite outcome.
-- [ ] Hash mismatch fails before final install.
+- [x] Hash mismatch fails before final install.
 - [x] Unit tests cover filename sanitization, stable hash IDs, peer URL
   normalization, and diagnostics secret redaction.
 
 ### App UX
 
-- [ ] First-run setup works with manual URL entry.
-- [ ] `Test Connection` checks server health or peer health before sync.
+- [x] First-run setup works with manual URL entry.
+- [x] `Test Connection` checks peer health before sync.
 - [ ] `Dry Run` result matches the following real sync result.
-- [ ] The main app view shows last sync time, last result, and warning count.
-- [ ] The app shows "reopen your design app" guidance after successful install.
+- [x] The main app view shows last sync time, last result, and warning count.
+- [x] The app shows "reopen your design app" guidance after successful install.
 - [ ] Denied macOS Local Network permission still allows manual URL fallback.
 - [ ] Windows client-only mode does not request an inbound firewall exception.
-- [ ] Hosted peer mode clearly says it is only for trusted local networks.
+- [x] Hosted peer mode clearly says it is only for trusted local networks.
 
 ## Current Engine Coverage
 

@@ -88,11 +88,74 @@ fn saved_peer_sync_all_installs_matching_font_bytes() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn lan_sync_with_wrong_key_fails_without_installing_fonts() {
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
+    let root = unique_temp_dir("syncmyfonts-lan-wrong-key");
+    let peer_a_fonts = root.join("peer-a-fonts");
+    let peer_a_config = root.join("peer-a-config");
+    let peer_b_fonts = root.join("peer-b-fonts");
+    let peer_b_config = root.join("peer-b-config");
+    fs::create_dir_all(&peer_a_fonts).unwrap();
+    fs::create_dir_all(&peer_a_config).unwrap();
+    fs::create_dir_all(&peer_b_fonts).unwrap();
+    fs::create_dir_all(&peer_b_config).unwrap();
+    fs::write(
+        peer_a_fonts.join("Protected Workshop.ttf"),
+        b"private font\n",
+    )
+    .unwrap();
+
+    let listen = free_local_addr();
+    let mut child = Command::new(&bin);
+    child
+        .arg("lan-serve")
+        .arg("--listen")
+        .arg(listen.to_string())
+        .arg("--lan-key")
+        .arg("correct-key");
+    apply_isolated_env(&mut child, &peer_a_fonts, &peer_a_config);
+    let server = child.spawn().unwrap();
+    let _server = ChildGuard(server);
+    wait_for_tcp(listen);
+
+    let mut sync = Command::new(&bin);
+    sync.arg("lan-sync")
+        .arg("--peer")
+        .arg(format!("http://{listen}"))
+        .arg("--lan-key")
+        .arg("wrong-key");
+    apply_isolated_env(&mut sync, &peer_b_fonts, &peer_b_config);
+    let output = sync.output().unwrap();
+
+    assert!(
+        !output.status.success(),
+        "lan-sync unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !font_dir_has_entries(&peer_b_fonts),
+        "wrong-key sync wrote files under {}",
+        peer_b_fonts.display()
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
 fn apply_isolated_env(command: &mut Command, font_dir: &Path, config_dir: &Path) {
     command
         .env("SYNCMYFONTS_USER_FONT_DIR", font_dir)
         .env("SYNCMYFONTS_CONFIG_DIR", config_dir)
         .env("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION", "1");
+}
+
+fn font_dir_has_entries(path: &Path) -> bool {
+    fs::read_dir(path)
+        .ok()
+        .into_iter()
+        .flatten()
+        .any(|entry| entry.is_ok())
 }
 
 fn unique_temp_dir(prefix: &str) -> PathBuf {

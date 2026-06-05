@@ -609,6 +609,13 @@ struct PeerTestResponse {
 }
 
 #[derive(Debug, Serialize)]
+struct OpenFolderResponse {
+    opened: bool,
+    path: PathBuf,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
 struct DiagnosticsReport {
     version: &'static str,
     platform: &'static str,
@@ -1060,6 +1067,7 @@ async fn app_serve(listen: SocketAddr, open_browser_on_start: bool) -> Result<()
         .route("/api/scan", get(app_scan))
         .route("/api/diagnostics", get(app_diagnostics))
         .route("/api/managed/verify", get(app_verify_managed))
+        .route("/api/managed/open", post(app_open_managed_folder))
         .route("/api/peers", get(app_peers).post(app_add_peer))
         .route("/api/peers/forget", post(app_forget_peer))
         .route("/api/peers/discover", post(app_discover_peers))
@@ -1116,6 +1124,26 @@ async fn app_verify_managed() -> Result<Json<ManagedVerifyReport>, LanApiError> 
     verify_managed_fonts()
         .map(Json)
         .map_err(LanApiError::internal)
+}
+
+async fn app_open_managed_folder() -> Result<Json<OpenFolderResponse>, LanApiError> {
+    tokio::task::spawn_blocking(|| -> Result<OpenFolderResponse> {
+        let folder = managed_font_dir().and_then(|path| {
+            fs::create_dir_all(&path)
+                .with_context(|| format!("creating managed font folder {}", path.display()))?;
+            Ok(path)
+        })?;
+        let path = open_path(folder)?;
+        Ok(OpenFolderResponse {
+            opened: true,
+            path,
+            message: "Opened the SyncMyFonts managed font folder.".to_string(),
+        })
+    })
+    .await
+    .map_err(LanApiError::internal)?
+    .map(Json)
+    .map_err(LanApiError::internal)
 }
 
 async fn app_peers() -> Result<Json<Vec<LanPeerConfig>>, LanApiError> {
@@ -1521,6 +1549,33 @@ impl SyncMyFontsGui {
         });
     }
 
+    fn open_managed_font_folder(&mut self) {
+        let folder = managed_font_dir().and_then(|path| {
+            fs::create_dir_all(&path)
+                .with_context(|| format!("creating managed font folder {}", path.display()))?;
+            Ok(path)
+        });
+        match folder.and_then(open_path) {
+            Ok(path) => {
+                self.output = format!("Opened managed font folder: {}", path.display());
+                self.next_step =
+                    "This is where SyncMyFonts puts fonts it installs for this user.".to_string();
+                self.last_result = format!(
+                    "Open Managed Folder completed at {}",
+                    Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+                );
+                self.warning_count = 0;
+            }
+            Err(error) => {
+                self.output = error.to_string();
+                self.next_step =
+                    "SyncMyFonts could not open the managed font folder. Diagnostics will show the folder path.".to_string();
+                self.last_result = "Open Managed Folder failed.".to_string();
+                self.warning_count = 1;
+            }
+        }
+    }
+
     fn discover_peers(&mut self) {
         let port = self
             .listen
@@ -1834,6 +1889,9 @@ impl eframe::App for SyncMyFontsGui {
                 if ui.button("Diagnostics").clicked() {
                     self.run_diagnostics();
                 }
+                if ui.button("Open Managed Folder").clicked() {
+                    self.open_managed_font_folder();
+                }
                 if ui.button("Sync Saved Peers").clicked() {
                     self.sync_saved_peers(false);
                 }
@@ -1980,6 +2038,37 @@ fn empty_to_none(value: &str) -> Option<String> {
         None
     } else {
         Some(trimmed.to_string())
+    }
+}
+
+fn open_path(path: PathBuf) -> Result<PathBuf> {
+    let status = platform_open_command(&path)
+        .status()
+        .with_context(|| format!("opening {}", path.display()))?;
+    if !status.success() {
+        bail!("opening {} failed with {}", path.display(), status);
+    }
+    Ok(path)
+}
+
+fn platform_open_command(path: &Path) -> Command {
+    #[cfg(target_os = "macos")]
+    {
+        let mut command = Command::new("open");
+        command.arg(path);
+        command
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let mut command = Command::new("explorer");
+        command.arg(path);
+        command
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let mut command = Command::new("xdg-open");
+        command.arg(path);
+        command
     }
 }
 
@@ -2917,6 +3006,7 @@ const APP_HTML: &str = r#"<!doctype html>
         <button onclick="scanFonts()">Scan Fonts</button>
         <button onclick="verifyManaged()">Verify Managed Fonts</button>
         <button onclick="diagnostics()">Diagnostics</button>
+        <button onclick="openManagedFolder()">Open Managed Folder</button>
         <button class="primary" onclick="syncAll(false)">Sync Saved Peers</button>
         <button onclick="syncAll(true)">Dry Run</button>
       </div>
@@ -3044,6 +3134,13 @@ const APP_HTML: &str = r#"<!doctype html>
         setNextStep(issues
           ? `${issues} managed font issue${issues === 1 ? '' : 's'} found. Review the report before syncing more fonts.`
           : 'All SyncMyFonts-managed fonts still match the local manifest.');
+      } catch (error) { show(error.message); }
+    }
+    async function openManagedFolder() {
+      try {
+        const result = await request('/api/managed/open', { method: 'POST' });
+        showResult(result);
+        setNextStep('This is where SyncMyFonts puts fonts it installs for this user.');
       } catch (error) { show(error.message); }
     }
     async function loadPeers() {
@@ -3315,6 +3412,96 @@ mod tests {
 
         assert!(error.to_string().contains("system-font-conflict"));
         assert!(!user_dir.join("Existing.ttf").exists());
+    }
+
+    #[test]
+    fn install_font_rejects_hash_mismatch_before_write() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let user_dir = root.join("user-fonts");
+        let system_dir = root.join("system-fonts");
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", &user_dir);
+            std::env::set_var("SYNCMYFONTS_SYSTEM_FONT_DIRS", &system_dir);
+            std::env::set_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION", "1");
+        }
+
+        let error = install_font(
+            "Mismatch.ttf",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            b"actual font bytes",
+        )
+        .unwrap_err();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+            std::env::remove_var("SYNCMYFONTS_SYSTEM_FONT_DIRS");
+            std::env::remove_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION");
+        }
+
+        assert!(error.to_string().contains("hash-mismatch"));
+        assert!(!user_dir.exists());
+    }
+
+    #[test]
+    fn install_font_rejects_unsupported_format_before_write() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let user_dir = root.join("user-fonts");
+        let system_dir = root.join("system-fonts");
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", &user_dir);
+            std::env::set_var("SYNCMYFONTS_SYSTEM_FONT_DIRS", &system_dir);
+            std::env::set_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION", "1");
+        }
+
+        let bytes = b"web font bytes";
+        let sha256 = hex::encode(Sha256::digest(bytes));
+        let error = install_font("WebFont.woff2", &sha256, bytes).unwrap_err();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+            std::env::remove_var("SYNCMYFONTS_SYSTEM_FONT_DIRS");
+            std::env::remove_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION");
+        }
+
+        assert!(error.to_string().contains("unsupported-format"));
+        assert!(!user_dir.exists());
+    }
+
+    #[test]
+    fn install_font_suffixes_same_name_with_different_bytes() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let user_dir = root.join("user-fonts");
+        let system_dir = root.join("system-fonts");
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", &user_dir);
+            std::env::set_var("SYNCMYFONTS_SYSTEM_FONT_DIRS", &system_dir);
+            std::env::set_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION", "1");
+        }
+
+        let first_bytes = b"first font bytes";
+        let second_bytes = b"second font bytes";
+        let first_sha = hex::encode(Sha256::digest(first_bytes));
+        let second_sha = hex::encode(Sha256::digest(second_bytes));
+        let first = install_font("Duplicate.ttf", &first_sha, first_bytes).unwrap();
+        let second = install_font("Duplicate.ttf", &second_sha, second_bytes).unwrap();
+        let expected_install_dir = managed_font_dir().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+            std::env::remove_var("SYNCMYFONTS_SYSTEM_FONT_DIRS");
+            std::env::remove_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION");
+        }
+
+        assert_eq!(first, expected_install_dir.join("Duplicate.ttf"));
+        assert_ne!(first, second);
+        assert!(
+            second
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.contains(&second_sha[..8]))
+        );
+        assert_eq!(fs::read(first).unwrap(), first_bytes);
+        assert_eq!(fs::read(second).unwrap(), second_bytes);
     }
 
     #[test]
