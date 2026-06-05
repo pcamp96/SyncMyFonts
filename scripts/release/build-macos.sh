@@ -73,14 +73,17 @@ SyncMyFonts macOS MVP
 3. Click Readiness Check. The managed font folder should be under your user
    account, and no administrator prompt should appear.
 
-4. On the computer with fonts, click Share Fonts On LAN. Leave Shared Key blank
+4. Click Validation Report before and after a real two-computer sync test to
+   capture clean-machine evidence.
+
+5. On the computer with fonts, click Share Fonts On LAN. Leave Shared Key blank
    for the easiest setup and copy the pairing code.
 
-5. On the other computer, click Find LAN Peers, select the sharing computer,
+6. On the other computer, click Find LAN Peers, select the sharing computer,
    enter the pairing code, and click Pair Peer. Then use Preview From Peer or
    Get Missing Fonts.
 
-6. To install launch-at-login helpers, click Enable Sign-In Sync after pairing
+7. To install launch-at-login helpers, click Enable Sign-In Sync after pairing
    peers, or see:
    packaging/macos/README.md
 

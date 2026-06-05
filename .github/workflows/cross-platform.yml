@@ -108,10 +108,16 @@ jobs:
           SYNCMYFONTS_USER_FONT_DIR="$smoke_root/fonts" \
           SYNCMYFONTS_SKIP_STARTUP_REGISTRATION=1 \
           "$package_dir/bin/syncmyfonts-agent" doctor > "$smoke_root/doctor.json"
+          SYNCMYFONTS_CONFIG_DIR="$smoke_root/config" \
+          SYNCMYFONTS_LOG_DIR="$smoke_root/logs" \
+          SYNCMYFONTS_USER_FONT_DIR="$smoke_root/fonts" \
+          "$package_dir/bin/syncmyfonts-agent" validation-report > "$smoke_root/validation-report.json"
           grep -q '"support_report_text"' "$smoke_root/diagnostics.json"
           grep -q '"log_dir"' "$smoke_root/diagnostics.json"
           grep -q '"checks"' "$smoke_root/doctor.json"
           grep -q '"saved-peers"' "$smoke_root/doctor.json"
+          grep -q '"manual_validation_steps"' "$smoke_root/validation-report.json"
+          grep -q '"pass_criteria"' "$smoke_root/validation-report.json"
           source_fonts="$smoke_root/source-fonts"
           source_config="$smoke_root/source-config"
           target_fonts="$smoke_root/target-fonts"
@@ -181,12 +187,16 @@ jobs:
           $env:SYNCMYFONTS_USER_FONT_DIR = Join-Path $smokeRoot "fonts"
           & $agent diagnostics | Tee-Object -FilePath (Join-Path $smokeRoot "diagnostics.json")
           & $agent doctor | Tee-Object -FilePath (Join-Path $smokeRoot "doctor.json")
+          & $agent validation-report | Tee-Object -FilePath (Join-Path $smokeRoot "validation-report.json")
           $diagnostics = Get-Content (Join-Path $smokeRoot "diagnostics.json") -Raw
           $doctor = Get-Content (Join-Path $smokeRoot "doctor.json") -Raw
+          $validationReport = Get-Content (Join-Path $smokeRoot "validation-report.json") -Raw
           if (-not $diagnostics.Contains('"support_report_text"')) { throw "Diagnostics support report missing" }
           if (-not $diagnostics.Contains('"log_dir"')) { throw "Diagnostics log dir missing" }
           if (-not $doctor.Contains('"checks"')) { throw "Doctor checks missing" }
           if (-not $doctor.Contains('"saved-peers"')) { throw "Doctor saved peer check missing" }
+          if (-not $validationReport.Contains('"manual_validation_steps"')) { throw "Validation report manual steps missing" }
+          if (-not $validationReport.Contains('"pass_criteria"')) { throw "Validation report pass criteria missing" }
           $env:APPDATA = Join-Path $smokeRoot "appdata"
           & $agent install-app-shortcuts | Tee-Object -FilePath (Join-Path $smokeRoot "app-shortcuts.json")
           $shortcutsDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\SyncMyFonts"

@@ -28,6 +28,9 @@ fonts installed by SyncMyFonts, and `Open Logs` to open the per-user action
 history folder.
 Use `Readiness Check` before live two-machine testing to confirm local app
 paths, saved peers, and sign-in sync helper status.
+Use `Validation Report` before and after a real Mac-to-Windows test to capture
+diagnostics, readiness, managed-font verification, and the manual pass criteria
+in one redacted JSON bundle.
 Use `Enable Sign-In Sync` after pairing peers if this computer should pull
 missing fonts from saved peers whenever the user signs in.
 On Windows, use `Install App Shortcuts` to create current-user Start Menu

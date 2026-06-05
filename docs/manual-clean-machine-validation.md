@@ -27,10 +27,11 @@ On both computers:
    - Windows: open `bin\syncmyfonts-gui.exe`.
 2. Click `Diagnostics` and save or paste the support report path/output.
 3. Click `Readiness Check`.
-4. Confirm the managed font folder is a per-user path.
+4. Click `Validation Report` and save the JSON as the before-sync evidence.
+5. Confirm the managed font folder is a per-user path.
    - macOS should use `~/Library/Fonts/SyncMyFonts`.
    - Windows should use `%LOCALAPPDATA%\Microsoft\Windows\Fonts`.
-5. Confirm the app does not ask for administrator permission.
+6. Confirm the app does not ask for administrator permission.
 
 Evidence:
 
@@ -39,6 +40,8 @@ macOS diagnostics:
 Windows diagnostics:
 macOS readiness:
 Windows readiness:
+macOS validation report:
+Windows validation report:
 ```
 
 ## macOS To Windows
@@ -100,6 +103,7 @@ On both computers:
 2. Confirm fonts from known system folders are not listed as sync candidates.
 3. Confirm fonts installed by SyncMyFonts are tracked as managed fonts.
 4. Click `Verify Managed Fonts` and confirm the report is clean.
+5. Click `Validation Report` and save the JSON as the after-sync evidence.
 
 Evidence:
 
@@ -108,6 +112,8 @@ macOS scan notes:
 Windows scan notes:
 macOS managed verification:
 Windows managed verification:
+macOS after-sync validation report:
+Windows after-sync validation report:
 ```
 
 ## Sign-In Sync

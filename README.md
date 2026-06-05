@@ -143,6 +143,12 @@ Verify SyncMyFonts-managed font installs:
 cargo run -p syncmyfonts-agent -- verify-managed
 ```
 
+Create a clean-machine validation evidence bundle:
+
+```bash
+cargo run -p syncmyfonts-agent -- validation-report
+```
+
 Install current-user app shortcuts for common actions:
 
 ```bash

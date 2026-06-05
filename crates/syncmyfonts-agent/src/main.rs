@@ -120,6 +120,8 @@ enum Commands {
     Diagnostics,
     /// Check local app readiness without installing fonts or contacting peers.
     Doctor,
+    /// Print a clean-machine validation evidence bundle.
+    ValidationReport,
     /// Verify SyncMyFonts-managed installed font files still match the manifest.
     VerifyManaged,
     /// Install a per-user sign-in helper that syncs saved LAN peers.
@@ -236,6 +238,9 @@ fn main() -> Result<()> {
         }
         Commands::Doctor => {
             print_json(&doctor()?)?;
+        }
+        Commands::ValidationReport => {
+            print_json(&validation_report()?)?;
         }
         Commands::VerifyManaged => {
             print_json(&verify_managed_fonts()?)?;
@@ -746,6 +751,20 @@ struct DoctorCheck {
     name: String,
     ok: bool,
     message: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ValidationReport {
+    generated_at: String,
+    platform: &'static str,
+    version: &'static str,
+    device_name: String,
+    diagnostics: DiagnosticsReport,
+    readiness: DoctorReport,
+    managed_fonts: ManagedVerifyReport,
+    evidence_summary: Vec<String>,
+    manual_validation_steps: Vec<String>,
+    pass_criteria: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1271,6 +1290,85 @@ fn doctor() -> Result<DoctorReport> {
         checks,
         next_step,
     })
+}
+
+fn validation_report() -> Result<ValidationReport> {
+    let diagnostics = diagnostics()?;
+    let readiness = doctor()?;
+    let managed_fonts = verify_managed_fonts()?;
+    let evidence_summary = validation_evidence_summary(&diagnostics, &readiness, &managed_fonts);
+
+    Ok(ValidationReport {
+        generated_at: Utc::now().to_rfc3339(),
+        platform: platform_name(),
+        version: env!("CARGO_PKG_VERSION"),
+        device_name: device_name(),
+        diagnostics,
+        readiness,
+        managed_fonts,
+        evidence_summary,
+        manual_validation_steps: manual_validation_steps(),
+        pass_criteria: manual_validation_pass_criteria(),
+    })
+}
+
+fn validation_evidence_summary(
+    diagnostics: &DiagnosticsReport,
+    readiness: &DoctorReport,
+    managed_fonts: &ManagedVerifyReport,
+) -> Vec<String> {
+    let failed_readiness = readiness.checks.iter().filter(|check| !check.ok).count();
+    let managed_issues =
+        managed_fonts.missing.len() + managed_fonts.modified.len() + managed_fonts.unreadable.len();
+    vec![
+        format!("Platform: {}", diagnostics.platform),
+        format!("Device: {}", diagnostics.device_name),
+        format!("User font dir: {}", diagnostics.user_font_dir.display()),
+        format!(
+            "Managed font dir: {}",
+            diagnostics.managed_font_dir.display()
+        ),
+        format!("Saved peers: {}", diagnostics.saved_peer_count),
+        format!("Local scanned fonts: {}", diagnostics.user_font_count),
+        format!(
+            "Managed font records: {}",
+            diagnostics.managed_manifest_count
+        ),
+        format!("Readiness failed checks: {failed_readiness}"),
+        format!("Managed font verification issues: {managed_issues}"),
+        "Secrets are redacted in diagnostics, saved peer summaries, and action history."
+            .to_string(),
+    ]
+}
+
+fn manual_validation_steps() -> Vec<String> {
+    vec![
+        "Launch the native app on both macOS and Windows.".to_string(),
+        "Run Validation Report on both computers before syncing.".to_string(),
+        "On the computer that has a non-system test font, click Share Fonts On LAN with Shared Key blank.".to_string(),
+        "On the other computer, find or enter the peer URL, enter the pairing code, and click Pair Peer.".to_string(),
+        "Run Preview From Peer and confirm the test font is missing while system fonts are not offered.".to_string(),
+        "Run Get Missing Fonts and confirm the font installs into the current-user or SyncMyFonts-managed folder.".to_string(),
+        "Run the same sync again and confirm the already installed font is skipped.".to_string(),
+        "Repeat the flow in the other direction with a different non-system test font.".to_string(),
+        "Run Validation Report again on both computers and keep the before/after JSON as evidence.".to_string(),
+    ]
+}
+
+fn manual_validation_pass_criteria() -> Vec<String> {
+    vec![
+        "Native GUI launches on both platforms without administrator privileges.".to_string(),
+        "Pairing-code LAN sync works from macOS to Windows and Windows to macOS.".to_string(),
+        "Fonts install only into current-user or SyncMyFonts-managed locations.".to_string(),
+        "System fonts are not listed as missing sync candidates.".to_string(),
+        "Re-running sync skips fonts that are already present.".to_string(),
+        "Managed font verification has no missing, modified, or unreadable entries after sync."
+            .to_string(),
+        "Diagnostics and validation reports do not expose LAN keys, pairing codes, or API keys."
+            .to_string(),
+        "No port forwarding, Docker container, or cloud service is required for the LAN test."
+            .to_string(),
+    ]
 }
 
 fn doctor_check(name: &str, ok: bool, message: impl Into<String>) -> DoctorCheck {
@@ -2111,6 +2209,29 @@ impl SyncMyFontsGui {
         });
     }
 
+    fn run_validation_report(&mut self) {
+        self.start_task("Collecting validation report", || match validation_report() {
+            Ok(report) => {
+                let warnings = report
+                    .readiness
+                    .checks
+                    .iter()
+                    .filter(|check| !check.ok)
+                    .count()
+                    + report.managed_fonts.missing.len()
+                    + report.managed_fonts.modified.len()
+                    + report.managed_fonts.unreadable.len();
+                gui_ok_with_warning_count(
+                    &report,
+                    "Save this before/after report with the clean-machine Mac and Windows sync test evidence."
+                        .to_string(),
+                    warnings,
+                )
+            }
+            Err(error) => gui_error(error),
+        });
+    }
+
     fn open_managed_font_folder(&mut self) {
         let folder = managed_font_dir().and_then(|path| {
             fs::create_dir_all(&path)
@@ -2550,6 +2671,9 @@ impl eframe::App for SyncMyFontsGui {
                 }
                 if ui.button("Readiness Check").clicked() {
                     self.run_doctor();
+                }
+                if ui.button("Validation Report").clicked() {
+                    self.run_validation_report();
                 }
                 if ui.button("Open Managed Folder").clicked() {
                     self.open_managed_font_folder();
@@ -4968,6 +5092,63 @@ mod tests {
             .expect("doctor should include LAN sharing guidance");
         assert!(guidance.ok);
         assert!(guidance.message.contains("No port forwarding is needed"));
+    }
+
+    #[test]
+    fn validation_report_bundles_clean_machine_evidence_without_secrets() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", root.join("config"));
+            std::env::set_var("SYNCMYFONTS_LOG_DIR", root.join("logs"));
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", root.join("fonts"));
+        }
+        add_lan_peer(
+            "Shop PC".to_string(),
+            "http://127.0.0.1:7370".to_string(),
+            Some("super-secret-lan-key".to_string()),
+        )
+        .unwrap();
+        record_action(
+            "Pair Peer",
+            "success",
+            0,
+            "Paired with code 12345678 and token smf-secret-token",
+        )
+        .unwrap();
+
+        let report = validation_report().unwrap();
+        let json = serde_json::to_string(&report).unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_LOG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+        }
+
+        assert_eq!(report.platform, platform_name());
+        assert_eq!(report.diagnostics.saved_peer_count, 1);
+        assert!(
+            report
+                .readiness
+                .checks
+                .iter()
+                .any(|check| check.name == "saved-peers")
+        );
+        assert!(
+            report
+                .manual_validation_steps
+                .iter()
+                .any(|step| step.contains("Repeat the flow in the other direction"))
+        );
+        assert!(
+            report
+                .pass_criteria
+                .iter()
+                .any(|criterion| criterion.contains("No port forwarding"))
+        );
+        assert!(!json.contains("super-secret-lan-key"));
+        assert!(!json.contains("12345678"));
+        assert!(!json.contains("smf-secret-token"));
     }
 
     #[test]

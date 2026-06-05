@@ -23,6 +23,7 @@ The app MVP should reuse the current agent commands:
 - `syncmyfonts-agent lan-peers`
 - `syncmyfonts-agent lan-sync-all`
 - `syncmyfonts-agent doctor`
+- `syncmyfonts-agent validation-report`
 - `syncmyfonts-agent verify-managed`
 - `syncmyfonts-agent install-app-shortcuts`
 - `syncmyfonts-agent gui`
@@ -59,6 +60,7 @@ The app MVP should reuse the current agent commands:
 - [x] `Pair Peer` exchanges an 8-digit pairing code for a saved LAN token.
 - [x] `Sync Saved Peers` wraps `syncmyfonts-agent lan-sync-all`.
 - [x] `Diagnostics` wraps `syncmyfonts-agent diagnostics`.
+- [x] `Validation Report` wraps `syncmyfonts-agent validation-report`.
 - [x] `Verify Managed Fonts` wraps `syncmyfonts-agent verify-managed`.
 - [x] `Install App Shortcuts` wraps
   `syncmyfonts-agent install-app-shortcuts`.
@@ -97,6 +99,8 @@ The app MVP should reuse the current agent commands:
 - [x] Per-user log directory.
 - [x] Diagnostics output that redacts API keys and LAN keys.
 - [x] Readiness check for local paths, saved peers, and sign-in sync helper.
+- [x] Validation report that bundles diagnostics, readiness, managed font
+  verification, and manual clean-machine pass criteria.
 - [x] A short first-run setup path for manual peer URL entry.
 - [x] A copyable support report with app version, agent version, platform,
   config paths, font paths, last command, and last result.
