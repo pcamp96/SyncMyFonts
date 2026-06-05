@@ -1034,11 +1034,7 @@ fn diagnostics() -> Result<DiagnosticsReport> {
     let saved_peers = config
         .peers
         .iter()
-        .map(|peer| RedactedPeer {
-            name: peer.name.clone(),
-            url: peer.url.clone(),
-            has_lan_key: peer.lan_key.is_some(),
-        })
+        .map(redacted_peer_config)
         .collect::<Vec<_>>();
     Ok(DiagnosticsReport {
         version: env!("CARGO_PKG_VERSION"),
@@ -1146,9 +1142,9 @@ async fn app_open_managed_folder() -> Result<Json<OpenFolderResponse>, LanApiErr
     .map_err(LanApiError::internal)
 }
 
-async fn app_peers() -> Result<Json<Vec<LanPeerConfig>>, LanApiError> {
+async fn app_peers() -> Result<Json<Vec<RedactedPeer>>, LanApiError> {
     load_app_config()
-        .map(|config| Json(config.peers))
+        .map(|config| Json(config.peers.iter().map(redacted_peer_config).collect()))
         .map_err(LanApiError::internal)
 }
 
@@ -1609,7 +1605,16 @@ impl SyncMyFontsGui {
                         "{} is paired and saved. Preview from the peer before installing.",
                         peer.name
                     );
-                    gui_ok_with_updates(&peer, next_step, Some(peer.clone()), None, false, true, 0)
+                    let output = redacted_peer_config(&peer);
+                    gui_ok_with_updates(
+                        &output,
+                        next_step,
+                        Some(peer.clone()),
+                        None,
+                        false,
+                        true,
+                        0,
+                    )
                 }
                 Err(error) => gui_error(error),
             }
@@ -1627,7 +1632,16 @@ impl SyncMyFontsGui {
                         "{} is saved. Use Sync Saved Peers for repeat syncs.",
                         peer.name
                     );
-                    gui_ok_with_updates(&peer, next_step, Some(peer.clone()), None, false, true, 0)
+                    let output = redacted_peer_config(&peer);
+                    gui_ok_with_updates(
+                        &output,
+                        next_step,
+                        Some(peer.clone()),
+                        None,
+                        false,
+                        true,
+                        0,
+                    )
                 }
                 Err(error) => gui_error(error),
             }
@@ -1911,7 +1925,7 @@ impl eframe::App for SyncMyFontsGui {
         });
         ui.horizontal(|ui| {
             ui.label("Shared Key");
-            ui.text_edit_singleline(&mut self.peer_key);
+            ui.add(eframe::egui::TextEdit::singleline(&mut self.peer_key).password(true));
             ui.label("Pairing Code");
             ui.text_edit_singleline(&mut self.pairing_code);
         });
@@ -1950,7 +1964,7 @@ impl eframe::App for SyncMyFontsGui {
             ui.label("Listen Address");
             ui.text_edit_singleline(&mut self.listen);
             ui.label("Shared Key");
-            ui.text_edit_singleline(&mut self.share_key);
+            ui.add(eframe::egui::TextEdit::singleline(&mut self.share_key).password(true));
         });
         ui.add_enabled_ui(!task_running, |ui| {
             ui.horizontal_wrapped(|ui| {
@@ -2029,6 +2043,14 @@ fn gui_error(error: anyhow::Error) -> GuiTaskResult {
         clear_peer_key: false,
         refresh_saved_peers: false,
         warning_count: 1,
+    }
+}
+
+fn redacted_peer_config(peer: &LanPeerConfig) -> RedactedPeer {
+    RedactedPeer {
+        name: peer.name.clone(),
+        url: peer.url.clone(),
+        has_lan_key: peer.lan_key.is_some(),
     }
 }
 
@@ -3017,7 +3039,7 @@ const APP_HTML: &str = r#"<!doctype html>
       <div class="grid">
         <label>Name <input id="peerName" placeholder="Workshop PC"></label>
         <label>URL <input id="peerUrl" placeholder="http://192.168.1.50:7370"></label>
-        <label>Shared Key <input id="peerKey" placeholder="saved after pairing"></label>
+        <label>Shared Key <input id="peerKey" type="password" placeholder="saved after pairing"></label>
         <label>Pairing Code <input id="pairingCode" placeholder="8 digits from sharing computer"></label>
       </div>
       <p class="row">
@@ -3037,7 +3059,7 @@ const APP_HTML: &str = r#"<!doctype html>
       <h2>Share This Device</h2>
       <div class="grid">
         <label>Listen Address <input id="listen" value="0.0.0.0:7370"></label>
-        <label>Shared Key <input id="shareKey" placeholder="optional; blank creates pairing code"></label>
+        <label>Shared Key <input id="shareKey" type="password" placeholder="optional; blank creates pairing code"></label>
       </div>
       <p class="row">
         <button class="primary" onclick="startShare()">Share Fonts On LAN</button>
@@ -3092,6 +3114,14 @@ const APP_HTML: &str = r#"<!doctype html>
     function showResult(value) {
       summarize(value);
       show(value);
+    }
+    function redactPeer(peer) {
+      if (!peer || typeof peer !== 'object') return peer;
+      return {
+        name: peer.name,
+        url: peer.url,
+        has_lan_key: Boolean(peer.lan_key || peer.has_lan_key)
+      };
     }
     function showShareResult(value) {
       showResult(value);
@@ -3211,7 +3241,7 @@ const APP_HTML: &str = r#"<!doctype html>
         document.getElementById('peerName').value = peer.name;
         document.getElementById('peerUrl').value = peer.url;
         document.getElementById('peerKey').value = peer.lan_key ?? '';
-        showResult(peer);
+        showResult(redactPeer(peer));
         setNextStep(`${peer.name} is paired and saved. Click Test Peer or Preview From Peer next.`);
       } catch (error) { show(error.message); }
     }
@@ -3247,7 +3277,7 @@ const APP_HTML: &str = r#"<!doctype html>
             lan_key: document.getElementById('peerKey').value || null
           })
         });
-        showResult(peer);
+        showResult(redactPeer(peer));
         setNextStep(`${peer.name} is saved. Use Sync Saved Peers for repeat syncs.`);
       } catch (error) { show(error.message); }
     }
@@ -3512,11 +3542,7 @@ mod tests {
             lan_key: Some("super-secret".to_string()),
         };
 
-        let redacted = RedactedPeer {
-            name: peer.name,
-            url: peer.url,
-            has_lan_key: peer.lan_key.is_some(),
-        };
+        let redacted = redacted_peer_config(&peer);
         let json = serde_json::to_string(&redacted).unwrap();
 
         assert!(json.contains("\"has_lan_key\":true"));
