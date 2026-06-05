@@ -133,6 +133,10 @@ SYNCMYFONTS_LAN_KEY=choose-a-shared-key \
   cargo run -p syncmyfonts-agent -- lan-serve --listen 0.0.0.0:7370
 ```
 
+If you omit `SYNCMYFONTS_LAN_KEY`, `lan-serve` generates a private token and
+prints an 8-digit pairing code. In the local app, leaving `Shared Key` blank
+does the same thing and shows the pairing code in the result panel.
+
 On the device that needs the fonts:
 
 ```bash
@@ -155,7 +159,8 @@ cargo run -p syncmyfonts-agent -- lan-sync \
   --dry-run
 ```
 
-The first LAN MVP has lightweight UDP peer discovery plus manual peer URLs.
+The first LAN MVP has lightweight UDP peer discovery, manual peer URLs, and an
+8-digit app pairing code that saves the generated LAN token for future syncs.
 Bonjour/mDNS discovery, QR-code pairing, tray apps, and background startup
 wrappers are planned next-layer app features.
 

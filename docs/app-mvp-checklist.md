@@ -51,6 +51,7 @@ The app MVP should reuse the current agent commands:
 - [x] `Save Peer` wraps
   `syncmyfonts-agent lan-add-peer --name <name> --url http://<peer-lan-ip>:7370`.
 - [x] `Find LAN Peers` wraps `syncmyfonts-agent lan-discover`.
+- [x] `Pair Peer` exchanges an 8-digit pairing code for a saved LAN token.
 - [x] `Sync Saved Peers` wraps `syncmyfonts-agent lan-sync-all`.
 - [x] `Diagnostics` wraps `syncmyfonts-agent diagnostics`.
 - [x] `Open Control Surface` wraps `syncmyfonts-agent app`.
@@ -224,11 +225,11 @@ Already present in the repo:
 - [ ] Keychain or Credential Manager integration for secrets.
 - [ ] Stable machine-readable reports for every command and error.
 - [x] Dedicated diagnostics command or support-report artifact.
-- [ ] Local ownership manifest for managed fonts.
+- [x] Local ownership manifest for managed fonts.
 - [ ] Explicit conflict review UI.
 - [x] Lightweight UDP LAN peer discovery.
 - [ ] Bonjour/mDNS discovery.
-- [ ] Pairing-code flow from the protocol doc.
+- [x] First pairing-code flow for exchanging a short code for a saved LAN token.
 - [ ] Firewall/network-profile detection for hosted Windows peer mode.
 - [ ] macOS bundled-app Local Network permission testing.
 - [x] Windows `WM_FONTCHANGE` notification after registry writes.

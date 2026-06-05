@@ -12,6 +12,7 @@ use std::{
 
 const LAN_DISCOVERY_REQUEST: &[u8] = b"SYNCMYFONTS_DISCOVER_V1";
 const LAN_DISCOVERY_TIMEOUT: Duration = Duration::from_millis(1400);
+const PAIRING_CODE_TTL: Duration = Duration::from_secs(10 * 60);
 
 use anyhow::{Context, Result, anyhow, bail};
 use axum::{
@@ -73,6 +74,8 @@ enum Commands {
         listen: SocketAddr,
         #[arg(long, env = "SYNCMYFONTS_LAN_KEY")]
         lan_key: Option<String>,
+        #[arg(long, env = "SYNCMYFONTS_PAIRING_CODE")]
+        pairing_code: Option<String>,
     },
     /// Pull missing fonts directly from another SyncMyFonts LAN peer.
     LanSync {
@@ -171,9 +174,13 @@ fn main() -> Result<()> {
             let report = sync(&server, api_key.as_deref(), dry_run)?;
             print_json(&report)?;
         }
-        Commands::LanServe { listen, lan_key } => {
+        Commands::LanServe {
+            listen,
+            lan_key,
+            pairing_code,
+        } => {
             let runtime = tokio::runtime::Runtime::new().context("starting LAN peer runtime")?;
-            runtime.block_on(lan_serve(listen, lan_key))?;
+            runtime.block_on(lan_serve(listen, lan_key, pairing_code))?;
         }
         Commands::LanSync {
             peer,
@@ -433,7 +440,26 @@ fn sync(server: &str, api_key: Option<&str>, dry_run: bool) -> Result<SyncReport
 
 #[derive(Debug, Clone)]
 struct LanState {
-    lan_key: Option<String>,
+    lan_key: String,
+    pairing: Option<PairingState>,
+}
+
+#[derive(Debug, Clone)]
+struct PairingState {
+    code: String,
+    expires_at: Instant,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct LanPairRequest {
+    pairing_code: String,
+    device_name: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct LanPairResponse {
+    lan_key: String,
+    device_name: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -520,6 +546,13 @@ struct AddPeerRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct PairPeerRequest {
+    name: String,
+    url: String,
+    pairing_code: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct PeerSyncRequest {
     url: String,
     lan_key: Option<String>,
@@ -537,6 +570,8 @@ struct ShareResponse {
     sharing: bool,
     message: String,
     urls: Vec<String>,
+    pairing_code: Option<String>,
+    pairing_expires_seconds: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -591,7 +626,11 @@ struct ManagedFontRecord {
     size_bytes: u64,
 }
 
-async fn lan_serve(listen: SocketAddr, lan_key: Option<String>) -> Result<()> {
+async fn lan_serve(
+    listen: SocketAddr,
+    lan_key: Option<String>,
+    pairing_code: Option<String>,
+) -> Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
@@ -599,11 +638,33 @@ async fn lan_serve(listen: SocketAddr, lan_key: Option<String>) -> Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let state = Arc::new(LanState { lan_key });
-    spawn_lan_discovery_responder(listen, state.clone());
+    let provided_lan_key = lan_key.filter(|key| !key.trim().is_empty());
+    let pairing_code = pairing_code
+        .filter(|code| !code.trim().is_empty())
+        .map(|code| normalize_pairing_code(&code))
+        .or_else(|| {
+            if provided_lan_key.is_some() {
+                None
+            } else {
+                generate_pairing_code()
+            }
+        });
+    let lan_key = provided_lan_key.unwrap_or_else(generate_lan_token);
+    if let Some(code) = &pairing_code {
+        eprintln!("SyncMyFonts pairing code: {code}");
+    }
+    let state = Arc::new(LanState {
+        lan_key,
+        pairing: pairing_code.map(|code| PairingState {
+            code,
+            expires_at: Instant::now() + PAIRING_CODE_TTL,
+        }),
+    });
+    spawn_lan_discovery_responder(listen);
     let app = Router::new()
         .route("/health", get(lan_health))
         .route("/api/lan/v1/health", get(lan_health))
+        .route("/api/lan/v1/pair", post(lan_pair))
         .route("/api/lan/v1/manifest", get(lan_manifest))
         .route("/api/lan/v1/blobs/{sha256}", get(lan_blob))
         .route("/api/lan/v1/fonts/{sha256}/blob", get(lan_blob))
@@ -618,15 +679,15 @@ async fn lan_serve(listen: SocketAddr, lan_key: Option<String>) -> Result<()> {
     Ok(())
 }
 
-fn spawn_lan_discovery_responder(listen: SocketAddr, state: Arc<LanState>) {
+fn spawn_lan_discovery_responder(listen: SocketAddr) {
     tokio::spawn(async move {
-        if let Err(error) = lan_discovery_responder(listen, state).await {
+        if let Err(error) = lan_discovery_responder(listen).await {
             tracing::warn!("LAN discovery responder stopped: {error}");
         }
     });
 }
 
-async fn lan_discovery_responder(listen: SocketAddr, state: Arc<LanState>) -> Result<()> {
+async fn lan_discovery_responder(listen: SocketAddr) -> Result<()> {
     let socket = tokio::net::UdpSocket::bind(listen)
         .await
         .with_context(|| format!("binding LAN discovery responder at {listen}"))?;
@@ -644,7 +705,7 @@ async fn lan_discovery_responder(listen: SocketAddr, state: Arc<LanState>) -> Re
             api_version: API_VERSION.to_string(),
             device_name: device_name(),
             port: listen.port(),
-            requires_lan_key: state.lan_key.is_some(),
+            requires_lan_key: true,
         };
         let bytes = serde_json::to_vec(&response).context("serializing LAN discovery response")?;
         socket
@@ -659,6 +720,26 @@ async fn lan_health() -> Json<HealthResponse> {
         ok: true,
         api_version: API_VERSION,
     })
+}
+
+async fn lan_pair(
+    State(state): State<Arc<LanState>>,
+    Json(request): Json<LanPairRequest>,
+) -> Result<Json<LanPairResponse>, LanApiError> {
+    let Some(pairing) = &state.pairing else {
+        return Err(LanApiError::unauthorized("pairing is not enabled"));
+    };
+    if Instant::now() > pairing.expires_at {
+        return Err(LanApiError::unauthorized("pairing code expired"));
+    }
+    if normalize_pairing_code(&request.pairing_code) != pairing.code {
+        return Err(LanApiError::unauthorized("invalid pairing code"));
+    }
+    let _requesting_device = request.device_name;
+    Ok(Json(LanPairResponse {
+        lan_key: state.lan_key.clone(),
+        device_name: device_name(),
+    }))
 }
 
 async fn lan_manifest(
@@ -783,6 +864,28 @@ fn add_lan_peer(name: String, url: String, lan_key: Option<String>) -> Result<La
     Ok(peer)
 }
 
+fn pair_lan_peer(name: String, url: String, pairing_code: String) -> Result<LanPeerConfig> {
+    let url = normalize_peer_url(&url);
+    let response: LanPairResponse = http_client()?
+        .post(api_url(&url, "/api/lan/v1/pair")?)
+        .json(&LanPairRequest {
+            pairing_code,
+            device_name: Some(device_name()),
+        })
+        .send()
+        .context("sending LAN pairing request")?
+        .error_for_status()
+        .context("LAN peer rejected pairing request")?
+        .json()
+        .context("parsing LAN pairing response")?;
+    let peer_name = if name.trim().is_empty() {
+        response.device_name
+    } else {
+        name
+    };
+    add_lan_peer(peer_name, url, Some(response.lan_key))
+}
+
 fn lan_sync_all(dry_run: bool) -> Result<LanSyncAllReport> {
     let config = load_app_config()?;
     let mut peers = Vec::new();
@@ -904,6 +1007,7 @@ async fn app_serve(listen: SocketAddr, open_browser_on_start: bool) -> Result<()
         .route("/api/diagnostics", get(app_diagnostics))
         .route("/api/peers", get(app_peers).post(app_add_peer))
         .route("/api/peers/discover", post(app_discover_peers))
+        .route("/api/peer/pair", post(app_pair_peer))
         .route("/api/peer/test", post(app_peer_test))
         .route("/api/peer/sync", post(app_peer_sync))
         .route("/api/sync-all", post(app_sync_all))
@@ -973,6 +1077,18 @@ async fn app_discover_peers(
         .map_err(LanApiError::internal)
 }
 
+async fn app_pair_peer(
+    Json(request): Json<PairPeerRequest>,
+) -> Result<Json<LanPeerConfig>, LanApiError> {
+    tokio::task::spawn_blocking(move || {
+        pair_lan_peer(request.name, request.url, request.pairing_code)
+    })
+    .await
+    .map_err(LanApiError::internal)?
+    .map(Json)
+    .map_err(LanApiError::internal)
+}
+
 async fn app_peer_test(
     Json(request): Json<PeerSyncRequest>,
 ) -> Result<Json<PeerTestResponse>, LanApiError> {
@@ -1036,6 +1152,8 @@ async fn app_share_start(
             sharing: true,
             message: "Already sharing fonts on the LAN.".to_string(),
             urls,
+            pairing_code: None,
+            pairing_expires_seconds: None,
         }));
     }
     let exe = std::env::current_exe().map_err(LanApiError::internal)?;
@@ -1046,17 +1164,28 @@ async fn app_share_start(
         .map_err(LanApiError::bad_request)?;
     let mut command = Command::new(exe);
     command.args(["lan-serve", "--listen", &listen.to_string()]);
-    if let Some(lan_key) = request.lan_key {
-        command.env("SYNCMYFONTS_LAN_KEY", lan_key);
+    let provided_key = request.lan_key.filter(|key| !key.trim().is_empty());
+    let pairing_code = if provided_key.is_some() {
+        None
+    } else {
+        generate_pairing_code()
+    };
+    let lan_key = provided_key.unwrap_or_else(generate_lan_token);
+    command.env("SYNCMYFONTS_LAN_KEY", lan_key);
+    if let Some(code) = &pairing_code {
+        command.env("SYNCMYFONTS_PAIRING_CODE", code);
     }
     let child = command.spawn().map_err(LanApiError::internal)?;
     let child = wait_for_share_start(child, listen).map_err(LanApiError::internal)?;
     let urls = share_urls(listen);
     *guard = Some(RunningShare { child, listen });
+    let pairing_expires_seconds = pairing_code.as_ref().map(|_| PAIRING_CODE_TTL.as_secs());
     Ok(Json(ShareResponse {
         sharing: true,
         message: format!("Sharing fonts at {}.", urls.join(", ")),
         urls,
+        pairing_code,
+        pairing_expires_seconds,
     }))
 }
 
@@ -1070,6 +1199,8 @@ async fn app_share_stop(State(state): State<AppState>) -> Result<Json<ShareRespo
             sharing: false,
             message: "Sharing was not running.".to_string(),
             urls: Vec::new(),
+            pairing_code: None,
+            pairing_expires_seconds: None,
         }));
     };
     let _ = share.child.kill();
@@ -1078,6 +1209,8 @@ async fn app_share_stop(State(state): State<AppState>) -> Result<Json<ShareRespo
         sharing: false,
         message: "Stopped sharing fonts.".to_string(),
         urls: Vec::new(),
+        pairing_code: None,
+        pairing_expires_seconds: None,
     }))
 }
 
@@ -1563,18 +1696,28 @@ fn lan_authed(
 }
 
 fn authorize_lan(state: &LanState, headers: &HeaderMap) -> Result<(), LanApiError> {
-    let Some(expected) = &state.lan_key else {
-        return Ok(());
-    };
     let provided = headers
         .get(DEFAULT_API_KEY_HEADER)
         .and_then(|value| value.to_str().ok())
         .ok_or_else(|| LanApiError::unauthorized("missing LAN key"))?;
-    if provided == expected {
+    if provided == state.lan_key {
         Ok(())
     } else {
         Err(LanApiError::unauthorized("invalid LAN key"))
     }
+}
+
+fn generate_lan_token() -> String {
+    format!("smf-{}", Uuid::new_v4().simple())
+}
+
+fn generate_pairing_code() -> Option<String> {
+    let digits = u128::from_be_bytes(*Uuid::new_v4().as_bytes()) % 100_000_000;
+    Some(format!("{digits:08}"))
+}
+
+fn normalize_pairing_code(code: &str) -> String {
+    code.chars().filter(|ch| ch.is_ascii_digit()).collect()
 }
 
 fn validate_sha256(value: &str) -> Result<()> {
@@ -1863,13 +2006,15 @@ const APP_HTML: &str = r#"<!doctype html>
       <div class="grid">
         <label>Name <input id="peerName" placeholder="Workshop PC"></label>
         <label>URL <input id="peerUrl" placeholder="http://192.168.1.50:7370"></label>
-        <label>Shared Key <input id="peerKey" placeholder="choose-a-shared-key"></label>
+        <label>Shared Key <input id="peerKey" placeholder="saved after pairing"></label>
+        <label>Pairing Code <input id="pairingCode" placeholder="8 digits from sharing computer"></label>
       </div>
       <p class="row">
         <button onclick="discoverPeers()">Find LAN Peers</button>
+        <button class="primary" onclick="pairPeer()">Pair Peer</button>
         <button onclick="testPeer()">Test Peer</button>
         <button onclick="syncPeer(true)">Preview From Peer</button>
-        <button class="primary" onclick="syncPeer(false)">Get Missing Fonts</button>
+        <button onclick="syncPeer(false)">Get Missing Fonts</button>
         <button onclick="savePeer()">Save Peer</button>
         <button onclick="loadPeers()">List Peers</button>
       </p>
@@ -1880,7 +2025,7 @@ const APP_HTML: &str = r#"<!doctype html>
       <h2>Share This Device</h2>
       <div class="grid">
         <label>Listen Address <input id="listen" value="0.0.0.0:7370"></label>
-        <label>Shared Key <input id="shareKey" placeholder="choose-a-shared-key"></label>
+        <label>Shared Key <input id="shareKey" placeholder="optional; blank creates pairing code"></label>
       </div>
       <p class="row">
         <button class="primary" onclick="startShare()">Share Fonts On LAN</button>
@@ -1923,6 +2068,12 @@ const APP_HTML: &str = r#"<!doctype html>
     function showResult(value) {
       summarize(value);
       show(value);
+    }
+    function showShareResult(value) {
+      showResult(value);
+      if (value?.pairing_code) {
+        out.textContent += `\n\nPairing code: ${value.pairing_code}\nValid for about ${Math.round((value.pairing_expires_seconds ?? 600) / 60)} minutes.`;
+      }
     }
     async function request(path, options = {}) {
       const response = await fetch(path, options);
@@ -1997,6 +2148,23 @@ const APP_HTML: &str = r#"<!doctype html>
         }));
       } catch (error) { show(error.message); }
     }
+    async function pairPeer() {
+      try {
+        const peer = await request('/api/peer/pair', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            name: document.getElementById('peerName').value,
+            url: document.getElementById('peerUrl').value,
+            pairing_code: document.getElementById('pairingCode').value
+          })
+        });
+        document.getElementById('peerName').value = peer.name;
+        document.getElementById('peerUrl').value = peer.url;
+        document.getElementById('peerKey').value = peer.lan_key ?? '';
+        showResult(peer);
+      } catch (error) { show(error.message); }
+    }
     async function syncPeer(dryRun) {
       try {
         const result = await request('/api/peer/sync', {
@@ -2034,7 +2202,7 @@ const APP_HTML: &str = r#"<!doctype html>
     }
     async function startShare() {
       try {
-        showResult(await request('/api/share/start', {
+        showShareResult(await request('/api/share/start', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -2096,6 +2264,21 @@ mod tests {
             normalize_peer_url("  http://192.168.1.50:7370///  "),
             "http://192.168.1.50:7370"
         );
+    }
+
+    #[test]
+    fn pairing_code_normalization_keeps_only_digits() {
+        assert_eq!(normalize_pairing_code(" 1234-56 78 "), "12345678");
+    }
+
+    #[test]
+    fn generated_lan_token_and_pairing_code_have_expected_shape() {
+        let token = generate_lan_token();
+        let code = generate_pairing_code().unwrap();
+
+        assert!(token.starts_with("smf-"));
+        assert_eq!(code.len(), 8);
+        assert!(code.chars().all(|ch| ch.is_ascii_digit()));
     }
 
     #[test]
