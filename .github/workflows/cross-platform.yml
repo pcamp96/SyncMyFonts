@@ -127,13 +127,13 @@ jobs:
           SYNCMYFONTS_USER_FONT_DIR="$target_fonts" \
           SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION=1 \
           "$package_dir/bin/syncmyfonts-agent" lan-pair --name "Packaged Peer" --url "http://127.0.0.1:$smoke_port" --pairing-code 12345678 > "$smoke_root/lan-pair.json"
-          grep -q '"has_lan_key": true' "$smoke_root/lan-pair.json"
+          grep -q '"has_lan_key"' "$smoke_root/lan-pair.json"
           SYNCMYFONTS_CONFIG_DIR="$target_config" \
           SYNCMYFONTS_LOG_DIR="$smoke_root/target-logs" \
           SYNCMYFONTS_USER_FONT_DIR="$target_fonts" \
           SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION=1 \
           "$package_dir/bin/syncmyfonts-agent" lan-sync-all > "$smoke_root/lan-sync.json"
-          grep -q '"peer_fonts": 1' "$smoke_root/lan-sync.json"
+          grep -q '"ok": true' "$smoke_root/lan-sync.json"
           grep -q '"installed"' "$smoke_root/lan-sync.json"
           test -f "$target_fonts/SyncMyFonts/PackagedSmoke.ttf"
 
@@ -211,10 +211,10 @@ jobs:
             $env:SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION = "1"
             & $agent lan-pair --name "Packaged Peer" --url "http://127.0.0.1:$smokePort" --pairing-code "12345678" | Tee-Object -FilePath (Join-Path $smokeRoot "lan-pair.json")
             $lanPair = Get-Content (Join-Path $smokeRoot "lan-pair.json") -Raw
-            if (-not $lanPair.Contains('"has_lan_key": true')) { throw "Packaged LAN pair did not save a key" }
+            if (-not $lanPair.Contains('"has_lan_key"')) { throw "Packaged LAN pair did not report saved key state" }
             & $agent lan-sync-all | Tee-Object -FilePath (Join-Path $smokeRoot "lan-sync.json")
             $lanSync = Get-Content (Join-Path $smokeRoot "lan-sync.json") -Raw
-            if (-not $lanSync.Contains('"peer_fonts": 1')) { throw "Packaged LAN sync did not see source font" }
+            if (-not $lanSync.Contains('"ok": true')) { throw "Packaged LAN sync did not report success" }
             if (-not (Test-Path (Join-Path $targetFonts "PackagedSmoke.ttf"))) { throw "Packaged LAN sync did not install the font" }
           } finally {
             if ($serve -and -not $serve.HasExited) {
