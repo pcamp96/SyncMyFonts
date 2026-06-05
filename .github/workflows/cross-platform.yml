@@ -102,6 +102,34 @@ jobs:
           grep -q '"log_dir"' "$smoke_root/diagnostics.json"
           grep -q '"checks"' "$smoke_root/doctor.json"
           grep -q '"saved-peers"' "$smoke_root/doctor.json"
+          source_fonts="$smoke_root/source-fonts"
+          source_config="$smoke_root/source-config"
+          target_fonts="$smoke_root/target-fonts"
+          target_config="$smoke_root/target-config"
+          mkdir -p "$source_fonts" "$source_config" "$target_fonts" "$target_config"
+          printf 'packaged LAN smoke font\n' > "$source_fonts/PackagedSmoke.ttf"
+          smoke_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
+          SYNCMYFONTS_CONFIG_DIR="$source_config" \
+          SYNCMYFONTS_LOG_DIR="$smoke_root/source-logs" \
+          SYNCMYFONTS_USER_FONT_DIR="$source_fonts" \
+          "$package_dir/bin/syncmyfonts-agent" lan-serve --listen "127.0.0.1:$smoke_port" --lan-key smoke-key &
+          server_pid=$!
+          trap 'kill "$server_pid" >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:$smoke_port/health" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS "http://127.0.0.1:$smoke_port/health" >/dev/null
+          SYNCMYFONTS_CONFIG_DIR="$target_config" \
+          SYNCMYFONTS_LOG_DIR="$smoke_root/target-logs" \
+          SYNCMYFONTS_USER_FONT_DIR="$target_fonts" \
+          SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION=1 \
+          "$package_dir/bin/syncmyfonts-agent" lan-sync --peer "http://127.0.0.1:$smoke_port" --lan-key smoke-key > "$smoke_root/lan-sync.json"
+          grep -q '"peer_fonts": 1' "$smoke_root/lan-sync.json"
+          grep -q '"installed"' "$smoke_root/lan-sync.json"
+          test -f "$target_fonts/SyncMyFonts/PackagedSmoke.ttf"
 
       - name: Upload macOS archive
         if: runner.os == 'macOS'
@@ -143,6 +171,47 @@ jobs:
           if (-not $diagnostics.Contains('"log_dir"')) { throw "Diagnostics log dir missing" }
           if (-not $doctor.Contains('"checks"')) { throw "Doctor checks missing" }
           if (-not $doctor.Contains('"saved-peers"')) { throw "Doctor saved peer check missing" }
+          $sourceFonts = Join-Path $smokeRoot "source-fonts"
+          $sourceConfig = Join-Path $smokeRoot "source-config"
+          $targetFonts = Join-Path $smokeRoot "target-fonts"
+          $targetConfig = Join-Path $smokeRoot "target-config"
+          New-Item -ItemType Directory -Force -Path $sourceFonts, $sourceConfig, $targetFonts, $targetConfig | Out-Null
+          Set-Content -Path (Join-Path $sourceFonts "PackagedSmoke.ttf") -Encoding UTF8 -Value "packaged LAN smoke font"
+          $serveEnv = @{
+            SYNCMYFONTS_CONFIG_DIR = $sourceConfig
+            SYNCMYFONTS_LOG_DIR = Join-Path $smokeRoot "source-logs"
+            SYNCMYFONTS_USER_FONT_DIR = $sourceFonts
+          }
+          $portListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse("127.0.0.1"), 0)
+          $portListener.Start()
+          $smokePort = $portListener.LocalEndpoint.Port
+          $portListener.Stop()
+          $serve = Start-Process -FilePath $agent -ArgumentList @("lan-serve", "--listen", "127.0.0.1:$smokePort", "--lan-key", "smoke-key") -Environment $serveEnv -PassThru -WindowStyle Hidden
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 60; $attempt++) {
+              try {
+                Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$smokePort/health" | Out-Null
+                $ready = $true
+                break
+              } catch {
+                Start-Sleep -Seconds 1
+              }
+            }
+            if (-not $ready) { throw "Packaged LAN server did not become ready" }
+            $env:SYNCMYFONTS_CONFIG_DIR = $targetConfig
+            $env:SYNCMYFONTS_LOG_DIR = Join-Path $smokeRoot "target-logs"
+            $env:SYNCMYFONTS_USER_FONT_DIR = $targetFonts
+            $env:SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION = "1"
+            & $agent lan-sync --peer "http://127.0.0.1:$smokePort" --lan-key "smoke-key" | Tee-Object -FilePath (Join-Path $smokeRoot "lan-sync.json")
+            $lanSync = Get-Content (Join-Path $smokeRoot "lan-sync.json") -Raw
+            if (-not $lanSync.Contains('"peer_fonts": 1')) { throw "Packaged LAN sync did not see source font" }
+            if (-not (Test-Path (Join-Path $targetFonts "PackagedSmoke.ttf"))) { throw "Packaged LAN sync did not install the font" }
+          } finally {
+            if ($serve -and -not $serve.HasExited) {
+              Stop-Process -Id $serve.Id -Force
+            }
+          }
 
       - name: Upload Windows archive
         if: runner.os == 'Windows'
