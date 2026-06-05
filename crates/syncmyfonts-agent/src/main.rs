@@ -3007,18 +3007,67 @@ fn gui_ok_with_updates<T: Serialize>(
 }
 
 fn gui_error(error: anyhow::Error) -> GuiTaskResult {
+    let output = error.to_string();
+    let next_step = gui_error_next_step(&output);
     GuiTaskResult {
-        output: error.to_string(),
-        next_step: format!(
-            "That action failed. Review the output, then check the peer URL, pairing code, or network access. {}",
-            platform_manual_peer_fallback_guidance()
-        ),
+        output,
+        next_step,
         peer: None,
         discovered_peer: None,
         clear_peer_key: false,
         refresh_saved_peers: false,
         warning_count: 1,
     }
+}
+
+fn gui_error_next_step(error: &str) -> String {
+    let lower = error.to_ascii_lowercase();
+    if lower.contains("invalid listen address") {
+        return "The listen address is invalid. Use an address like 0.0.0.0:7370, then try sharing again.".to_string();
+    }
+    if lower.contains("lan share did not answer")
+        || lower.contains("address already in use")
+        || lower.contains("os error 48")
+        || lower.contains("os error 10048")
+    {
+        return format!(
+            "Sharing could not start on that port. Stop the other SyncMyFonts share or choose a different Listen Address. {}",
+            platform_lan_sharing_guidance()
+        );
+    }
+    if lower.contains("lan peer rejected pairing request")
+        || lower.contains("invalid pairing code")
+        || lower.contains("pairing code expired")
+        || lower.contains("pairing is not enabled")
+    {
+        return "The pairing code was rejected. Start sharing again on the other computer, copy the fresh 8-digit code, and pair within 10 minutes.".to_string();
+    }
+    if lower.contains("lan peer rejected manifest request")
+        || lower.contains("lan peer rejected font download")
+        || lower.contains("401")
+        || lower.contains("unauthorized")
+    {
+        return "The shared key did not match this peer. Pair again with the code shown on the sharing computer, or update the saved peer key.".to_string();
+    }
+    if lower.contains("failed to lookup address information")
+        || lower.contains("connection refused")
+        || lower.contains("connection reset")
+        || lower.contains("timed out")
+        || lower.contains("timeout")
+        || lower.contains("error trying to connect")
+    {
+        return format!(
+            "SyncMyFonts could not reach that peer. Make sure the other computer is sharing, both devices are on the same trusted LAN, and the peer URL is correct. {}",
+            platform_manual_peer_fallback_guidance()
+        );
+    }
+    if lower.contains("builder error") || lower.contains("relative url without a base") {
+        return "The peer URL is invalid. Enter a full URL like http://192.168.1.50:7370, then try again.".to_string();
+    }
+    format!(
+        "That action failed. Review the output, then check the peer URL, pairing code, or network access. {}",
+        platform_manual_peer_fallback_guidance()
+    )
 }
 
 fn redacted_peer_config(peer: &LanPeerConfig) -> RedactedPeer {
@@ -5280,6 +5329,44 @@ mod tests {
             1,
             now
         ));
+    }
+
+    #[test]
+    fn gui_error_guidance_distinguishes_pairing_key_and_connectivity_failures() {
+        assert!(
+            gui_error_next_step(
+                "LAN peer rejected pairing request: HTTP status client error (401 Unauthorized)"
+            )
+            .contains("pairing code was rejected")
+        );
+        assert!(
+            gui_error_next_step(
+                "LAN peer rejected manifest request: HTTP status client error (401 Unauthorized)"
+            )
+            .contains("shared key did not match")
+        );
+        assert!(
+            gui_error_next_step(
+                "fetching LAN peer manifest: error trying to connect: connection refused"
+            )
+            .contains("could not reach that peer")
+        );
+    }
+
+    #[test]
+    fn gui_error_guidance_distinguishes_invalid_urls_and_share_ports() {
+        assert!(
+            gui_error_next_step("builder error: relative URL without a base")
+                .contains("peer URL is invalid")
+        );
+        assert!(
+            gui_error_next_step("LAN share did not answer at 127.0.0.1:7370")
+                .contains("could not start on that port")
+        );
+        assert!(
+            gui_error_next_step("invalid listen address: invalid socket address syntax")
+                .contains("listen address is invalid")
+        );
     }
 
     #[test]
