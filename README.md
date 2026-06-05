@@ -3,11 +3,16 @@
 SyncMyFonts is a FOSS-first MVP for syncing installed fonts across macOS and
 Windows machines. The current build provides:
 
-- A self-hostable Rust sync server.
-- SQLite metadata storage.
-- Content-addressed local font blob storage.
-- A cross-platform Rust CLI agent for macOS and Windows.
-- Docker/Compose deployment for the server.
+- A native desktop GUI for macOS and Windows.
+- Direct LAN pairing so two computers can sync without a cloud service,
+  self-hosted server, port forwarding, or Docker.
+- Current-user font installs with explicit system-font exclusion.
+- A cross-platform Rust CLI agent for scripting and diagnostics.
+- An optional self-hostable Rust sync server with SQLite metadata,
+  content-addressed local blob storage, and Docker/Compose deployment.
+
+The browser control surface is for development and future self-hosted/server
+workflows. The user-facing MVP is the native app.
 
 ## MVP Behavior
 
@@ -37,6 +42,9 @@ applications. SyncMyFonts is intended for fonts the user intentionally installed
 for their own design/workshop workflow.
 
 ## Run the Server
+
+The server is optional. Use it only when you want a central self-hosted sync
+component instead of direct LAN pairing between app installs.
 
 ```bash
 docker compose up --build
@@ -85,6 +93,9 @@ cargo run -p syncmyfonts-agent --bin syncmyfonts-agent -- gui
 
 Release archives also include app-style launchers: `SyncMyFonts.app` on macOS
 and `bin\syncmyfonts-gui.exe` on Windows.
+
+For the real two-computer validation flow, see
+`docs/manual-clean-machine-validation.md`.
 
 The GUI can scan fonts, discover sharing LAN peers, test a LAN peer, preview
 missing fonts from a peer, install missing fonts, save LAN peers, sync all saved
@@ -237,6 +248,8 @@ CLI instead of reimplementing sync behavior:
 
 See the platform app notes in:
 
+- `docs/app-install.md`
+- `docs/manual-clean-machine-validation.md`
 - `docs/macos-lan-app.md`
 - `docs/windows-lan-app.md`
 - `docs/release.md`
