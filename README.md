@@ -147,6 +147,7 @@ Create a clean-machine validation evidence bundle:
 
 ```bash
 cargo run -p syncmyfonts-agent -- validation-report
+cargo run -p syncmyfonts-agent -- validation-report --write
 ```
 
 Install current-user app shortcuts for common actions:

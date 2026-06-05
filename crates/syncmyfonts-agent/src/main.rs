@@ -120,8 +120,11 @@ enum Commands {
     Diagnostics,
     /// Check local app readiness without installing fonts or contacting peers.
     Doctor,
-    /// Print a clean-machine validation evidence bundle.
-    ValidationReport,
+    /// Print or save a clean-machine validation evidence bundle.
+    ValidationReport {
+        #[arg(long)]
+        write: bool,
+    },
     /// Verify SyncMyFonts-managed installed font files still match the manifest.
     VerifyManaged,
     /// Install a per-user sign-in helper that syncs saved LAN peers.
@@ -239,8 +242,12 @@ fn main() -> Result<()> {
         Commands::Doctor => {
             print_json(&doctor()?)?;
         }
-        Commands::ValidationReport => {
-            print_json(&validation_report()?)?;
+        Commands::ValidationReport { write } => {
+            if write {
+                print_json(&write_validation_report()?)?;
+            } else {
+                print_json(&validation_report()?)?;
+            }
         }
         Commands::VerifyManaged => {
             print_json(&verify_managed_fonts()?)?;
@@ -765,6 +772,13 @@ struct ValidationReport {
     evidence_summary: Vec<String>,
     manual_validation_steps: Vec<String>,
     pass_criteria: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct ValidationReportFile {
+    path: PathBuf,
+    report: ValidationReport,
+    message: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -1310,6 +1324,33 @@ fn validation_report() -> Result<ValidationReport> {
         manual_validation_steps: manual_validation_steps(),
         pass_criteria: manual_validation_pass_criteria(),
     })
+}
+
+fn write_validation_report() -> Result<ValidationReportFile> {
+    let report = validation_report()?;
+    let path = validation_report_path(&report.generated_at)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    }
+    let bytes = serde_json::to_vec_pretty(&report).context("serializing validation report")?;
+    fs::write(&path, bytes).with_context(|| format!("writing {}", path.display()))?;
+    Ok(ValidationReportFile {
+        path,
+        report,
+        message:
+            "Validation report saved. Keep this JSON with before/after clean-machine test evidence."
+                .to_string(),
+    })
+}
+
+fn validation_report_path(generated_at: &str) -> Result<PathBuf> {
+    let safe_stamp = generated_at
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+    Ok(app_log_dir()?.join(format!("validation-report-{safe_stamp}.json")))
 }
 
 fn validation_evidence_summary(
@@ -2210,21 +2251,24 @@ impl SyncMyFontsGui {
     }
 
     fn run_validation_report(&mut self) {
-        self.start_task("Collecting validation report", || match validation_report() {
-            Ok(report) => {
-                let warnings = report
+        self.start_task("Saving validation report", || match write_validation_report() {
+            Ok(file) => {
+                let warnings = file
+                    .report
                     .readiness
                     .checks
                     .iter()
                     .filter(|check| !check.ok)
                     .count()
-                    + report.managed_fonts.missing.len()
-                    + report.managed_fonts.modified.len()
-                    + report.managed_fonts.unreadable.len();
+                    + file.report.managed_fonts.missing.len()
+                    + file.report.managed_fonts.modified.len()
+                    + file.report.managed_fonts.unreadable.len();
                 gui_ok_with_warning_count(
-                    &report,
-                    "Save this before/after report with the clean-machine Mac and Windows sync test evidence."
-                        .to_string(),
+                    &file,
+                    format!(
+                        "Validation report saved to {}. Keep before/after reports with the clean-machine Mac and Windows sync evidence.",
+                        file.path.display()
+                    ),
                     warnings,
                 )
             }
@@ -5149,6 +5193,38 @@ mod tests {
         assert!(!json.contains("super-secret-lan-key"));
         assert!(!json.contains("12345678"));
         assert!(!json.contains("smf-secret-token"));
+    }
+
+    #[test]
+    fn write_validation_report_saves_timestamped_json_file() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", root.join("config"));
+            std::env::set_var("SYNCMYFONTS_LOG_DIR", root.join("logs"));
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", root.join("fonts"));
+        }
+
+        let saved = write_validation_report().unwrap();
+        let file = fs::read_to_string(&saved.path).unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_LOG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+        }
+
+        assert!(saved.path.starts_with(root.join("logs")));
+        assert!(
+            saved
+                .path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("validation-report-")
+        );
+        assert!(file.contains("\"manual_validation_steps\""));
+        assert!(file.contains("\"pass_criteria\""));
+        assert!(saved.message.contains("Validation report saved"));
     }
 
     #[test]

@@ -27,7 +27,8 @@ On both computers:
    - Windows: open `bin\syncmyfonts-gui.exe`.
 2. Click `Diagnostics` and save or paste the support report path/output.
 3. Click `Readiness Check`.
-4. Click `Validation Report` and save the JSON as the before-sync evidence.
+4. Click `Validation Report` and keep the saved JSON as the before-sync
+   evidence.
 5. Confirm the managed font folder is a per-user path.
    - macOS should use `~/Library/Fonts/SyncMyFonts`.
    - Windows should use `%LOCALAPPDATA%\Microsoft\Windows\Fonts`.
@@ -103,7 +104,8 @@ On both computers:
 2. Confirm fonts from known system folders are not listed as sync candidates.
 3. Confirm fonts installed by SyncMyFonts are tracked as managed fonts.
 4. Click `Verify Managed Fonts` and confirm the report is clean.
-5. Click `Validation Report` and save the JSON as the after-sync evidence.
+5. Click `Validation Report` and keep the saved JSON as the after-sync
+   evidence.
 
 Evidence:
 

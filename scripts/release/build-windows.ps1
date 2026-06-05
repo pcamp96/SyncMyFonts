@@ -52,7 +52,7 @@ SyncMyFonts Windows MVP
    account, and no administrator prompt should appear.
 
 4. Click Validation Report before and after a real two-computer sync test to
-   capture clean-machine evidence.
+   save clean-machine evidence in the log folder.
 
 5. On the computer with fonts, click Share Fonts On LAN. Leave Shared Key blank
    for the easiest setup and copy the pairing code.
