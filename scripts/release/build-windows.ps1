@@ -44,10 +44,14 @@ SyncMyFonts Windows MVP
    Then open the printed
    localhost URL manually.
 
-3. Use the app to Share Fonts On LAN on one computer. On another computer, use
-   Find LAN Peers, Test Peer, Preview From Peer, and Get Missing Fonts.
+3. On the computer with fonts, click Share Fonts On LAN. Leave Shared Key blank
+   for the easiest setup and copy the pairing code.
 
-4. To install startup helpers, see:
+4. On the other computer, click Find LAN Peers, select the sharing computer,
+   enter the pairing code, and click Pair Peer. Then use Preview From Peer or
+   Get Missing Fonts.
+
+5. To install startup helpers, see:
    packaging\windows\README.md
 "@
 
