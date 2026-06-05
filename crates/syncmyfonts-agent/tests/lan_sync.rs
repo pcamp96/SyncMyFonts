@@ -7,6 +7,9 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use sha2::{Digest, Sha256};
+use syncmyfonts_core::DEFAULT_API_KEY_HEADER;
+
 struct ChildGuard(Child);
 
 impl Drop for ChildGuard {
@@ -495,6 +498,82 @@ fn lan_sync_skips_system_font_conflict_without_installing_fonts() {
 }
 
 #[test]
+fn lan_manifest_and_blobs_do_not_expose_system_fonts() {
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
+    let root = unique_temp_dir("syncmyfonts-lan-system-exposure");
+    let peer_fonts = root.join("peer-fonts");
+    let peer_config = root.join("peer-config");
+    let peer_system_fonts = root.join("peer-system-fonts");
+    fs::create_dir_all(&peer_fonts).unwrap();
+    fs::create_dir_all(&peer_config).unwrap();
+    fs::create_dir_all(&peer_system_fonts).unwrap();
+
+    let user_font_bytes = b"user font is shareable\n";
+    let system_font_bytes = b"system font must never be served\n";
+    let user_hash = sha256_hex(user_font_bytes);
+    let system_hash = sha256_hex(system_font_bytes);
+    fs::write(peer_fonts.join("Shareable User Font.ttf"), user_font_bytes).unwrap();
+    fs::write(
+        peer_system_fonts.join("Protected System Font.ttf"),
+        system_font_bytes,
+    )
+    .unwrap();
+
+    let listen = free_local_addr();
+    let mut child = Command::new(&bin);
+    child
+        .arg("lan-serve")
+        .arg("--listen")
+        .arg(listen.to_string())
+        .arg("--lan-key")
+        .arg("test-key");
+    apply_isolated_env(&mut child, &peer_fonts, &peer_config);
+    child.env("SYNCMYFONTS_SYSTEM_FONT_DIRS", &peer_system_fonts);
+    let server = child.spawn().unwrap();
+    let _server = ChildGuard(server);
+    wait_for_tcp(listen);
+
+    let client = reqwest::blocking::Client::new();
+    let manifest: serde_json::Value = client
+        .get(format!("http://{listen}/api/lan/v1/manifest"))
+        .header(DEFAULT_API_KEY_HEADER, "test-key")
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    let hashes = manifest["fonts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|font| font["sha256"].as_str())
+        .collect::<Vec<_>>();
+    assert!(hashes.contains(&user_hash.as_str()));
+    assert!(!hashes.contains(&system_hash.as_str()));
+
+    let user_blob = client
+        .get(format!("http://{listen}/api/lan/v1/blobs/{user_hash}"))
+        .header(DEFAULT_API_KEY_HEADER, "test-key")
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .bytes()
+        .unwrap();
+    assert_eq!(&user_blob[..], user_font_bytes);
+
+    let system_blob = client
+        .get(format!("http://{listen}/api/lan/v1/blobs/{system_hash}"))
+        .header(DEFAULT_API_KEY_HEADER, "test-key")
+        .send()
+        .unwrap();
+    assert_eq!(system_blob.status(), reqwest::StatusCode::NOT_FOUND);
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn saved_peer_sync_all_reports_offline_peer_without_installing_fonts() {
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
     let root = unique_temp_dir("syncmyfonts-lan-offline");
@@ -596,6 +675,10 @@ fn assert_already_present_skip(json: &serde_json::Value) {
                 .as_str()
                 .is_some_and(|line| line.contains("already present")))
     );
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
 }
 
 fn font_dir_has_entries(path: &Path) -> bool {
