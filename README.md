@@ -244,7 +244,7 @@ The Windows MVP also writes the current-user registry entry through `reg.exe`.
 
 ## Roadmap
 
-- Add a local manifest and ownership tracking.
+- Add signed platform installers and clean-machine smoke tests.
 - Add font name parsing from OpenType tables.
 - Add R2/S3 blob storage adapter.
 - Add Postgres metadata adapter.

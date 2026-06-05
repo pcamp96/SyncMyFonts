@@ -1,7 +1,8 @@
 # Release Build Notes
 
-The MVP release artifact is a folder containing the `syncmyfonts-agent` binary,
-platform launcher helpers, and app install docs.
+The MVP release artifact is a portable archive containing the
+`syncmyfonts-agent` binary, platform launcher helpers, and app install docs.
+It is not yet a signed installer, notarized macOS `.app`, DMG, MSI, or MSIX.
 
 ## macOS
 
@@ -52,3 +53,14 @@ The release folder's `START-HERE.txt` also calls out the common LAN setup
 checks: both computers need to be on the same trusted LAN/VPN, Windows sharing
 hosts should allow SyncMyFonts on Private networks if Firewall prompts, and no
 port forwarding is needed.
+
+## Trust And Installer Status
+
+Current artifacts are meant for MVP testing:
+
+- macOS: portable `.tar.gz`; no notarized `.app` or DMG yet.
+- Windows: portable `.zip`; no MSI/MSIX or code-signed installer yet.
+
+The GitHub Actions build proves that the Rust workspace builds/tests on macOS
+and Windows and that portable archives are produced. It does not replace a
+clean-machine install smoke test, code signing, notarization, or installer QA.

@@ -488,6 +488,22 @@ struct AppConfig {
     peers: Vec<LanPeerConfig>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct AppHistory {
+    schema: u8,
+    last_action: Option<ActionRecord>,
+    recent: Vec<ActionRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ActionRecord {
+    action: String,
+    status: String,
+    finished_at: String,
+    warning_count: usize,
+    result: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct LanPeerConfig {
     name: String,
@@ -621,14 +637,19 @@ struct DiagnosticsReport {
     platform: &'static str,
     device_name: String,
     config_path: PathBuf,
+    log_dir: PathBuf,
+    history_path: PathBuf,
     managed_manifest_path: PathBuf,
     user_font_dir: PathBuf,
     managed_font_dir: PathBuf,
     saved_peer_count: usize,
     saved_peers: Vec<RedactedPeer>,
+    last_action: Option<ActionRecord>,
+    recent_actions: Vec<ActionRecord>,
     user_font_count: usize,
     managed_manifest_count: usize,
     warnings: Vec<String>,
+    support_report_text: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -1036,19 +1057,29 @@ fn diagnostics() -> Result<DiagnosticsReport> {
         .iter()
         .map(redacted_peer_config)
         .collect::<Vec<_>>();
-    Ok(DiagnosticsReport {
+    let history = load_app_history().unwrap_or_default();
+    let report = DiagnosticsReport {
         version: env!("CARGO_PKG_VERSION"),
         platform: platform_name(),
         device_name: device_name(),
         config_path: app_config_path()?,
+        log_dir: app_log_dir()?,
+        history_path: app_history_path()?,
         managed_manifest_path: managed_manifest_path()?,
         user_font_dir: user_font_dir()?,
         managed_font_dir: managed_font_dir()?,
         saved_peer_count: config.peers.len(),
         saved_peers,
+        last_action: history.last_action,
+        recent_actions: history.recent,
         user_font_count: scan.fonts.len(),
         managed_manifest_count,
         warnings: diagnostics_warnings(scan.warnings, manifest_result),
+        support_report_text: String::new(),
+    };
+    Ok(DiagnosticsReport {
+        support_report_text: support_report_text(&report),
+        ..report
     })
 }
 
@@ -1109,21 +1140,68 @@ async fn app_status(State(state): State<AppState>) -> Result<Json<AppStatus>, La
 }
 
 async fn app_scan() -> Result<Json<ScanOutput>, LanApiError> {
-    scan(true).map(Json).map_err(LanApiError::internal)
+    match scan(true) {
+        Ok(report) => {
+            let warnings = report.warnings.len();
+            record_action_best_effort(
+                "Browser Scan Fonts",
+                "success",
+                warnings,
+                &format!("Found {} local fonts.", report.fonts.len()),
+            );
+            Ok(Json(report))
+        }
+        Err(error) => {
+            record_action_best_effort("Browser Scan Fonts", "failed", 1, &error.to_string());
+            Err(LanApiError::internal(error))
+        }
+    }
 }
 
 async fn app_diagnostics() -> Result<Json<DiagnosticsReport>, LanApiError> {
-    diagnostics().map(Json).map_err(LanApiError::internal)
+    match diagnostics() {
+        Ok(report) => {
+            record_action_best_effort(
+                "Browser Diagnostics",
+                "success",
+                report.warnings.len(),
+                "Diagnostics report generated.",
+            );
+            Ok(Json(report))
+        }
+        Err(error) => {
+            record_action_best_effort("Browser Diagnostics", "failed", 1, &error.to_string());
+            Err(LanApiError::internal(error))
+        }
+    }
 }
 
 async fn app_verify_managed() -> Result<Json<ManagedVerifyReport>, LanApiError> {
-    verify_managed_fonts()
-        .map(Json)
-        .map_err(LanApiError::internal)
+    match verify_managed_fonts() {
+        Ok(report) => {
+            let issues = report.missing.len() + report.modified.len() + report.unreadable.len();
+            record_action_best_effort(
+                "Browser Verify Managed Fonts",
+                "success",
+                issues,
+                &format!("{issues} managed font issue(s) found."),
+            );
+            Ok(Json(report))
+        }
+        Err(error) => {
+            record_action_best_effort(
+                "Browser Verify Managed Fonts",
+                "failed",
+                1,
+                &error.to_string(),
+            );
+            Err(LanApiError::internal(error))
+        }
+    }
 }
 
 async fn app_open_managed_folder() -> Result<Json<OpenFolderResponse>, LanApiError> {
-    tokio::task::spawn_blocking(|| -> Result<OpenFolderResponse> {
+    let result = tokio::task::spawn_blocking(|| -> Result<OpenFolderResponse> {
         let folder = managed_font_dir().and_then(|path| {
             fs::create_dir_all(&path)
                 .with_context(|| format!("creating managed font folder {}", path.display()))?;
@@ -1137,9 +1215,27 @@ async fn app_open_managed_folder() -> Result<Json<OpenFolderResponse>, LanApiErr
         })
     })
     .await
-    .map_err(LanApiError::internal)?
-    .map(Json)
-    .map_err(LanApiError::internal)
+    .map_err(LanApiError::internal)?;
+    match result {
+        Ok(response) => {
+            record_action_best_effort(
+                "Browser Open Managed Folder",
+                "success",
+                0,
+                &response.message,
+            );
+            Ok(Json(response))
+        }
+        Err(error) => {
+            record_action_best_effort(
+                "Browser Open Managed Folder",
+                "failed",
+                1,
+                &error.to_string(),
+            );
+            Err(LanApiError::internal(error))
+        }
+    }
 }
 
 async fn app_peers() -> Result<Json<Vec<RedactedPeer>>, LanApiError> {
@@ -1151,17 +1247,31 @@ async fn app_peers() -> Result<Json<Vec<RedactedPeer>>, LanApiError> {
 async fn app_add_peer(
     Json(request): Json<AddPeerRequest>,
 ) -> Result<Json<LanPeerConfig>, LanApiError> {
-    add_lan_peer(request.name, request.url, request.lan_key)
-        .map(Json)
-        .map_err(LanApiError::internal)
+    match add_lan_peer(request.name, request.url, request.lan_key) {
+        Ok(peer) => {
+            record_action_best_effort("Browser Save Peer", "success", 0, "Saved LAN peer.");
+            Ok(Json(peer))
+        }
+        Err(error) => {
+            record_action_best_effort("Browser Save Peer", "failed", 1, &error.to_string());
+            Err(LanApiError::internal(error))
+        }
+    }
 }
 
 async fn app_forget_peer(
     Json(request): Json<ForgetPeerRequest>,
 ) -> Result<Json<ForgetPeerResponse>, LanApiError> {
-    forget_lan_peer(&request.name)
-        .map(Json)
-        .map_err(LanApiError::internal)
+    match forget_lan_peer(&request.name) {
+        Ok(response) => {
+            record_action_best_effort("Browser Forget Peer", "success", 0, "Forgot LAN peer.");
+            Ok(Json(response))
+        }
+        Err(error) => {
+            record_action_best_effort("Browser Forget Peer", "failed", 1, &error.to_string());
+            Err(LanApiError::internal(error))
+        }
+    }
 }
 
 async fn app_discover_peers(
@@ -1178,13 +1288,21 @@ async fn app_discover_peers(
 async fn app_pair_peer(
     Json(request): Json<PairPeerRequest>,
 ) -> Result<Json<LanPeerConfig>, LanApiError> {
-    tokio::task::spawn_blocking(move || {
+    let result = tokio::task::spawn_blocking(move || {
         pair_lan_peer(request.name, request.url, request.pairing_code)
     })
     .await
-    .map_err(LanApiError::internal)?
-    .map(Json)
-    .map_err(LanApiError::internal)
+    .map_err(LanApiError::internal)?;
+    match result {
+        Ok(peer) => {
+            record_action_best_effort("Browser Pair Peer", "success", 0, "Paired LAN peer.");
+            Ok(Json(peer))
+        }
+        Err(error) => {
+            record_action_best_effort("Browser Pair Peer", "failed", 1, &error.to_string());
+            Err(LanApiError::internal(error))
+        }
+    }
 }
 
 async fn app_peer_test(
@@ -1192,16 +1310,29 @@ async fn app_peer_test(
 ) -> Result<Json<PeerTestResponse>, LanApiError> {
     let url = request.url;
     let lan_key = request.lan_key;
-    let report = tokio::task::spawn_blocking(move || lan_sync(&url, lan_key.as_deref(), true))
+    let result = tokio::task::spawn_blocking(move || lan_sync(&url, lan_key.as_deref(), true))
         .await
-        .map_err(LanApiError::internal)?
         .map_err(LanApiError::internal)?;
-    Ok(Json(PeerTestResponse {
-        ok: true,
-        message: format!("Connected. Peer reported {} fonts.", report.peer_fonts),
-        peer_fonts: report.peer_fonts,
-        would_install_or_skip: report.skipped.len(),
-    }))
+    match result {
+        Ok(report) => {
+            record_action_best_effort(
+                "Browser Test Peer",
+                "success",
+                0,
+                &format!("Connected. Peer reported {} fonts.", report.peer_fonts),
+            );
+            Ok(Json(PeerTestResponse {
+                ok: true,
+                message: format!("Connected. Peer reported {} fonts.", report.peer_fonts),
+                peer_fonts: report.peer_fonts,
+                would_install_or_skip: report.skipped.len(),
+            }))
+        }
+        Err(error) => {
+            record_action_best_effort("Browser Test Peer", "failed", 1, &error.to_string());
+            Err(LanApiError::internal(error))
+        }
+    }
 }
 
 async fn app_peer_sync(
@@ -1210,27 +1341,91 @@ async fn app_peer_sync(
     let url = request.url;
     let lan_key = request.lan_key;
     let dry_run = request.dry_run.unwrap_or(false);
-    tokio::task::spawn_blocking(move || lan_sync(&url, lan_key.as_deref(), dry_run))
+    let action = if dry_run {
+        "Browser Preview From Peer"
+    } else {
+        "Browser Get Missing Fonts"
+    };
+    let result = tokio::task::spawn_blocking(move || lan_sync(&url, lan_key.as_deref(), dry_run))
         .await
-        .map_err(LanApiError::internal)?
-        .map(Json)
-        .map_err(LanApiError::internal)
+        .map_err(LanApiError::internal)?;
+    match result {
+        Ok(report) => {
+            let result = if dry_run {
+                format!("Dry run complete with {} result(s).", report.skipped.len())
+            } else {
+                format!("Installed {} font(s).", report.installed.len())
+            };
+            record_action_best_effort(action, "success", 0, &result);
+            Ok(Json(report))
+        }
+        Err(error) => {
+            record_action_best_effort(action, "failed", 1, &error.to_string());
+            Err(LanApiError::internal(error))
+        }
+    }
 }
 
 async fn app_sync_all() -> Result<Json<LanSyncAllReport>, LanApiError> {
-    tokio::task::spawn_blocking(|| lan_sync_all(false))
+    let result = tokio::task::spawn_blocking(|| lan_sync_all(false))
         .await
-        .map_err(LanApiError::internal)?
-        .map(Json)
-        .map_err(LanApiError::internal)
+        .map_err(LanApiError::internal)?;
+    match result {
+        Ok(report) => {
+            let warnings = report
+                .peers
+                .iter()
+                .filter(|peer| peer.error.is_some())
+                .count();
+            let installed = report
+                .peers
+                .iter()
+                .map(|peer| peer.installed.len())
+                .sum::<usize>();
+            record_action_best_effort(
+                "Browser Sync Saved Peers",
+                "success",
+                warnings,
+                &format!("Installed {installed} font(s) from saved peers."),
+            );
+            Ok(Json(report))
+        }
+        Err(error) => {
+            record_action_best_effort("Browser Sync Saved Peers", "failed", 1, &error.to_string());
+            Err(LanApiError::internal(error))
+        }
+    }
 }
 
 async fn app_sync_all_dry_run() -> Result<Json<LanSyncAllReport>, LanApiError> {
-    tokio::task::spawn_blocking(|| lan_sync_all(true))
+    let result = tokio::task::spawn_blocking(|| lan_sync_all(true))
         .await
-        .map_err(LanApiError::internal)?
-        .map(Json)
-        .map_err(LanApiError::internal)
+        .map_err(LanApiError::internal)?;
+    match result {
+        Ok(report) => {
+            let warnings = report
+                .peers
+                .iter()
+                .filter(|peer| peer.error.is_some())
+                .count();
+            record_action_best_effort(
+                "Browser Dry Run Saved Peers",
+                "success",
+                warnings,
+                "Dry run complete for saved peers.",
+            );
+            Ok(Json(report))
+        }
+        Err(error) => {
+            record_action_best_effort(
+                "Browser Dry Run Saved Peers",
+                "failed",
+                1,
+                &error.to_string(),
+            );
+            Err(LanApiError::internal(error))
+        }
+    }
 }
 
 async fn app_share_start(
@@ -1273,18 +1468,47 @@ async fn app_share_start(
     if let Some(code) = &pairing_code {
         command.env("SYNCMYFONTS_PAIRING_CODE", code);
     }
-    let child = command.spawn().map_err(LanApiError::internal)?;
-    let child = wait_for_share_start(child, listen).map_err(LanApiError::internal)?;
+    let child = match command.spawn().map_err(anyhow::Error::from) {
+        Ok(child) => child,
+        Err(error) => {
+            record_action_best_effort(
+                "Browser Share Fonts On LAN",
+                "failed",
+                1,
+                &error.to_string(),
+            );
+            return Err(LanApiError::internal(error));
+        }
+    };
+    let child = match wait_for_share_start(child, listen) {
+        Ok(child) => child,
+        Err(error) => {
+            record_action_best_effort(
+                "Browser Share Fonts On LAN",
+                "failed",
+                1,
+                &error.to_string(),
+            );
+            return Err(LanApiError::internal(error));
+        }
+    };
     let urls = share_urls(listen);
     *guard = Some(RunningShare { child, listen });
     let pairing_expires_seconds = pairing_code.as_ref().map(|_| PAIRING_CODE_TTL.as_secs());
-    Ok(Json(ShareResponse {
+    let response = ShareResponse {
         sharing: true,
         message: format!("Sharing fonts at {}.", urls.join(", ")),
         urls,
         pairing_code,
         pairing_expires_seconds,
-    }))
+    };
+    record_action_best_effort(
+        "Browser Share Fonts On LAN",
+        "success",
+        0,
+        &response.message,
+    );
+    Ok(Json(response))
 }
 
 async fn app_share_stop(State(state): State<AppState>) -> Result<Json<ShareResponse>, LanApiError> {
@@ -1303,6 +1527,12 @@ async fn app_share_stop(State(state): State<AppState>) -> Result<Json<ShareRespo
     };
     let _ = share.child.kill();
     let _ = share.child.wait();
+    record_action_best_effort(
+        "Browser Stop Sharing",
+        "success",
+        0,
+        "Stopped sharing fonts.",
+    );
     Ok(Json(ShareResponse {
         sharing: false,
         message: "Stopped sharing fonts.".to_string(),
@@ -1407,6 +1637,10 @@ impl SyncMyFontsGui {
         };
         match receiver.try_recv() {
             Ok(result) => {
+                let action = self
+                    .current_action
+                    .clone()
+                    .unwrap_or_else(|| "Action".to_string());
                 if let Some(peer) = result.peer {
                     self.peer_name = peer.name;
                     self.peer_url = peer.url;
@@ -1424,9 +1658,17 @@ impl SyncMyFontsGui {
                 self.warning_count = result.warning_count;
                 self.last_result = format!(
                     "{} completed at {}",
-                    self.current_action.as_deref().unwrap_or("Action"),
+                    action,
                     Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
                 );
+                if let Err(error) =
+                    record_action(&action, "success", self.warning_count, &self.next_step)
+                {
+                    self.output.push_str(&format!(
+                        "\n\nWarning: could not save action history: {error}"
+                    ));
+                    self.warning_count += 1;
+                }
                 if result.refresh_saved_peers {
                     self.load_saved_peers_summary();
                 }
@@ -1441,6 +1683,11 @@ impl SyncMyFontsGui {
                     "That action did not finish cleanly. Try again or run Diagnostics.".to_string();
                 self.last_result = "Last action stopped before returning a result.".to_string();
                 self.warning_count = 1;
+                let action = self
+                    .current_action
+                    .clone()
+                    .unwrap_or_else(|| "Action".to_string());
+                let _ = record_action(&action, "failed", self.warning_count, &self.next_step);
                 self.current_action = None;
             }
         }
@@ -1561,6 +1808,7 @@ impl SyncMyFontsGui {
                     Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
                 );
                 self.warning_count = 0;
+                let _ = record_action("Open Managed Folder", "success", 0, &self.next_step);
             }
             Err(error) => {
                 self.output = error.to_string();
@@ -1568,6 +1816,7 @@ impl SyncMyFontsGui {
                     "SyncMyFonts could not open the managed font folder. Diagnostics will show the folder path.".to_string();
                 self.last_result = "Open Managed Folder failed.".to_string();
                 self.warning_count = 1;
+                let _ = record_action("Open Managed Folder", "failed", 1, &self.next_step);
             }
         }
     }
@@ -1758,6 +2007,7 @@ impl SyncMyFontsGui {
                 self.output = format!("invalid listen address: {error}");
                 self.last_result = "Share Fonts On LAN failed before starting.".to_string();
                 self.warning_count = 1;
+                let _ = record_action("Share Fonts On LAN", "failed", 1, &self.output);
                 return;
             }
         };
@@ -1767,6 +2017,7 @@ impl SyncMyFontsGui {
                 self.output = format!("locating current executable failed: {error}");
                 self.last_result = "Share Fonts On LAN failed before starting.".to_string();
                 self.warning_count = 1;
+                let _ = record_action("Share Fonts On LAN", "failed", 1, &self.output);
                 return;
             }
         };
@@ -1815,6 +2066,7 @@ impl SyncMyFontsGui {
                     Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
                 );
                 self.warning_count = 0;
+                let _ = record_action("Share Fonts On LAN", "success", 0, &self.next_step);
             }
             Err(error) => {
                 self.output = error.to_string();
@@ -1823,6 +2075,7 @@ impl SyncMyFontsGui {
                         .to_string();
                 self.last_result = "Share Fonts On LAN failed.".to_string();
                 self.warning_count = 1;
+                let _ = record_action("Share Fonts On LAN", "failed", 1, &self.next_step);
             }
         }
     }
@@ -1843,6 +2096,7 @@ impl SyncMyFontsGui {
             Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
         );
         self.warning_count = 0;
+        let _ = record_action("Stop Sharing", "success", 0, &self.next_step);
     }
 
     fn prune_stopped_share(&mut self) {
@@ -2192,8 +2446,157 @@ fn save_app_config(config: &AppConfig) -> Result<()> {
     Ok(())
 }
 
+fn load_app_history() -> Result<AppHistory> {
+    let path = app_history_path()?;
+    if !path.exists() {
+        return Ok(AppHistory {
+            schema: 1,
+            last_action: None,
+            recent: Vec::new(),
+        });
+    }
+    let bytes = fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
+    let mut history: AppHistory =
+        serde_json::from_slice(&bytes).with_context(|| format!("parsing {}", path.display()))?;
+    if history.schema == 0 {
+        history.schema = 1;
+    }
+    Ok(history)
+}
+
+fn save_app_history(history: &AppHistory) -> Result<()> {
+    let path = app_history_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    }
+    let temp = path.with_extension("json.tmp");
+    let bytes = serde_json::to_vec_pretty(history).context("serializing app history")?;
+    fs::write(&temp, bytes).with_context(|| format!("writing {}", temp.display()))?;
+    fs::rename(&temp, &path).with_context(|| format!("saving {}", path.display()))?;
+    Ok(())
+}
+
+fn record_action(action: &str, status: &str, warning_count: usize, result: &str) -> Result<()> {
+    let record = ActionRecord {
+        action: action.to_string(),
+        status: status.to_string(),
+        finished_at: Utc::now().to_rfc3339(),
+        warning_count,
+        result: sanitize_action_result(result),
+    };
+    let mut history = load_app_history().unwrap_or_default();
+    history.schema = 1;
+    history.last_action = Some(record.clone());
+    history.recent.insert(0, record.clone());
+    history.recent.truncate(20);
+    save_app_history(&history)?;
+    append_action_log(&record)?;
+    Ok(())
+}
+
+fn record_action_best_effort(action: &str, status: &str, warning_count: usize, result: &str) {
+    if let Err(error) = record_action(action, status, warning_count, result) {
+        eprintln!("SyncMyFonts could not save action history: {error}");
+    }
+}
+
+fn append_action_log(record: &ActionRecord) -> Result<()> {
+    let dir = app_log_dir()?;
+    fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    let path = app_action_log_path()?;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .with_context(|| format!("opening {}", path.display()))?;
+    serde_json::to_writer(&mut file, record).context("serializing action log record")?;
+    file.write_all(b"\n")
+        .with_context(|| format!("writing {}", path.display()))?;
+    Ok(())
+}
+
+fn sanitize_action_result(result: &str) -> String {
+    let mut sanitized = result
+        .split_whitespace()
+        .map(|word| {
+            let trimmed = word.trim_matches(|ch: char| !ch.is_ascii_alphanumeric() && ch != '-');
+            if trimmed.len() == 8 && trimmed.chars().all(|ch| ch.is_ascii_digit()) {
+                "[redacted-code]".to_string()
+            } else if trimmed.starts_with("smf-") {
+                "[redacted-token]".to_string()
+            } else {
+                word.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    if sanitized.len() > 500 {
+        sanitized.truncate(500);
+        sanitized.push_str("...");
+    }
+    sanitized
+}
+
+fn support_report_text(report: &DiagnosticsReport) -> String {
+    let mut lines = vec![
+        "SyncMyFonts Support Report".to_string(),
+        format!("Version: {}", report.version),
+        format!("Platform: {}", report.platform),
+        format!("Device: {}", report.device_name),
+        format!("Config path: {}", report.config_path.display()),
+        format!("Log dir: {}", report.log_dir.display()),
+        format!("History path: {}", report.history_path.display()),
+        format!("User font dir: {}", report.user_font_dir.display()),
+        format!("Managed font dir: {}", report.managed_font_dir.display()),
+        format!(
+            "Managed manifest: {}",
+            report.managed_manifest_path.display()
+        ),
+        format!("Saved peers: {}", report.saved_peer_count),
+        format!("User fonts scanned: {}", report.user_font_count),
+        format!(
+            "Managed manifest records: {}",
+            report.managed_manifest_count
+        ),
+        format!("Warnings: {}", report.warnings.len()),
+    ];
+    if let Some(action) = &report.last_action {
+        lines.push(format!("Last action: {}", action.action));
+        lines.push(format!("Last action status: {}", action.status));
+        lines.push(format!("Last action finished: {}", action.finished_at));
+        lines.push(format!("Last action warnings: {}", action.warning_count));
+        lines.push(format!("Last action result: {}", action.result));
+    } else {
+        lines.push("Last action: none recorded".to_string());
+    }
+    if !report.saved_peers.is_empty() {
+        lines.push("Saved peer summary:".to_string());
+        for peer in &report.saved_peers {
+            lines.push(format!(
+                "- {} at {} (key saved: {})",
+                peer.name, peer.url, peer.has_lan_key
+            ));
+        }
+    }
+    if !report.warnings.is_empty() {
+        lines.push("Warnings:".to_string());
+        for warning in &report.warnings {
+            lines.push(format!("- {warning}"));
+        }
+    }
+    lines.join("\n")
+}
+
 fn app_config_path() -> Result<PathBuf> {
     Ok(app_data_dir()?.join("config.json"))
+}
+
+fn app_history_path() -> Result<PathBuf> {
+    Ok(app_log_dir()?.join("action-history.json"))
+}
+
+fn app_action_log_path() -> Result<PathBuf> {
+    Ok(app_log_dir()?.join("action-history.jsonl"))
 }
 
 fn managed_manifest_path() -> Result<PathBuf> {
@@ -2225,6 +2628,30 @@ fn app_data_dir() -> Result<PathBuf> {
         use directories::BaseDirs;
         let base = BaseDirs::new().ok_or_else(|| anyhow!("user config directory unavailable"))?;
         Ok(base.config_dir().join("syncmyfonts"))
+    }
+}
+
+fn app_log_dir() -> Result<PathBuf> {
+    if let Ok(log_dir) = std::env::var("SYNCMYFONTS_LOG_DIR") {
+        return Ok(PathBuf::from(log_dir));
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use directories::UserDirs;
+        let home = UserDirs::new()
+            .ok_or_else(|| anyhow!("user home directory unavailable"))?
+            .home_dir()
+            .to_path_buf();
+        return Ok(home.join("Library/Logs/SyncMyFonts"));
+    }
+    #[cfg(target_os = "windows")]
+    {
+        Ok(app_data_dir()?.join("logs"))
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        Ok(app_data_dir()?.join("logs"))
     }
 }
 
@@ -3547,6 +3974,63 @@ mod tests {
 
         assert!(json.contains("\"has_lan_key\":true"));
         assert!(!json.contains("super-secret"));
+    }
+
+    #[test]
+    fn action_history_persists_recent_result_for_diagnostics() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let config_dir = root.join("config");
+        let log_dir = root.join("logs");
+        let font_dir = root.join("fonts");
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+            std::env::set_var("SYNCMYFONTS_LOG_DIR", &log_dir);
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", &font_dir);
+            std::env::set_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION", "1");
+        }
+
+        add_lan_peer(
+            "Workshop".to_string(),
+            "http://127.0.0.1:7370".to_string(),
+            Some("super-secret-lan-key".to_string()),
+        )
+        .unwrap();
+        record_action(
+            "Test Sync",
+            "success",
+            2,
+            "Installed 1 font.\nPairing code 12345678",
+        )
+        .unwrap();
+        let report = diagnostics().unwrap();
+        let report_json = serde_json::to_string(&report).unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_LOG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+            std::env::remove_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION");
+        }
+
+        let last_action = report.last_action.unwrap();
+        assert_eq!(last_action.action, "Test Sync");
+        assert_eq!(last_action.status, "success");
+        assert_eq!(last_action.warning_count, 2);
+        assert!(report.history_path.ends_with("action-history.json"));
+        assert!(
+            report
+                .support_report_text
+                .contains("Last action: Test Sync")
+        );
+        assert!(
+            report
+                .support_report_text
+                .contains("Last action warnings: 2")
+        );
+        assert!(!report_json.contains("12345678"));
+        assert!(!report.support_report_text.contains("12345678"));
+        assert!(!report_json.contains("super-secret-lan-key"));
+        assert!(!report.support_report_text.contains("super-secret-lan-key"));
     }
 
     #[test]

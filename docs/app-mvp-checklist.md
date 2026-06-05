@@ -88,10 +88,10 @@ The app MVP should reuse the current agent commands:
 - [ ] Bundled `syncmyfonts-agent` binary compiled for the target platform.
 - [ ] Per-user config file with server URL, peer URL history, sync mode, and
   startup preference.
-- [ ] Per-user log directory.
+- [x] Per-user log directory.
 - [x] Diagnostics output that redacts API keys and LAN keys.
 - [x] A short first-run setup path for manual peer URL entry.
-- [ ] A copyable support report with app version, agent version, platform,
+- [x] A copyable support report with app version, agent version, platform,
   config paths, font paths, last command, and last result.
 
 ### macOS
@@ -102,7 +102,7 @@ The app MVP should reuse the current agent commands:
   `~/Library/Fonts/SyncMyFonts`.
 - [x] App support folder:
   `~/Library/Application Support/SyncMyFonts`.
-- [ ] Log folder:
+- [x] Log folder:
   `~/Library/Logs/SyncMyFonts`.
 - [ ] Optional user LaunchAgent in `~/Library/LaunchAgents` for scheduled sync.
 - [x] App action to open the managed font folder.
@@ -113,7 +113,7 @@ The app MVP should reuse the current agent commands:
   `%LOCALAPPDATA%\Microsoft\Windows\Fonts`.
 - [x] Current-user registry registration under
   `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts`.
-- [x] App config under `%LOCALAPPDATA%\SyncMyFonts`.
+- [x] App config and logs under `%LOCALAPPDATA%\SyncMyFonts`.
 - [ ] Start Menu shortcuts for `Sync Now`, `Send My Fonts`,
   `Get Missing Fonts`, and `Diagnostics` if there is no full tray UI yet.
 - [ ] Per-user startup option through a tray app, Startup folder, `HKCU\Run`, or
@@ -127,7 +127,10 @@ The app MVP should reuse the current agent commands:
 
 - [ ] `cargo build` succeeds on macOS.
 - [ ] `cargo build` succeeds on Windows.
-- [x] GitHub Actions proves macOS and Windows build/test/release packaging.
+- [x] GitHub Actions builds/tests on macOS and Windows and produces portable
+  release archives.
+- [ ] Clean-machine smoke tests prove the portable archives launch the native
+  app on macOS and Windows.
 - [ ] `cargo run -p syncmyfonts-agent -- scan` returns JSON inventory on macOS.
 - [ ] `cargo run -p syncmyfonts-agent -- scan` returns JSON inventory on
   Windows.
