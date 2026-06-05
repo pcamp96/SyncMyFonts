@@ -62,5 +62,7 @@ Current artifacts are meant for MVP testing:
 - Windows: portable `.zip`; no MSI/MSIX or code-signed installer yet.
 
 The GitHub Actions build proves that the Rust workspace builds/tests on macOS
-and Windows and that portable archives are produced. It does not replace a
-clean-machine install smoke test, code signing, notarization, or installer QA.
+and Windows, that portable archives are produced, and that the packaged agent
+inside each archive can run `diagnostics` with isolated per-user paths. It does
+not replace a clean-machine GUI launch test, code signing, notarization, or
+installer QA.

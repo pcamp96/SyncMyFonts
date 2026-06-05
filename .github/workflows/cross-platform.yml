@@ -75,6 +75,23 @@ jobs:
         if: runner.os == 'macOS'
         run: scripts/release/build-macos.sh
 
+      - name: Smoke macOS archive
+        if: runner.os == 'macOS'
+        run: |
+          set -eu
+          archive=$(ls dist/syncmyfonts-macos-*.tar.gz | head -n 1)
+          smoke_root=$(mktemp -d)
+          tar -C "$smoke_root" -xzf "$archive"
+          package_dir=$(find "$smoke_root" -maxdepth 1 -type d -name 'syncmyfonts-macos-*' | head -n 1)
+          test -x "$package_dir/bin/syncmyfonts-agent"
+          test -x "$package_dir/Start-SyncMyFonts.command"
+          SYNCMYFONTS_CONFIG_DIR="$smoke_root/config" \
+          SYNCMYFONTS_LOG_DIR="$smoke_root/logs" \
+          SYNCMYFONTS_USER_FONT_DIR="$smoke_root/fonts" \
+          "$package_dir/bin/syncmyfonts-agent" diagnostics > "$smoke_root/diagnostics.json"
+          grep -q '"support_report_text"' "$smoke_root/diagnostics.json"
+          grep -q '"log_dir"' "$smoke_root/diagnostics.json"
+
       - name: Upload macOS archive
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
@@ -87,6 +104,28 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: .\scripts\release\build-windows.ps1
+
+      - name: Smoke Windows archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $archive = Get-ChildItem dist\syncmyfonts-windows-*.zip | Select-Object -First 1
+          $smokeRoot = Join-Path $env:RUNNER_TEMP ("syncmyfonts-smoke-" + [guid]::NewGuid().ToString())
+          New-Item -ItemType Directory -Force -Path $smokeRoot | Out-Null
+          Expand-Archive -Path $archive.FullName -DestinationPath $smokeRoot
+          $packageDir = Get-ChildItem $smokeRoot -Directory -Filter "syncmyfonts-windows-*" | Select-Object -First 1
+          $agent = Join-Path $packageDir.FullName "bin\syncmyfonts-agent.exe"
+          $launcher = Join-Path $packageDir.FullName "Start-SyncMyFonts.cmd"
+          if (-not (Test-Path $agent)) { throw "Packaged agent missing" }
+          if (-not (Test-Path $launcher)) { throw "Packaged launcher missing" }
+          $env:SYNCMYFONTS_CONFIG_DIR = Join-Path $smokeRoot "config"
+          $env:SYNCMYFONTS_LOG_DIR = Join-Path $smokeRoot "logs"
+          $env:SYNCMYFONTS_USER_FONT_DIR = Join-Path $smokeRoot "fonts"
+          & $agent diagnostics | Tee-Object -FilePath (Join-Path $smokeRoot "diagnostics.json")
+          $diagnostics = Get-Content (Join-Path $smokeRoot "diagnostics.json") -Raw
+          if (-not $diagnostics.Contains('"support_report_text"')) { throw "Diagnostics support report missing" }
+          if (-not $diagnostics.Contains('"log_dir"')) { throw "Diagnostics log dir missing" }
 
       - name: Upload Windows archive
         if: runner.os == 'Windows'

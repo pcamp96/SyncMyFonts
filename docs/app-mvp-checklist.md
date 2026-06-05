@@ -129,6 +129,8 @@ The app MVP should reuse the current agent commands:
 - [ ] `cargo build` succeeds on Windows.
 - [x] GitHub Actions builds/tests on macOS and Windows and produces portable
   release archives.
+- [x] GitHub Actions smoke-tests the packaged agent inside each portable
+  archive.
 - [ ] Clean-machine smoke tests prove the portable archives launch the native
   app on macOS and Windows.
 - [ ] `cargo run -p syncmyfonts-agent -- scan` returns JSON inventory on macOS.
