@@ -140,6 +140,115 @@ fn saved_peer_sync_all_installs_matching_font_bytes() {
 }
 
 #[test]
+fn bidirectional_saved_peer_sync_converges_without_duplicates() {
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
+    let root = unique_temp_dir("syncmyfonts-lan-bidirectional");
+    let peer_a_fonts = root.join("peer-a-fonts");
+    let peer_a_config = root.join("peer-a-config");
+    let peer_b_fonts = root.join("peer-b-fonts");
+    let peer_b_config = root.join("peer-b-config");
+    fs::create_dir_all(&peer_a_fonts).unwrap();
+    fs::create_dir_all(&peer_a_config).unwrap();
+    fs::create_dir_all(&peer_b_fonts).unwrap();
+    fs::create_dir_all(&peer_b_config).unwrap();
+
+    let peer_a_source = peer_a_fonts.join("MacBook Design Font.ttf");
+    let peer_b_source = peer_b_fonts.join("Workshop Laser Font.ttf");
+    fs::write(&peer_a_source, b"font installed first on the macbook\n").unwrap();
+    fs::write(&peer_b_source, b"font installed first on the shop pc\n").unwrap();
+
+    let peer_a_listen = free_local_addr();
+    let peer_b_listen = free_local_addr();
+    let mut peer_a_server = Command::new(&bin);
+    peer_a_server
+        .arg("lan-serve")
+        .arg("--listen")
+        .arg(peer_a_listen.to_string())
+        .arg("--lan-key")
+        .arg("shared-test-key");
+    apply_isolated_env(&mut peer_a_server, &peer_a_fonts, &peer_a_config);
+    let peer_a_server = peer_a_server.spawn().unwrap();
+    let _peer_a_server = ChildGuard(peer_a_server);
+
+    let mut peer_b_server = Command::new(&bin);
+    peer_b_server
+        .arg("lan-serve")
+        .arg("--listen")
+        .arg(peer_b_listen.to_string())
+        .arg("--lan-key")
+        .arg("shared-test-key");
+    apply_isolated_env(&mut peer_b_server, &peer_b_fonts, &peer_b_config);
+    let peer_b_server = peer_b_server.spawn().unwrap();
+    let _peer_b_server = ChildGuard(peer_b_server);
+
+    wait_for_tcp(peer_a_listen);
+    wait_for_tcp(peer_b_listen);
+
+    let peer_a_url = format!("http://{peer_a_listen}");
+    let peer_b_url = format!("http://{peer_b_listen}");
+    add_saved_peer(&bin, &peer_a_fonts, &peer_a_config, "Shop PC", &peer_b_url);
+    add_saved_peer(&bin, &peer_b_fonts, &peer_b_config, "MacBook", &peer_a_url);
+
+    let peer_a_first = sync_saved_peers(&bin, &peer_a_fonts, &peer_a_config);
+    let peer_b_first = sync_saved_peers(&bin, &peer_b_fonts, &peer_b_config);
+    assert_eq!(peer_a_first["dry_run"], false);
+    assert_eq!(peer_b_first["dry_run"], false);
+    assert_eq!(peer_a_first["peers"][0]["name"], "Shop PC");
+    assert_eq!(peer_b_first["peers"][0]["name"], "MacBook");
+    assert_eq!(peer_a_first["peers"][0]["ok"], true);
+    assert_eq!(peer_b_first["peers"][0]["ok"], true);
+    assert_eq!(
+        peer_a_first["peers"][0]["installed"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        peer_b_first["peers"][0]["installed"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_font_bytes_present(&peer_a_fonts, fs::read(&peer_b_source).unwrap());
+    assert_font_bytes_present(&peer_b_fonts, fs::read(&peer_a_source).unwrap());
+    let peer_a_installed_after_first = installed_font_paths(&peer_a_fonts);
+    let peer_b_installed_after_first = installed_font_paths(&peer_b_fonts);
+    assert_eq!(peer_a_installed_after_first.len(), 2);
+    assert_eq!(peer_b_installed_after_first.len(), 2);
+
+    let peer_a_second = sync_saved_peers(&bin, &peer_a_fonts, &peer_a_config);
+    let peer_b_second = sync_saved_peers(&bin, &peer_b_fonts, &peer_b_config);
+    assert_eq!(
+        peer_a_second["peers"][0]["installed"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    assert_eq!(
+        peer_b_second["peers"][0]["installed"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    assert_already_present_skip(&peer_a_second);
+    assert_already_present_skip(&peer_b_second);
+    assert_eq!(
+        installed_font_paths(&peer_a_fonts),
+        peer_a_installed_after_first
+    );
+    assert_eq!(
+        installed_font_paths(&peer_b_fonts),
+        peer_b_installed_after_first
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn lan_sync_dry_run_reports_missing_without_installing_fonts() {
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
     let root = unique_temp_dir("syncmyfonts-lan-dry-run");
@@ -437,6 +546,56 @@ fn apply_isolated_env(command: &mut Command, font_dir: &Path, config_dir: &Path)
         .env("SYNCMYFONTS_USER_FONT_DIR", font_dir)
         .env("SYNCMYFONTS_CONFIG_DIR", config_dir)
         .env("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION", "1");
+}
+
+fn add_saved_peer(bin: &Path, font_dir: &Path, config_dir: &Path, name: &str, url: &str) {
+    let mut add_peer = Command::new(bin);
+    add_peer
+        .arg("lan-add-peer")
+        .arg("--name")
+        .arg(name)
+        .arg("--url")
+        .arg(url)
+        .arg("--lan-key")
+        .arg("shared-test-key");
+    apply_isolated_env(&mut add_peer, font_dir, config_dir);
+    assert!(add_peer.status().unwrap().success());
+}
+
+fn sync_saved_peers(bin: &Path, font_dir: &Path, config_dir: &Path) -> serde_json::Value {
+    let mut sync_all = Command::new(bin);
+    sync_all.arg("lan-sync-all");
+    apply_isolated_env(&mut sync_all, font_dir, config_dir);
+    let output = sync_all.output().unwrap();
+    assert!(
+        output.status.success(),
+        "lan-sync-all failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    parse_json(&output)
+}
+
+fn assert_font_bytes_present(root: &Path, expected_bytes: Vec<u8>) {
+    assert!(
+        installed_font_paths(root)
+            .iter()
+            .any(|path| fs::read(path).is_ok_and(|bytes| bytes == expected_bytes)),
+        "no installed font under {} matched expected bytes",
+        root.display()
+    );
+}
+
+fn assert_already_present_skip(json: &serde_json::Value) {
+    assert!(
+        json["peers"][0]["skipped"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|value| value
+                .as_str()
+                .is_some_and(|line| line.contains("already present")))
+    );
 }
 
 fn font_dir_has_entries(path: &Path) -> bool {
