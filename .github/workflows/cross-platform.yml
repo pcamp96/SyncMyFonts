@@ -99,6 +99,8 @@ jobs:
           test -x "$package_dir/SyncMyFonts.app/Contents/MacOS/SyncMyFonts"
           test -x "$package_dir/SyncMyFonts.app/Contents/MacOS/syncmyfonts-agent"
           plutil -lint "$package_dir/SyncMyFonts.app/Contents/Info.plist"
+          plutil -extract CFBundleExecutable raw -o - "$package_dir/SyncMyFonts.app/Contents/Info.plist" | grep -q '^SyncMyFonts$'
+          grep -q 'syncmyfonts-gui' "$package_dir/Start-SyncMyFonts.command"
           SYNCMYFONTS_CONFIG_DIR="$smoke_root/config" \
           SYNCMYFONTS_LOG_DIR="$smoke_root/logs" \
           SYNCMYFONTS_USER_FONT_DIR="$smoke_root/fonts" \
@@ -188,6 +190,8 @@ jobs:
           if (-not (Test-Path $agent)) { throw "Packaged agent missing" }
           if (-not (Test-Path $gui)) { throw "Packaged GUI launcher missing" }
           if (-not (Test-Path $launcher)) { throw "Packaged launcher missing" }
+          $launcherText = Get-Content $launcher -Raw
+          if (-not $launcherText.Contains("syncmyfonts-gui.exe")) { throw "Packaged launcher does not target GUI binary" }
           $env:SYNCMYFONTS_CONFIG_DIR = Join-Path $smokeRoot "config"
           $env:SYNCMYFONTS_LOG_DIR = Join-Path $smokeRoot "logs"
           $env:SYNCMYFONTS_USER_FONT_DIR = Join-Path $smokeRoot "fonts"
