@@ -107,6 +107,9 @@ run a readiness check before live two-machine testing.
 When multiple computers are saved, the GUI includes a saved-peer selector so a
 user can load the exact Mac or Windows PC they want to test, preview, sync, or
 forget.
+The result panel includes copy buttons for the current result and the latest
+redacted support report, which helps capture firewall, permission, and sync
+evidence from clean-machine tests.
 When sharing is on, the GUI provides copy buttons for the active LAN URL and
 pairing code so manual pairing is less error-prone.
 On Windows, the GUI can also install current-user Start Menu shortcuts for the

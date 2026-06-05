@@ -2003,6 +2003,7 @@ struct SyncMyFontsGui {
     status: String,
     next_step: String,
     output: String,
+    last_support_report: Option<String>,
     last_result: String,
     warning_count: usize,
     saved_peer_summary: String,
@@ -2032,6 +2033,7 @@ struct GuiTaskResult {
     discovered_peer: Option<LanDiscoveredPeer>,
     clear_peer_key: bool,
     refresh_saved_peers: bool,
+    support_report: Option<String>,
     warning_count: usize,
 }
 
@@ -2045,6 +2047,7 @@ impl SyncMyFontsGui {
             next_step: "Start by sharing fonts on one computer, then pair from the other computer."
                 .to_string(),
             output: "Ready.".to_string(),
+            last_support_report: None,
             last_result: "No actions yet.".to_string(),
             warning_count: 0,
             saved_peer_summary: "Saved peers: loading...".to_string(),
@@ -2115,6 +2118,9 @@ impl SyncMyFontsGui {
                     self.peer_key.clear();
                 }
                 self.output = result.output;
+                if let Some(support_report) = result.support_report {
+                    self.last_support_report = Some(support_report);
+                }
                 self.next_step = result.next_step;
                 self.warning_count = result.warning_count;
                 self.last_result = format!(
@@ -2307,11 +2313,7 @@ impl SyncMyFontsGui {
         self.start_task("Collecting diagnostics", || match diagnostics() {
             Ok(report) => {
                 let warnings = report.warnings.len();
-                gui_ok_with_warning_count(
-                    &report,
-                    "Diagnostics are redacted and safe to paste into a support issue.".to_string(),
-                    warnings,
-                )
+                gui_diagnostics_result(&report, warnings)
             }
             Err(error) => gui_error(error),
         });
@@ -3010,6 +3012,21 @@ impl eframe::App for SyncMyFontsGui {
         ui.separator();
         ui.heading("Result");
         ui.label(&self.next_step);
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Copy Result").clicked() {
+                ui.ctx().copy_text(self.output.clone());
+                self.next_step = "Result copied.".to_string();
+            }
+            let has_support_report = self.last_support_report.is_some();
+            ui.add_enabled_ui(has_support_report, |ui| {
+                if ui.button("Copy Support Report").clicked() {
+                    if let Some(report) = &self.last_support_report {
+                        ui.ctx().copy_text(report.clone());
+                        self.next_step = "Redacted support report copied.".to_string();
+                    }
+                }
+            });
+        });
         eframe::egui::ScrollArea::vertical()
             .max_height(260.0)
             .show(ui, |ui| {
@@ -3050,6 +3067,20 @@ fn gui_ok_with_updates<T: Serialize>(
         discovered_peer,
         clear_peer_key,
         refresh_saved_peers,
+        support_report: None,
+        warning_count,
+    }
+}
+
+fn gui_diagnostics_result(report: &DiagnosticsReport, warning_count: usize) -> GuiTaskResult {
+    GuiTaskResult {
+        output: serde_json::to_string_pretty(report).unwrap_or_else(|_| "ok".to_string()),
+        next_step: "Diagnostics are redacted and safe to paste into a support issue.".to_string(),
+        peer: None,
+        discovered_peer: None,
+        clear_peer_key: false,
+        refresh_saved_peers: false,
+        support_report: Some(report.support_report_text.clone()),
         warning_count,
     }
 }
@@ -3064,6 +3095,7 @@ fn gui_error(error: anyhow::Error) -> GuiTaskResult {
         discovered_peer: None,
         clear_peer_key: false,
         refresh_saved_peers: false,
+        support_report: None,
         warning_count: 1,
     }
 }
@@ -5935,6 +5967,43 @@ mod tests {
         assert!(!report.support_report_text.contains("12345678"));
         assert!(!report_json.contains("super-secret-lan-key"));
         assert!(!report.support_report_text.contains("super-secret-lan-key"));
+    }
+
+    #[test]
+    fn gui_diagnostics_result_carries_redacted_support_report() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let config_dir = root.join("config");
+        let log_dir = root.join("logs");
+        let font_dir = root.join("fonts");
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+            std::env::set_var("SYNCMYFONTS_LOG_DIR", &log_dir);
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", &font_dir);
+            std::env::set_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION", "1");
+        }
+        add_lan_peer(
+            "Secret Peer".to_string(),
+            "http://127.0.0.1:7370".to_string(),
+            Some("super-secret-lan-key".to_string()),
+        )
+        .unwrap();
+
+        let report = diagnostics().unwrap();
+        let gui = gui_diagnostics_result(&report, report.warnings.len());
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_LOG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+            std::env::remove_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION");
+        }
+
+        let support_report = gui.support_report.unwrap();
+        assert!(support_report.contains("SyncMyFonts Support Report"));
+        assert!(support_report.contains("Saved peer summary:"));
+        assert!(!support_report.contains("super-secret-lan-key"));
+        assert!(gui.output.contains("\"support_report_text\""));
+        assert!(!gui.output.contains("super-secret-lan-key"));
     }
 
     #[test]

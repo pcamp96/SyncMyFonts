@@ -107,6 +107,8 @@ The app MVP should reuse the current agent commands:
 - [x] A short first-run setup path for manual peer URL entry.
 - [x] A copyable support report with app version, agent version, platform,
   config paths, font paths, last command, and last result.
+- [x] Native GUI copy buttons for the current result and latest redacted
+  support report.
 
 ### macOS
 

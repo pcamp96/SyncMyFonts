@@ -31,6 +31,8 @@ the per-user config so it survives relaunches.
 Use `Diagnostics` for a copyable support report, `Open Managed Folder` to see
 fonts installed by SyncMyFonts, and `Open Logs` to open the per-user action
 history folder.
+After running `Diagnostics`, use `Copy Support Report` to copy the redacted
+support text without selecting JSON by hand.
 Use `Readiness Check` before live two-machine testing to confirm local app
 paths, saved peers, and sign-in sync helper status.
 Use `Validation Report` before and after a real Mac-to-Windows test to save
