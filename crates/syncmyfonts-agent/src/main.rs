@@ -1952,6 +1952,14 @@ const APP_HTML: &str = r#"<!doctype html>
       background: color-mix(in oklab, CanvasText 7%, Canvas);
       overflow-wrap: anywhere;
     }
+    .nextstep {
+      margin-top: 12px;
+      padding: 12px;
+      border-left: 4px solid #116149;
+      border-radius: 6px;
+      background: color-mix(in oklab, #116149 10%, Canvas);
+      overflow-wrap: anywhere;
+    }
     .result {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -2037,6 +2045,7 @@ const APP_HTML: &str = r#"<!doctype html>
 
     <section>
       <h2>Result</h2>
+      <div id="nextStep" class="nextstep">Start by sharing fonts on one computer, then find and pair from the other computer.</div>
       <div id="summary" class="result"></div>
       <pre id="output">Ready.</pre>
     </section>
@@ -2044,6 +2053,10 @@ const APP_HTML: &str = r#"<!doctype html>
   <script>
     const out = document.getElementById('output');
     const summary = document.getElementById('summary');
+    const nextStep = document.getElementById('nextStep');
+    function setNextStep(message) {
+      nextStep.textContent = message;
+    }
     function show(value) {
       out.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
     }
@@ -2063,6 +2076,8 @@ const APP_HTML: &str = r#"<!doctype html>
         summary.innerHTML = metric('peer fonts', value.peer_fonts ?? 0) + metric('installed', value.installed.length) + metric('skipped', value.skipped?.length ?? 0);
       } else if (typeof value.peer_fonts === 'number') {
         summary.innerHTML = metric('peer fonts', value.peer_fonts) + metric('results', value.would_install_or_skip ?? 0);
+      } else if (Array.isArray(value)) {
+        summary.innerHTML = metric('items', value.length);
       }
     }
     function showResult(value) {
@@ -2072,7 +2087,10 @@ const APP_HTML: &str = r#"<!doctype html>
     function showShareResult(value) {
       showResult(value);
       if (value?.pairing_code) {
+        setNextStep(`Pairing code ${value.pairing_code} is ready for about ${Math.round((value.pairing_expires_seconds ?? 600) / 60)} minutes. On the other computer, click Find LAN Peers, select this device, enter the code, and click Pair Peer.`);
         out.textContent += `\n\nPairing code: ${value.pairing_code}\nValid for about ${Math.round((value.pairing_expires_seconds ?? 600) / 60)} minutes.`;
+      } else if (value?.sharing) {
+        setNextStep('Sharing is on. On the other computer, enter this URL and shared key, or use Find LAN Peers if it can discover this device.');
       }
     }
     async function request(path, options = {}) {
@@ -2114,6 +2132,7 @@ const APP_HTML: &str = r#"<!doctype html>
         const box = document.getElementById('discoveredPeers');
         if (!peers.length) {
           box.textContent = 'No sharing SyncMyFonts peers answered on this LAN.';
+          setNextStep('No peers answered. Make sure the other computer is sharing, both computers are on the same trusted LAN/VPN, and Windows Firewall allows Private network access if Windows is sharing.');
         } else {
           box.textContent = '';
           for (const peer of peers) {
@@ -2124,6 +2143,7 @@ const APP_HTML: &str = r#"<!doctype html>
             box.appendChild(button);
             box.appendChild(document.createTextNode(' '));
           }
+          setNextStep('Select the sharing computer below, enter its pairing code, then click Pair Peer.');
         }
         showResult(peers);
       } catch (error) { show(error.message); }
@@ -2131,6 +2151,7 @@ const APP_HTML: &str = r#"<!doctype html>
     function useDiscoveredPeer(name, url) {
       document.getElementById('peerName').value = name;
       document.getElementById('peerUrl').value = url;
+      setNextStep(`Selected ${name}. Enter the pairing code from that computer, then click Pair Peer.`);
     }
     function peerPayload(dryRun) {
       return {
@@ -2141,11 +2162,13 @@ const APP_HTML: &str = r#"<!doctype html>
     }
     async function testPeer() {
       try {
-        showResult(await request('/api/peer/test', {
+        const result = await request('/api/peer/test', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(peerPayload(true))
-        }));
+        });
+        showResult(result);
+        setNextStep(`Connected. This peer reports ${result.peer_fonts} fonts. Use Preview From Peer to see what would happen, or Get Missing Fonts to install missing fonts.`);
       } catch (error) { show(error.message); }
     }
     async function pairPeer() {
@@ -2163,6 +2186,7 @@ const APP_HTML: &str = r#"<!doctype html>
         document.getElementById('peerUrl').value = peer.url;
         document.getElementById('peerKey').value = peer.lan_key ?? '';
         showResult(peer);
+        setNextStep(`${peer.name} is paired and saved. Click Test Peer or Preview From Peer next.`);
       } catch (error) { show(error.message); }
     }
     async function syncPeer(dryRun) {
@@ -2173,14 +2197,22 @@ const APP_HTML: &str = r#"<!doctype html>
           body: JSON.stringify(peerPayload(dryRun))
         });
         showResult(result);
-        if (!dryRun && result.installed?.length) {
+        if (dryRun) {
+          const wouldInstall = result.skipped?.filter(line => line.startsWith('would install ')).length ?? 0;
+          setNextStep(wouldInstall
+            ? `${wouldInstall} fonts are missing locally. Click Get Missing Fonts to install them.`
+            : 'No missing installable fonts were found from this peer.');
+        } else if (result.installed?.length) {
+          setNextStep('Installed fonts are ready. Reopen design apps if they do not appear yet.');
           out.textContent += '\n\nInstalled fonts are ready. Reopen design apps if they do not appear yet.';
+        } else {
+          setNextStep('No new fonts were installed. The peer may already match this computer.');
         }
       } catch (error) { show(error.message); }
     }
     async function savePeer() {
       try {
-        showResult(await request('/api/peers', {
+        const peer = await request('/api/peers', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -2188,7 +2220,9 @@ const APP_HTML: &str = r#"<!doctype html>
             url: document.getElementById('peerUrl').value,
             lan_key: document.getElementById('peerKey').value || null
           })
-        }));
+        });
+        showResult(peer);
+        setNextStep(`${peer.name} is saved. Use Sync Saved Peers for repeat syncs.`);
       } catch (error) { show(error.message); }
     }
     async function syncAll(dryRun) {
@@ -2196,7 +2230,12 @@ const APP_HTML: &str = r#"<!doctype html>
         const result = await request(dryRun ? '/api/sync-all/dry-run' : '/api/sync-all', { method: 'POST' });
         showResult(result);
         if (!dryRun && result.peers?.some(peer => peer.installed?.length)) {
+          setNextStep('Installed fonts are ready. Reopen design apps if they do not appear yet.');
           out.textContent += '\n\nInstalled fonts are ready. Reopen design apps if they do not appear yet.';
+        } else if (dryRun) {
+          setNextStep('Dry run complete. Review the peer results below before syncing saved peers.');
+        } else {
+          setNextStep('Saved peer sync finished. No new fonts were installed.');
         }
       } catch (error) { show(error.message); }
     }
@@ -2216,6 +2255,7 @@ const APP_HTML: &str = r#"<!doctype html>
     async function stopShare() {
       try {
         showResult(await request('/api/share/stop', { method: 'POST' }));
+        setNextStep('Sharing is off. Start sharing again when another computer needs fonts from this one.');
         refresh();
       } catch (error) { show(error.message); }
     }
