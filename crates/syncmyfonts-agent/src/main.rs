@@ -1510,10 +1510,19 @@ fn install_font(remote_file_name: &str, expected_sha256: &str, bytes: &[u8]) -> 
         bail!("unsupported-format: {}", remote_file_name);
     }
 
+    let safe_name = safe_file_name(remote_file_name, expected_sha256);
+    if let Some(conflict_path) = system_font_filename_conflict(&safe_name)? {
+        bail!(
+            "system-font-conflict: {} conflicts with {}",
+            safe_name,
+            conflict_path.display()
+        );
+    }
+
     let install_dir = managed_install_dir()?;
     fs::create_dir_all(&install_dir)
         .with_context(|| format!("creating {}", install_dir.display()))?;
-    let destination = unique_destination(&install_dir, remote_file_name, expected_sha256)?;
+    let destination = unique_destination(&install_dir, &safe_name, expected_sha256)?;
     let temp = destination.with_extension(format!(
         "{}.tmp",
         destination
@@ -1536,11 +1545,10 @@ fn install_font(remote_file_name: &str, expected_sha256: &str, bytes: &[u8]) -> 
 
 fn unique_destination(
     install_dir: &Path,
-    remote_file_name: &str,
+    safe_name: &str,
     expected_sha256: &str,
 ) -> Result<PathBuf> {
-    let safe_name = safe_file_name(remote_file_name, expected_sha256);
-    let candidate = install_dir.join(&safe_name);
+    let candidate = install_dir.join(safe_name);
     if !candidate.exists() {
         return Ok(candidate);
     }
@@ -1561,6 +1569,71 @@ fn unique_destination(
         &expected_sha256[..8],
         extension
     )))
+}
+
+fn system_font_filename_conflict(safe_name: &str) -> Result<Option<PathBuf>> {
+    let safe_name_lower = safe_name.to_ascii_lowercase();
+    for dir in system_font_dirs()? {
+        if !dir.exists() {
+            continue;
+        }
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(error) => {
+                tracing::warn!(
+                    "skipping unreadable system font directory {}: {error}",
+                    dir.display()
+                );
+                continue;
+            }
+        };
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(error) => {
+                    tracing::warn!("skipping unreadable system font entry: {error}");
+                    continue;
+                }
+            };
+            let file_name = entry.file_name();
+            if file_name
+                .to_str()
+                .map(|name| name.eq_ignore_ascii_case(&safe_name_lower))
+                .unwrap_or(false)
+            {
+                return Ok(Some(entry.path()));
+            }
+        }
+        let candidate = dir.join(safe_name);
+        if candidate.exists() {
+            return Ok(Some(candidate));
+        }
+    }
+    Ok(None)
+}
+
+fn system_font_dirs() -> Result<Vec<PathBuf>> {
+    if let Ok(dirs) = std::env::var("SYNCMYFONTS_SYSTEM_FONT_DIRS") {
+        return Ok(std::env::split_paths(&dirs).collect());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Ok(vec![
+            PathBuf::from("/System/Library/Fonts"),
+            PathBuf::from("/Library/Fonts"),
+            PathBuf::from("/Network/Library/Fonts"),
+        ])
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let windir = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".to_string());
+        Ok(vec![PathBuf::from(windir).join("Fonts")])
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        Ok(Vec::new())
+    }
 }
 
 fn safe_file_name(remote_file_name: &str, expected_sha256: &str) -> String {
@@ -2371,6 +2444,56 @@ mod tests {
         assert!(token.starts_with("smf-"));
         assert_eq!(code.len(), 8);
         assert!(code.chars().all(|ch| ch.is_ascii_digit()));
+    }
+
+    #[test]
+    fn system_font_filename_conflict_detects_exact_and_case_insensitive_names() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let system_dir = root.join("system-fonts");
+        fs::create_dir_all(&system_dir).unwrap();
+        fs::write(system_dir.join("ProtectedFont.TTF"), b"system").unwrap();
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_SYSTEM_FONT_DIRS", &system_dir);
+        }
+
+        let exact = system_font_filename_conflict("ProtectedFont.TTF").unwrap();
+        let case_insensitive = system_font_filename_conflict("protectedfont.ttf").unwrap();
+        let missing = system_font_filename_conflict("OtherFont.ttf").unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_SYSTEM_FONT_DIRS");
+        }
+
+        assert_eq!(exact, Some(system_dir.join("ProtectedFont.TTF")));
+        assert_eq!(case_insensitive, Some(system_dir.join("ProtectedFont.TTF")));
+        assert_eq!(missing, None);
+    }
+
+    #[test]
+    fn install_font_skips_system_font_filename_conflicts() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let user_dir = root.join("user-fonts");
+        let system_dir = root.join("system-fonts");
+        fs::create_dir_all(&system_dir).unwrap();
+        fs::write(system_dir.join("Existing.ttf"), b"system").unwrap();
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", &user_dir);
+            std::env::set_var("SYNCMYFONTS_SYSTEM_FONT_DIRS", &system_dir);
+            std::env::set_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION", "1");
+        }
+
+        let bytes = b"syncmyfonts fake font bytes";
+        let sha256 = hex::encode(Sha256::digest(bytes));
+        let error = install_font("Existing.ttf", &sha256, bytes).unwrap_err();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+            std::env::remove_var("SYNCMYFONTS_SYSTEM_FONT_DIRS");
+            std::env::remove_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION");
+        }
+
+        assert!(error.to_string().contains("system-font-conflict"));
+        assert!(!user_dir.join("Existing.ttf").exists());
     }
 
     #[test]

@@ -27,6 +27,7 @@ The app MVP should reuse the current agent commands:
 
 - [x] Sync only current-user fonts and SyncMyFonts-managed fonts.
 - [x] Never scan, copy, install, delete, or mutate system font directories.
+- [x] Skip installs whose filename conflicts with known system font directories.
 - [ ] Install synced fonts without administrator privileges.
 - [ ] Treat SHA-256 as the font identity and deduplicate identical bytes across
   macOS and Windows.

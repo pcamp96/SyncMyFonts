@@ -23,6 +23,8 @@ removing a font from one computer should not surprise-remove it everywhere.
 SyncMyFonts only syncs fonts installed in the current user's font directory. It
 does not scan, upload, copy, install, delete, or manage operating-system font
 directories.
+When installing a synced font, SyncMyFonts also skips it if the sanitized file
+name conflicts with a file already present in a known system font directory.
 
 Excluded system locations include:
 
