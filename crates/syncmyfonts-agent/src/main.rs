@@ -1305,6 +1305,9 @@ struct SyncMyFontsGui {
     status: String,
     next_step: String,
     output: String,
+    last_result: String,
+    warning_count: usize,
+    saved_peer_summary: String,
     current_action: Option<String>,
     task: Option<mpsc::Receiver<GuiTaskResult>>,
     peer_name: String,
@@ -1323,6 +1326,8 @@ struct GuiTaskResult {
     peer: Option<LanPeerConfig>,
     discovered_peer: Option<LanDiscoveredPeer>,
     clear_peer_key: bool,
+    refresh_saved_peers: bool,
+    warning_count: usize,
 }
 
 impl SyncMyFontsGui {
@@ -1332,6 +1337,9 @@ impl SyncMyFontsGui {
             next_step: "Start by sharing fonts on one computer, then pair from the other computer."
                 .to_string(),
             output: "Ready.".to_string(),
+            last_result: "No actions yet.".to_string(),
+            warning_count: 0,
+            saved_peer_summary: "Saved peers: loading...".to_string(),
             current_action: None,
             task: None,
             peer_name: String::new(),
@@ -1344,6 +1352,7 @@ impl SyncMyFontsGui {
             share_urls: Vec::new(),
         };
         app.refresh_status();
+        app.load_saved_peers_into_form();
         app
     }
 
@@ -1388,6 +1397,15 @@ impl SyncMyFontsGui {
                 }
                 self.output = result.output;
                 self.next_step = result.next_step;
+                self.warning_count = result.warning_count;
+                self.last_result = format!(
+                    "{} completed at {}",
+                    self.current_action.as_deref().unwrap_or("Action"),
+                    Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+                );
+                if result.refresh_saved_peers {
+                    self.load_saved_peers_summary();
+                }
                 self.current_action = None;
             }
             Err(mpsc::TryRecvError::Empty) => {
@@ -1397,6 +1415,8 @@ impl SyncMyFontsGui {
                 self.output = "Background action stopped before returning a result.".to_string();
                 self.next_step =
                     "That action did not finish cleanly. Try again or run Diagnostics.".to_string();
+                self.last_result = "Last action stopped before returning a result.".to_string();
+                self.warning_count = 1;
                 self.current_action = None;
             }
         }
@@ -1415,17 +1435,59 @@ impl SyncMyFontsGui {
             .as_ref()
             .map(|share| share_urls(share.listen))
             .unwrap_or_default();
+        self.load_saved_peers_summary();
+    }
+
+    fn load_saved_peers_summary(&mut self) {
+        self.saved_peer_summary = match load_app_config() {
+            Ok(config) if config.peers.is_empty() => "Saved peers: none yet.".to_string(),
+            Ok(config) => format!(
+                "Saved peers: {} ({})",
+                config.peers.len(),
+                config
+                    .peers
+                    .iter()
+                    .map(|peer| peer.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Err(error) => format!("Saved peers unavailable: {error}"),
+        };
+    }
+
+    fn load_saved_peers_into_form(&mut self) {
+        match load_app_config() {
+            Ok(config) => {
+                if let Some(peer) = config.peers.first() {
+                    self.peer_name = peer.name.clone();
+                    self.peer_url = peer.url.clone();
+                    self.peer_key = peer.lan_key.clone().unwrap_or_default();
+                    self.next_step = format!(
+                        "Loaded saved peer {}. Use Test Peer, Preview From Peer, or Sync Saved Peers.",
+                        peer.name
+                    );
+                }
+            }
+            Err(error) => {
+                self.next_step = format!("Saved peers could not be loaded: {error}");
+            }
+        }
+        self.load_saved_peers_summary();
     }
 
     fn scan_fonts(&mut self) {
         self.start_task("Scanning fonts", || match scan(true) {
-            Ok(report) => gui_ok(
-                &report,
-                format!(
-                    "Found {} local fonts. Share this device if another computer needs these fonts.",
-                    report.fonts.len()
-                ),
-            ),
+            Ok(report) => {
+                let warnings = report.warnings.len();
+                gui_ok_with_warning_count(
+                    &report,
+                    format!(
+                        "Found {} local fonts. Share this device if another computer needs these fonts.",
+                        report.fonts.len()
+                    ),
+                    warnings,
+                )
+            }
             Err(error) => gui_error(error),
         });
     }
@@ -1439,7 +1501,7 @@ impl SyncMyFontsGui {
                 } else {
                     format!("{issues} managed font issue(s) found. Review before syncing more.")
                 };
-                gui_ok(&report, next_step)
+                gui_ok_with_warning_count(&report, next_step, issues)
             }
             Err(error) => gui_error(error),
         });
@@ -1447,10 +1509,14 @@ impl SyncMyFontsGui {
 
     fn run_diagnostics(&mut self) {
         self.start_task("Collecting diagnostics", || match diagnostics() {
-            Ok(report) => gui_ok(
-                &report,
-                "Diagnostics are redacted and safe to paste into a support issue.".to_string(),
-            ),
+            Ok(report) => {
+                let warnings = report.warnings.len();
+                gui_ok_with_warning_count(
+                    &report,
+                    "Diagnostics are redacted and safe to paste into a support issue.".to_string(),
+                    warnings,
+                )
+            }
             Err(error) => gui_error(error),
         });
     }
@@ -1471,7 +1537,7 @@ impl SyncMyFontsGui {
                         "No sharing peers answered. Make sure the other computer is sharing and on the same trusted LAN."
                             .to_string()
                 };
-                gui_ok_with_updates(&peers, next_step, None, discovered_peer, false)
+                gui_ok_with_updates(&peers, next_step, None, discovered_peer, false, false, 0)
             }
             Err(error) => gui_error(error),
         });
@@ -1488,7 +1554,7 @@ impl SyncMyFontsGui {
                         "{} is paired and saved. Preview from the peer before installing.",
                         peer.name
                     );
-                    gui_ok_with_updates(&peer, next_step, Some(peer.clone()), None, false)
+                    gui_ok_with_updates(&peer, next_step, Some(peer.clone()), None, false, true, 0)
                 }
                 Err(error) => gui_error(error),
             }
@@ -1506,7 +1572,7 @@ impl SyncMyFontsGui {
                         "{} is saved. Use Sync Saved Peers for repeat syncs.",
                         peer.name
                     );
-                    gui_ok_with_updates(&peer, next_step, Some(peer.clone()), None, false)
+                    gui_ok_with_updates(&peer, next_step, Some(peer.clone()), None, false, true, 0)
                 }
                 Err(error) => gui_error(error),
             }
@@ -1523,7 +1589,7 @@ impl SyncMyFontsGui {
                     "No saved peer matched that name.".to_string()
                 };
                 let clear_peer_key = result.removed;
-                gui_ok_with_updates(&result, next_step, None, None, clear_peer_key)
+                gui_ok_with_updates(&result, next_step, None, None, clear_peer_key, true, 0)
             }
             Err(error) => gui_error(error),
         });
@@ -1591,6 +1657,7 @@ impl SyncMyFontsGui {
         };
         self.start_task(action, move || match lan_sync_all(dry_run) {
             Ok(report) => {
+                let warnings = report.peers.iter().filter(|peer| peer.error.is_some()).count();
                 let installed = report
                     .peers
                     .iter()
@@ -1605,7 +1672,7 @@ impl SyncMyFontsGui {
                         "Installed {installed} font(s). Reopen design apps if they do not appear yet."
                     )
                 };
-                gui_ok(&report, next_step)
+                gui_ok_with_warning_count(&report, next_step, warnings)
             }
             Err(error) => gui_error(error),
         });
@@ -1620,6 +1687,8 @@ impl SyncMyFontsGui {
             Ok(listen) => listen,
             Err(error) => {
                 self.output = format!("invalid listen address: {error}");
+                self.last_result = "Share Fonts On LAN failed before starting.".to_string();
+                self.warning_count = 1;
                 return;
             }
         };
@@ -1627,6 +1696,8 @@ impl SyncMyFontsGui {
             Ok(exe) => exe,
             Err(error) => {
                 self.output = format!("locating current executable failed: {error}");
+                self.last_result = "Share Fonts On LAN failed before starting.".to_string();
+                self.warning_count = 1;
                 return;
             }
         };
@@ -1670,12 +1741,19 @@ impl SyncMyFontsGui {
                 }
                 self.output =
                     serde_json::to_string_pretty(&response).unwrap_or_else(|_| "ok".to_string());
+                self.last_result = format!(
+                    "Share Fonts On LAN completed at {}",
+                    Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+                );
+                self.warning_count = 0;
             }
             Err(error) => {
                 self.output = error.to_string();
                 self.next_step =
                     "Sharing failed to start. Check whether another SyncMyFonts share is already using that port."
                         .to_string();
+                self.last_result = "Share Fonts On LAN failed.".to_string();
+                self.warning_count = 1;
             }
         }
     }
@@ -1691,6 +1769,11 @@ impl SyncMyFontsGui {
         self.next_step =
             "Sharing is off. Start sharing again when another computer needs fonts.".to_string();
         self.output = "Stopped sharing fonts.".to_string();
+        self.last_result = format!(
+            "Stop Sharing completed at {}",
+            Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+        );
+        self.warning_count = 0;
     }
 
     fn prune_stopped_share(&mut self) {
@@ -1729,6 +1812,11 @@ impl eframe::App for SyncMyFontsGui {
             }
         });
         ui.label(&self.status);
+        ui.label(&self.saved_peer_summary);
+        ui.label(format!(
+            "Last result: {} · warnings: {}",
+            self.last_result, self.warning_count
+        ));
         if let Some(action) = &self.current_action {
             ui.label(format!("{action} is still running..."));
         }
@@ -1773,6 +1861,9 @@ impl eframe::App for SyncMyFontsGui {
             ui.horizontal_wrapped(|ui| {
                 if ui.button("Find LAN Peers").clicked() {
                     self.discover_peers();
+                }
+                if ui.button("Load First Saved Peer").clicked() {
+                    self.load_saved_peers_into_form();
                 }
                 if ui.button("Pair Peer").clicked() {
                     self.pair_peer();
@@ -1838,7 +1929,15 @@ impl eframe::App for SyncMyFontsGui {
 }
 
 fn gui_ok<T: Serialize>(value: &T, next_step: String) -> GuiTaskResult {
-    gui_ok_with_updates(value, next_step, None, None, false)
+    gui_ok_with_updates(value, next_step, None, None, false, false, 0)
+}
+
+fn gui_ok_with_warning_count<T: Serialize>(
+    value: &T,
+    next_step: String,
+    warning_count: usize,
+) -> GuiTaskResult {
+    gui_ok_with_updates(value, next_step, None, None, false, false, warning_count)
 }
 
 fn gui_ok_with_updates<T: Serialize>(
@@ -1847,6 +1946,8 @@ fn gui_ok_with_updates<T: Serialize>(
     peer: Option<LanPeerConfig>,
     discovered_peer: Option<LanDiscoveredPeer>,
     clear_peer_key: bool,
+    refresh_saved_peers: bool,
+    warning_count: usize,
 ) -> GuiTaskResult {
     GuiTaskResult {
         output: serde_json::to_string_pretty(value).unwrap_or_else(|_| "ok".to_string()),
@@ -1854,6 +1955,8 @@ fn gui_ok_with_updates<T: Serialize>(
         peer,
         discovered_peer,
         clear_peer_key,
+        refresh_saved_peers,
+        warning_count,
     }
 }
 
@@ -1866,6 +1969,8 @@ fn gui_error(error: anyhow::Error) -> GuiTaskResult {
         peer: None,
         discovered_peer: None,
         clear_peer_key: false,
+        refresh_saved_peers: false,
+        warning_count: 1,
     }
 }
 
