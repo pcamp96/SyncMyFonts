@@ -5,7 +5,7 @@ use std::{
     net::{SocketAddr, TcpStream, UdpSocket},
     path::{Path, PathBuf},
     process::{Child, Command},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, mpsc},
     thread,
     time::{Duration, Instant},
 };
@@ -1305,6 +1305,8 @@ struct SyncMyFontsGui {
     status: String,
     next_step: String,
     output: String,
+    current_action: Option<String>,
+    task: Option<mpsc::Receiver<GuiTaskResult>>,
     peer_name: String,
     peer_url: String,
     peer_key: String,
@@ -1315,6 +1317,14 @@ struct SyncMyFontsGui {
     share_urls: Vec<String>,
 }
 
+struct GuiTaskResult {
+    output: String,
+    next_step: String,
+    peer: Option<LanPeerConfig>,
+    discovered_peer: Option<LanDiscoveredPeer>,
+    clear_peer_key: bool,
+}
+
 impl SyncMyFontsGui {
     fn new() -> Self {
         let mut app = Self {
@@ -1322,6 +1332,8 @@ impl SyncMyFontsGui {
             next_step: "Start by sharing fonts on one computer, then pair from the other computer."
                 .to_string(),
             output: "Ready.".to_string(),
+            current_action: None,
+            task: None,
             peer_name: String::new(),
             peer_url: String::new(),
             peer_key: String::new(),
@@ -1333,6 +1345,61 @@ impl SyncMyFontsGui {
         };
         app.refresh_status();
         app
+    }
+
+    fn start_task<F>(&mut self, action: &str, work: F)
+    where
+        F: FnOnce() -> GuiTaskResult + Send + 'static,
+    {
+        if self.task.is_some() {
+            self.next_step =
+                "Another SyncMyFonts action is still running. Wait for it to finish first."
+                    .to_string();
+            return;
+        }
+
+        let (sender, receiver) = mpsc::channel();
+        self.current_action = Some(action.to_string());
+        self.task = Some(receiver);
+        self.next_step = format!("{action} is running...");
+        self.output = "Working...".to_string();
+        thread::spawn(move || {
+            let _ = sender.send(work());
+        });
+    }
+
+    fn poll_task(&mut self) {
+        let Some(receiver) = self.task.take() else {
+            return;
+        };
+        match receiver.try_recv() {
+            Ok(result) => {
+                if let Some(peer) = result.peer {
+                    self.peer_name = peer.name;
+                    self.peer_url = peer.url;
+                    self.peer_key = peer.lan_key.unwrap_or_default();
+                }
+                if let Some(peer) = result.discovered_peer {
+                    self.peer_name = peer.name;
+                    self.peer_url = peer.url;
+                }
+                if result.clear_peer_key {
+                    self.peer_key.clear();
+                }
+                self.output = result.output;
+                self.next_step = result.next_step;
+                self.current_action = None;
+            }
+            Err(mpsc::TryRecvError::Empty) => {
+                self.task = Some(receiver);
+            }
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.output = "Background action stopped before returning a result.".to_string();
+                self.next_step =
+                    "That action did not finish cleanly. Try again or run Diagnostics.".to_string();
+                self.current_action = None;
+            }
+        }
     }
 
     fn refresh_status(&mut self) {
@@ -1350,53 +1417,42 @@ impl SyncMyFontsGui {
             .unwrap_or_default();
     }
 
-    fn set_result<T: Serialize>(&mut self, result: Result<T>) {
-        match result {
-            Ok(value) => {
-                self.output =
-                    serde_json::to_string_pretty(&value).unwrap_or_else(|_| "ok".to_string());
-            }
-            Err(error) => {
-                self.output = error.to_string();
-                self.next_step =
-                    "That action failed. Review the output, then check the peer URL, pairing code, or network access."
-                        .to_string();
-            }
-        }
-    }
-
     fn scan_fonts(&mut self) {
-        match scan(true) {
-            Ok(report) => {
-                self.next_step = format!(
+        self.start_task("Scanning fonts", || match scan(true) {
+            Ok(report) => gui_ok(
+                &report,
+                format!(
                     "Found {} local fonts. Share this device if another computer needs these fonts.",
                     report.fonts.len()
-                );
-                self.set_result(Ok(report));
-            }
-            Err(error) => self.set_result::<ScanOutput>(Err(error)),
-        }
+                ),
+            ),
+            Err(error) => gui_error(error),
+        });
     }
 
     fn verify_managed(&mut self) {
-        match verify_managed_fonts() {
+        self.start_task("Verifying managed fonts", || match verify_managed_fonts() {
             Ok(report) => {
                 let issues = report.missing.len() + report.modified.len() + report.unreadable.len();
-                self.next_step = if issues == 0 {
+                let next_step = if issues == 0 {
                     "All SyncMyFonts-managed fonts still match the local manifest.".to_string()
                 } else {
                     format!("{issues} managed font issue(s) found. Review before syncing more.")
                 };
-                self.set_result(Ok(report));
+                gui_ok(&report, next_step)
             }
-            Err(error) => self.set_result::<ManagedVerifyReport>(Err(error)),
-        }
+            Err(error) => gui_error(error),
+        });
     }
 
     fn run_diagnostics(&mut self) {
-        self.set_result(diagnostics());
-        self.next_step =
-            "Diagnostics are redacted and safe to paste into a support issue.".to_string();
+        self.start_task("Collecting diagnostics", || match diagnostics() {
+            Ok(report) => gui_ok(
+                &report,
+                "Diagnostics are redacted and safe to paste into a support issue.".to_string(),
+            ),
+            Err(error) => gui_error(error),
+        });
     }
 
     fn discover_peers(&mut self) {
@@ -1405,135 +1461,142 @@ impl SyncMyFontsGui {
             .rsplit_once(':')
             .and_then(|(_, port)| port.parse::<u16>().ok())
             .unwrap_or(7370);
-        match discover_lan_peers(port) {
+        self.start_task("Finding LAN peers", move || match discover_lan_peers(port) {
             Ok(peers) => {
-                if let Some(peer) = peers.first() {
-                    self.peer_name = peer.name.clone();
-                    self.peer_url = peer.url.clone();
-                    self.next_step =
+                let discovered_peer = peers.first().cloned();
+                let next_step = if discovered_peer.is_some() {
                         "Enter the pairing code shown on that computer, then click Pair Peer."
-                            .to_string();
+                            .to_string()
                 } else {
-                    self.next_step =
                         "No sharing peers answered. Make sure the other computer is sharing and on the same trusted LAN."
-                            .to_string();
-                }
-                self.set_result(Ok(peers));
+                            .to_string()
+                };
+                gui_ok_with_updates(&peers, next_step, None, discovered_peer, false)
             }
-            Err(error) => self.set_result::<Vec<LanDiscoveredPeer>>(Err(error)),
-        }
+            Err(error) => gui_error(error),
+        });
     }
 
     fn pair_peer(&mut self) {
-        match pair_lan_peer(
-            self.peer_name.clone(),
-            self.peer_url.clone(),
-            self.pairing_code.clone(),
-        ) {
-            Ok(peer) => {
-                self.peer_name = peer.name.clone();
-                self.peer_url = peer.url.clone();
-                self.peer_key = peer.lan_key.clone().unwrap_or_default();
-                self.next_step = format!(
-                    "{} is paired and saved. Preview from the peer before installing.",
-                    peer.name
-                );
-                self.set_result(Ok(peer));
+        let name = self.peer_name.clone();
+        let url = self.peer_url.clone();
+        let pairing_code = self.pairing_code.clone();
+        self.start_task("Pairing peer", move || {
+            match pair_lan_peer(name, url, pairing_code) {
+                Ok(peer) => {
+                    let next_step = format!(
+                        "{} is paired and saved. Preview from the peer before installing.",
+                        peer.name
+                    );
+                    gui_ok_with_updates(&peer, next_step, Some(peer.clone()), None, false)
+                }
+                Err(error) => gui_error(error),
             }
-            Err(error) => self.set_result::<LanPeerConfig>(Err(error)),
-        }
+        });
     }
 
     fn save_peer(&mut self) {
-        match add_lan_peer(
-            self.peer_name.clone(),
-            self.peer_url.clone(),
-            empty_to_none(&self.peer_key),
-        ) {
-            Ok(peer) => {
-                self.next_step = format!(
-                    "{} is saved. Use Sync Saved Peers for repeat syncs.",
-                    peer.name
-                );
-                self.set_result(Ok(peer));
+        let name = self.peer_name.clone();
+        let url = self.peer_url.clone();
+        let lan_key = empty_to_none(&self.peer_key);
+        self.start_task("Saving peer", move || {
+            match add_lan_peer(name, url, lan_key) {
+                Ok(peer) => {
+                    let next_step = format!(
+                        "{} is saved. Use Sync Saved Peers for repeat syncs.",
+                        peer.name
+                    );
+                    gui_ok_with_updates(&peer, next_step, Some(peer.clone()), None, false)
+                }
+                Err(error) => gui_error(error),
             }
-            Err(error) => self.set_result::<LanPeerConfig>(Err(error)),
-        }
+        });
     }
 
     fn forget_peer(&mut self) {
-        match forget_lan_peer(&self.peer_name) {
+        let name = self.peer_name.clone();
+        self.start_task("Forgetting peer", move || match forget_lan_peer(&name) {
             Ok(result) => {
-                if result.removed {
-                    self.peer_key.clear();
-                    self.next_step =
-                        "Peer removed. Pair or save it again if you still need it.".to_string();
+                let next_step = if result.removed {
+                    "Peer removed. Pair or save it again if you still need it.".to_string()
                 } else {
-                    self.next_step = "No saved peer matched that name.".to_string();
-                }
-                self.set_result(Ok(result));
+                    "No saved peer matched that name.".to_string()
+                };
+                let clear_peer_key = result.removed;
+                gui_ok_with_updates(&result, next_step, None, None, clear_peer_key)
             }
-            Err(error) => self.set_result::<ForgetPeerResponse>(Err(error)),
-        }
+            Err(error) => gui_error(error),
+        });
     }
 
     fn test_peer(&mut self) {
-        match lan_sync(
-            &self.peer_url,
-            empty_to_none(&self.peer_key).as_deref(),
-            true,
-        ) {
-            Ok(report) => {
-                self.next_step = format!(
-                    "Connected. Peer reports {} fonts. Preview or install missing fonts next.",
-                    report.peer_fonts
-                );
-                self.set_result(Ok(report));
+        let peer_url = self.peer_url.clone();
+        let peer_key = empty_to_none(&self.peer_key);
+        self.start_task("Testing peer", move || {
+            match lan_sync(&peer_url, peer_key.as_deref(), true) {
+                Ok(report) => {
+                    let next_step = format!(
+                        "Connected. Peer reports {} fonts. Preview or install missing fonts next.",
+                        report.peer_fonts
+                    );
+                    gui_ok(&report, next_step)
+                }
+                Err(error) => gui_error(error),
             }
-            Err(error) => self.set_result::<LanSyncReport>(Err(error)),
-        }
+        });
     }
 
     fn sync_peer(&mut self, dry_run: bool) {
-        match lan_sync(
-            &self.peer_url,
-            empty_to_none(&self.peer_key).as_deref(),
-            dry_run,
-        ) {
-            Ok(report) => {
-                if dry_run {
-                    let would_install = report
-                        .skipped
-                        .iter()
-                        .filter(|line| line.starts_with("would install "))
-                        .count();
-                    self.next_step = if would_install == 0 {
-                        "No missing installable fonts were found from this peer.".to_string()
+        let peer_url = self.peer_url.clone();
+        let peer_key = empty_to_none(&self.peer_key);
+        let action = if dry_run {
+            "Previewing peer"
+        } else {
+            "Getting missing fonts"
+        };
+        self.start_task(action, move || {
+            match lan_sync(&peer_url, peer_key.as_deref(), dry_run) {
+                Ok(report) => {
+                    let next_step = if dry_run {
+                        let would_install = report
+                            .skipped
+                            .iter()
+                            .filter(|line| line.starts_with("would install "))
+                            .count();
+                        if would_install == 0 {
+                            "No missing installable fonts were found from this peer.".to_string()
+                        } else {
+                            format!(
+                                "{would_install} missing font(s) can be installed from this peer."
+                            )
+                        }
+                    } else if report.installed.is_empty() {
+                        "No new fonts were installed.".to_string()
                     } else {
-                        format!("{would_install} missing font(s) can be installed from this peer.")
-                    };
-                } else if report.installed.is_empty() {
-                    self.next_step = "No new fonts were installed.".to_string();
-                } else {
-                    self.next_step =
                         "Installed fonts are ready. Reopen design apps if they do not appear yet."
-                            .to_string();
+                            .to_string()
+                    };
+                    gui_ok(&report, next_step)
                 }
-                self.set_result(Ok(report));
+                Err(error) => gui_error(error),
             }
-            Err(error) => self.set_result::<LanSyncReport>(Err(error)),
-        }
+        });
     }
 
     fn sync_saved_peers(&mut self, dry_run: bool) {
-        match lan_sync_all(dry_run) {
+        let action = if dry_run {
+            "Dry-running saved peers"
+        } else {
+            "Syncing saved peers"
+        };
+        self.start_task(action, move || match lan_sync_all(dry_run) {
             Ok(report) => {
                 let installed = report
                     .peers
                     .iter()
                     .map(|peer| peer.installed.len())
                     .sum::<usize>();
-                self.next_step = if dry_run {
+                let next_step = if dry_run {
                     "Dry run complete. Review the peer results before syncing.".to_string()
                 } else if installed == 0 {
                     "Saved peer sync finished. No new fonts were installed.".to_string()
@@ -1542,10 +1605,10 @@ impl SyncMyFontsGui {
                         "Installed {installed} font(s). Reopen design apps if they do not appear yet."
                     )
                 };
-                self.set_result(Ok(report));
+                gui_ok(&report, next_step)
             }
-            Err(error) => self.set_result::<LanSyncAllReport>(Err(error)),
-        }
+            Err(error) => gui_error(error),
+        });
     }
 
     fn start_share(&mut self) {
@@ -1605,7 +1668,8 @@ impl SyncMyFontsGui {
                         "Sharing is on. Use the shown LAN URL and shared key from another computer."
                             .to_string();
                 }
-                self.set_result(Ok(response));
+                self.output =
+                    serde_json::to_string_pretty(&response).unwrap_or_else(|_| "ok".to_string());
             }
             Err(error) => {
                 self.output = error.to_string();
@@ -1653,6 +1717,11 @@ impl Drop for SyncMyFontsGui {
 impl eframe::App for SyncMyFontsGui {
     fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
         self.prune_stopped_share();
+        self.poll_task();
+        let task_running = self.task.is_some();
+        if task_running {
+            ui.ctx().request_repaint_after(Duration::from_millis(100));
+        }
         ui.horizontal(|ui| {
             ui.heading("SyncMyFonts");
             if ui.button("Refresh").clicked() {
@@ -1660,25 +1729,30 @@ impl eframe::App for SyncMyFontsGui {
             }
         });
         ui.label(&self.status);
+        if let Some(action) = &self.current_action {
+            ui.label(format!("{action} is still running..."));
+        }
 
         ui.separator();
         ui.heading("Local Font Library");
-        ui.horizontal_wrapped(|ui| {
-            if ui.button("Scan Fonts").clicked() {
-                self.scan_fonts();
-            }
-            if ui.button("Verify Managed Fonts").clicked() {
-                self.verify_managed();
-            }
-            if ui.button("Diagnostics").clicked() {
-                self.run_diagnostics();
-            }
-            if ui.button("Sync Saved Peers").clicked() {
-                self.sync_saved_peers(false);
-            }
-            if ui.button("Dry Run Saved Peers").clicked() {
-                self.sync_saved_peers(true);
-            }
+        ui.add_enabled_ui(!task_running, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Scan Fonts").clicked() {
+                    self.scan_fonts();
+                }
+                if ui.button("Verify Managed Fonts").clicked() {
+                    self.verify_managed();
+                }
+                if ui.button("Diagnostics").clicked() {
+                    self.run_diagnostics();
+                }
+                if ui.button("Sync Saved Peers").clicked() {
+                    self.sync_saved_peers(false);
+                }
+                if ui.button("Dry Run Saved Peers").clicked() {
+                    self.sync_saved_peers(true);
+                }
+            });
         });
 
         ui.separator();
@@ -1695,28 +1769,30 @@ impl eframe::App for SyncMyFontsGui {
             ui.label("Pairing Code");
             ui.text_edit_singleline(&mut self.pairing_code);
         });
-        ui.horizontal_wrapped(|ui| {
-            if ui.button("Find LAN Peers").clicked() {
-                self.discover_peers();
-            }
-            if ui.button("Pair Peer").clicked() {
-                self.pair_peer();
-            }
-            if ui.button("Test Peer").clicked() {
-                self.test_peer();
-            }
-            if ui.button("Preview From Peer").clicked() {
-                self.sync_peer(true);
-            }
-            if ui.button("Get Missing Fonts").clicked() {
-                self.sync_peer(false);
-            }
-            if ui.button("Save Peer").clicked() {
-                self.save_peer();
-            }
-            if ui.button("Forget Peer").clicked() {
-                self.forget_peer();
-            }
+        ui.add_enabled_ui(!task_running, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Find LAN Peers").clicked() {
+                    self.discover_peers();
+                }
+                if ui.button("Pair Peer").clicked() {
+                    self.pair_peer();
+                }
+                if ui.button("Test Peer").clicked() {
+                    self.test_peer();
+                }
+                if ui.button("Preview From Peer").clicked() {
+                    self.sync_peer(true);
+                }
+                if ui.button("Get Missing Fonts").clicked() {
+                    self.sync_peer(false);
+                }
+                if ui.button("Save Peer").clicked() {
+                    self.save_peer();
+                }
+                if ui.button("Forget Peer").clicked() {
+                    self.forget_peer();
+                }
+            });
         });
 
         ui.separator();
@@ -1727,13 +1803,15 @@ impl eframe::App for SyncMyFontsGui {
             ui.label("Shared Key");
             ui.text_edit_singleline(&mut self.share_key);
         });
-        ui.horizontal_wrapped(|ui| {
-            if ui.button("Share Fonts On LAN").clicked() {
-                self.start_share();
-            }
-            if ui.button("Stop Sharing").clicked() {
-                self.stop_share();
-            }
+        ui.add_enabled_ui(!task_running, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Share Fonts On LAN").clicked() {
+                    self.start_share();
+                }
+                if ui.button("Stop Sharing").clicked() {
+                    self.stop_share();
+                }
+            });
         });
         if self.share_urls.is_empty() {
             ui.label("Sharing is off. No port forwarding is required.");
@@ -1756,6 +1834,38 @@ impl eframe::App for SyncMyFontsGui {
                         .desired_rows(14),
                 );
             });
+    }
+}
+
+fn gui_ok<T: Serialize>(value: &T, next_step: String) -> GuiTaskResult {
+    gui_ok_with_updates(value, next_step, None, None, false)
+}
+
+fn gui_ok_with_updates<T: Serialize>(
+    value: &T,
+    next_step: String,
+    peer: Option<LanPeerConfig>,
+    discovered_peer: Option<LanDiscoveredPeer>,
+    clear_peer_key: bool,
+) -> GuiTaskResult {
+    GuiTaskResult {
+        output: serde_json::to_string_pretty(value).unwrap_or_else(|_| "ok".to_string()),
+        next_step,
+        peer,
+        discovered_peer,
+        clear_peer_key,
+    }
+}
+
+fn gui_error(error: anyhow::Error) -> GuiTaskResult {
+    GuiTaskResult {
+        output: error.to_string(),
+        next_step:
+            "That action failed. Review the output, then check the peer URL, pairing code, or network access."
+                .to_string(),
+        peer: None,
+        discovered_peer: None,
+        clear_peer_key: false,
     }
 }
 
