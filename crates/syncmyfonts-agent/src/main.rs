@@ -1984,6 +1984,7 @@ struct SyncMyFontsGui {
     share_key: String,
     share: Option<RunningShare>,
     share_urls: Vec<String>,
+    last_pairing_code: Option<String>,
 }
 
 struct GuiTaskResult {
@@ -2017,6 +2018,7 @@ impl SyncMyFontsGui {
             share_key: String::new(),
             share: None,
             share_urls: Vec::new(),
+            last_pairing_code: None,
         };
         app.refresh_status();
         app.load_saved_peers_into_form();
@@ -2587,6 +2589,7 @@ impl SyncMyFontsGui {
             Ok(child) => {
                 self.share = Some(RunningShare { child, listen });
                 self.refresh_status();
+                self.last_pairing_code = pairing_code.clone();
                 let response = ShareResponse {
                     sharing: true,
                     message: format!("Sharing fonts at {}.", self.share_urls.join(", ")),
@@ -2617,6 +2620,7 @@ impl SyncMyFontsGui {
                 let _ = record_action("Share Fonts On LAN", "success", 0, &self.next_step);
             }
             Err(error) => {
+                self.last_pairing_code = None;
                 self.output = error.to_string();
                 self.next_step = format!(
                     "Sharing failed to start. Check whether another SyncMyFonts share is already using that port. {}",
@@ -2637,6 +2641,7 @@ impl SyncMyFontsGui {
         let _ = share.child.kill();
         let _ = share.child.wait();
         self.refresh_status();
+        self.last_pairing_code = None;
         self.next_step =
             "Sharing is off. Start sharing again when another computer needs fonts.".to_string();
         self.output = "Stopped sharing fonts.".to_string();
@@ -2656,6 +2661,7 @@ impl SyncMyFontsGui {
             .is_some();
         if stopped {
             self.share = None;
+            self.last_pairing_code = None;
         }
     }
 }
@@ -2804,10 +2810,26 @@ impl eframe::App for SyncMyFontsGui {
         if self.share_urls.is_empty() {
             ui.label("Sharing is off. No port forwarding is required.");
         } else {
-            ui.label(format!(
-                "Use this URL from another computer: {}",
-                self.share_urls.join(" or ")
-            ));
+            ui.horizontal_wrapped(|ui| {
+                ui.label(format!(
+                    "Use this URL from another computer: {}",
+                    self.share_urls.join(" or ")
+                ));
+                if ui.button("Copy URL").clicked() {
+                    if let Some(url) = self.share_urls.first() {
+                        ui.ctx().copy_text(url.clone());
+                        self.next_step = "LAN URL copied. Paste it on the other computer if discovery does not find this device.".to_string();
+                    }
+                }
+                if let Some(code) = &self.last_pairing_code {
+                    ui.label(format!("Pairing code: {code}"));
+                    if ui.button("Copy Code").clicked() {
+                        ui.ctx().copy_text(code.clone());
+                        self.next_step =
+                            "Pairing code copied. Enter it on the other computer.".to_string();
+                    }
+                }
+            });
         }
 
         ui.separator();

@@ -23,6 +23,8 @@ shared key is provided, find sharing peers on the LAN, pair with a peer, test a
 peer, preview missing fonts, install missing fonts, save peers, and run
 diagnostics. It can also verify that SyncMyFonts-managed installed font files
 still match the local manifest.
+When sharing is on, use `Copy URL` and `Copy Code` to move the LAN address and
+pairing code to the other computer without retyping.
 Use `Diagnostics` for a copyable support report, `Open Managed Folder` to see
 fonts installed by SyncMyFonts, and `Open Logs` to open the per-user action
 history folder.

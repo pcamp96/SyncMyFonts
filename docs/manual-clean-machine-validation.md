@@ -50,7 +50,8 @@ Windows validation report:
 1. On macOS, install or place a non-system test font in the current user's font
    folder. Do not use a font that shipped with macOS or Windows.
 2. On macOS, click `Share Fonts On LAN`.
-3. Leave `Shared Key` blank and copy the displayed peer URL and pairing code.
+3. Leave `Shared Key` blank and use `Copy URL` plus `Copy Code` for the
+   displayed peer URL and pairing code.
 4. On Windows, click `Find LAN Peers`.
 5. Select the Mac, enter the pairing code, and click `Pair Peer`.
 6. Click `Preview From Peer`.
@@ -76,7 +77,8 @@ Installed Windows font path:
    user's font folder.
 2. On Windows, click `Share Fonts On LAN`.
 3. If Windows Firewall prompts, allow Private networks only.
-4. Leave `Shared Key` blank and copy the displayed peer URL and pairing code.
+4. Leave `Shared Key` blank and use `Copy URL` plus `Copy Code` for the
+   displayed peer URL and pairing code.
 5. On macOS, click `Find LAN Peers`.
 6. Select the Windows computer, enter the pairing code, and click `Pair Peer`.
 7. Click `Preview From Peer`.

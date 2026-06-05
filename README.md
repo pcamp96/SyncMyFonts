@@ -104,6 +104,8 @@ friendly device name, verify managed font installs, and produce a redacted
 diagnostics report. It can also install a per-user sign-in helper that runs
 saved-peer sync without putting LAN keys in shortcut or plist arguments, and
 run a readiness check before live two-machine testing.
+When sharing is on, the GUI provides copy buttons for the active LAN URL and
+pairing code so manual pairing is less error-prone.
 On Windows, the GUI can also install current-user Start Menu shortcuts for the
 native app, saved-peer sync, dry-run preview, diagnostics, and readiness check.
 When SyncMyFonts installs a font, it records that install in a local managed
