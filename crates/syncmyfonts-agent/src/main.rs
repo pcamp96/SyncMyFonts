@@ -490,7 +490,14 @@ fn sync(server: &str, api_key: Option<&str>, dry_run: bool) -> Result<SyncReport
         .context("server rejected font download")?
         .bytes()
         .context("reading font bytes")?;
-        let path = install_font(&font.file_name, &font.sha256, &bytes)?;
+        let path = match install_font(&font.file_name, &font.sha256, &bytes) {
+            Ok(path) => path,
+            Err(error) if is_reportable_install_skip(&error) => {
+                skipped.push(format!("{} {}", font.file_name, error));
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
         record_managed_install(
             &font.file_name,
             &font.sha256,
@@ -1051,7 +1058,14 @@ fn lan_sync(peer: &str, lan_key: Option<&str>, dry_run: bool) -> Result<LanSyncR
         .context("LAN peer rejected font download")?
         .bytes()
         .context("reading LAN peer font bytes")?;
-        let path = install_font(&font.file_name, &font.sha256, &bytes)?;
+        let path = match install_font(&font.file_name, &font.sha256, &bytes) {
+            Ok(path) => path,
+            Err(error) if is_reportable_install_skip(&error) => {
+                skipped.push(format!("{} {}", font.file_name, error));
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
         record_managed_install(
             &font.file_name,
             &font.sha256,
@@ -4462,6 +4476,11 @@ fn managed_font_dir() -> Result<PathBuf> {
     {
         user_font_dir()
     }
+}
+
+fn is_reportable_install_skip(error: &anyhow::Error) -> bool {
+    let message = error.to_string();
+    message.contains("system-font-conflict") || message.contains("unsupported-format")
 }
 
 fn managed_install_dir() -> Result<PathBuf> {

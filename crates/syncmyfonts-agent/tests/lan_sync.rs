@@ -322,6 +322,70 @@ fn lan_sync_with_wrong_key_fails_without_installing_fonts() {
 }
 
 #[test]
+fn lan_sync_skips_system_font_conflict_without_installing_fonts() {
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
+    let root = unique_temp_dir("syncmyfonts-lan-system-conflict");
+    let peer_a_fonts = root.join("peer-a-fonts");
+    let peer_a_config = root.join("peer-a-config");
+    let peer_b_fonts = root.join("peer-b-fonts");
+    let peer_b_config = root.join("peer-b-config");
+    let peer_b_system_fonts = root.join("peer-b-system-fonts");
+    fs::create_dir_all(&peer_a_fonts).unwrap();
+    fs::create_dir_all(&peer_a_config).unwrap();
+    fs::create_dir_all(&peer_b_fonts).unwrap();
+    fs::create_dir_all(&peer_b_config).unwrap();
+    fs::create_dir_all(&peer_b_system_fonts).unwrap();
+    fs::write(peer_a_fonts.join("Existing.ttf"), b"peer font bytes\n").unwrap();
+    fs::write(
+        peer_b_system_fonts.join("existing.ttf"),
+        b"system font bytes\n",
+    )
+    .unwrap();
+
+    let listen = free_local_addr();
+    let mut child = Command::new(&bin);
+    child
+        .arg("lan-serve")
+        .arg("--listen")
+        .arg(listen.to_string())
+        .arg("--lan-key")
+        .arg("test-key");
+    apply_isolated_env(&mut child, &peer_a_fonts, &peer_a_config);
+    let server = child.spawn().unwrap();
+    let _server = ChildGuard(server);
+    wait_for_tcp(listen);
+
+    let mut sync = Command::new(&bin);
+    sync.arg("lan-sync")
+        .arg("--peer")
+        .arg(format!("http://{listen}"))
+        .arg("--lan-key")
+        .arg("test-key");
+    apply_isolated_env(&mut sync, &peer_b_fonts, &peer_b_config);
+    sync.env("SYNCMYFONTS_SYSTEM_FONT_DIRS", &peer_b_system_fonts);
+    let output = sync.output().unwrap();
+    assert!(
+        output.status.success(),
+        "system-conflict lan-sync failed instead of reporting a skip\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json = parse_json(&output);
+    assert_eq!(json["dry_run"], false);
+    assert_eq!(json["peer_fonts"], 1);
+    assert_eq!(json["installed"].as_array().unwrap().len(), 0);
+    assert!(json["skipped"].as_array().unwrap().iter().any(|value| {
+        value
+            .as_str()
+            .is_some_and(|line| line.contains("system-font-conflict"))
+    }));
+    assert_eq!(installed_font_count(&peer_b_fonts), 0);
+    assert_no_managed_manifest(&peer_b_config);
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn saved_peer_sync_all_reports_offline_peer_without_installing_fonts() {
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
     let root = unique_temp_dir("syncmyfonts-lan-offline");
