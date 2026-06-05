@@ -75,7 +75,23 @@ jobs:
         if: runner.os == 'macOS'
         run: scripts/release/build-macos.sh
 
+      - name: Upload macOS archive
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: syncmyfonts-macos
+          path: dist/syncmyfonts-macos-*.tar.gz
+          if-no-files-found: error
+
       - name: Build Windows archive
         if: runner.os == 'Windows'
         shell: pwsh
         run: .\scripts\release\build-windows.ps1
+
+      - name: Upload Windows archive
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: syncmyfonts-windows
+          path: dist/syncmyfonts-windows-*.zip
+          if-no-files-found: error
