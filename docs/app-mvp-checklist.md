@@ -77,7 +77,7 @@ The app MVP should reuse the current agent commands:
 - [ ] Server URL for central server mode, for example `http://192.168.0.50:7368`.
 - [ ] Optional server API key, passed through `SYNCMYFONTS_API_KEY` or a
   per-user secret store.
-- [ ] Friendly device name for UI, logs, and diagnostics.
+- [x] Friendly device name for UI, logs, and diagnostics.
 - [x] Copyable LAN URL is shown after sharing starts.
 
 ## Must-Have Artifacts

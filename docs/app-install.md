@@ -19,6 +19,9 @@ still match the local manifest.
 Use `Diagnostics` for a copyable support report, `Open Managed Folder` to see
 fonts installed by SyncMyFonts, and `Open Logs` to open the per-user action
 history folder.
+Set `Device Name` in the app header before pairing if the default computer name
+is unclear. This name appears in LAN discovery, pairing, diagnostics, and
+support reports.
 
 The browser control surface is kept as an explicit development and future
 self-hosted/server-adjacent command:

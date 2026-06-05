@@ -485,6 +485,7 @@ struct LanSyncReport {
 struct AppConfig {
     schema: u8,
     device_id: Option<Uuid>,
+    friendly_device_name: Option<String>,
     peers: Vec<LanPeerConfig>,
 }
 
@@ -562,6 +563,17 @@ struct AppStatus {
     managed_font_dir: PathBuf,
     sharing: bool,
     share_urls: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DeviceNameRequest {
+    device_name: String,
+}
+
+#[derive(Debug, Serialize)]
+struct DeviceNameResponse {
+    device_name: String,
+    saved: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1091,6 +1103,7 @@ async fn app_serve(listen: SocketAddr, open_browser_on_start: bool) -> Result<()
         .route("/", get(app_index))
         .route("/favicon.ico", get(app_favicon))
         .route("/api/status", get(app_status))
+        .route("/api/device-name", post(app_set_device_name))
         .route("/api/scan", get(app_scan))
         .route("/api/diagnostics", get(app_diagnostics))
         .route("/api/managed/verify", get(app_verify_managed))
@@ -1138,6 +1151,28 @@ async fn app_status(State(state): State<AppState>) -> Result<Json<AppStatus>, La
         sharing: share_listen.is_some(),
         share_urls: share_listen.map(share_urls).unwrap_or_default(),
     }))
+}
+
+async fn app_set_device_name(
+    Json(request): Json<DeviceNameRequest>,
+) -> Result<Json<DeviceNameResponse>, LanApiError> {
+    match set_friendly_device_name(request.device_name) {
+        Ok(response) => {
+            let saved = response.friendly_device_name.is_some();
+            let device_name = device_name();
+            record_action_best_effort(
+                "Browser Save Device Name",
+                "success",
+                0,
+                &format!("Device name is now {device_name}."),
+            );
+            Ok(Json(DeviceNameResponse { device_name, saved }))
+        }
+        Err(error) => {
+            record_action_best_effort("Browser Save Device Name", "failed", 1, &error.to_string());
+            Err(LanApiError::internal(error))
+        }
+    }
 }
 
 async fn app_scan() -> Result<Json<ScanOutput>, LanApiError> {
@@ -1591,6 +1626,7 @@ struct SyncMyFontsGui {
     last_result: String,
     warning_count: usize,
     saved_peer_summary: String,
+    device_name_input: String,
     current_action: Option<String>,
     task: Option<mpsc::Receiver<GuiTaskResult>>,
     peer_name: String,
@@ -1623,6 +1659,7 @@ impl SyncMyFontsGui {
             last_result: "No actions yet.".to_string(),
             warning_count: 0,
             saved_peer_summary: "Saved peers: loading...".to_string(),
+            device_name_input: device_name(),
             current_action: None,
             task: None,
             peer_name: String::new(),
@@ -1724,9 +1761,10 @@ impl SyncMyFontsGui {
 
     fn refresh_status(&mut self) {
         self.prune_stopped_share();
+        self.device_name_input = device_name();
         self.status = format!(
             "{} · {} · sharing: {}",
-            device_name(),
+            self.device_name_input,
             platform_name(),
             if self.share.is_some() { "on" } else { "off" }
         );
@@ -1736,6 +1774,40 @@ impl SyncMyFontsGui {
             .map(|share| share_urls(share.listen))
             .unwrap_or_default();
         self.load_saved_peers_summary();
+    }
+
+    fn save_device_name(&mut self) {
+        match set_friendly_device_name(self.device_name_input.clone()) {
+            Ok(config) => {
+                self.device_name_input = device_name();
+                self.refresh_status();
+                let saved = config.friendly_device_name.is_some();
+                self.output = if saved {
+                    format!("Saved device name: {}", self.device_name_input)
+                } else {
+                    format!(
+                        "Cleared device name. Using system name: {}",
+                        self.device_name_input
+                    )
+                };
+                self.next_step =
+                    "This name is used for LAN discovery, pairing, diagnostics, and support reports."
+                        .to_string();
+                self.last_result = format!(
+                    "Save Device Name completed at {}",
+                    Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+                );
+                self.warning_count = 0;
+                let _ = record_action("Save Device Name", "success", 0, &self.next_step);
+            }
+            Err(error) => {
+                self.output = error.to_string();
+                self.next_step = "SyncMyFonts could not save the device name.".to_string();
+                self.last_result = "Save Device Name failed.".to_string();
+                self.warning_count = 1;
+                let _ = record_action("Save Device Name", "failed", 1, &self.next_step);
+            }
+        }
     }
 
     fn load_saved_peers_summary(&mut self) {
@@ -2196,6 +2268,13 @@ impl eframe::App for SyncMyFontsGui {
             "Last result: {} · warnings: {}",
             self.last_result, self.warning_count
         ));
+        ui.horizontal(|ui| {
+            ui.label("Device Name");
+            ui.text_edit_singleline(&mut self.device_name_input);
+            if ui.button("Save Name").clicked() {
+                self.save_device_name();
+            }
+        });
         if let Some(action) = &self.current_action {
             ui.label(format!("{action} is still running..."));
         }
@@ -2468,6 +2547,7 @@ fn load_app_config() -> Result<AppConfig> {
         return Ok(AppConfig {
             schema: 1,
             device_id: Some(Uuid::new_v4()),
+            friendly_device_name: None,
             peers: Vec::new(),
         });
     }
@@ -2490,6 +2570,13 @@ fn normalize_app_config(config: &mut AppConfig) -> bool {
         config.device_id = Some(Uuid::new_v4());
         changed = true;
     }
+    if let Some(name) = config.friendly_device_name.clone() {
+        let normalized = normalize_friendly_device_name(&name);
+        if normalized != config.friendly_device_name {
+            config.friendly_device_name = normalized;
+            changed = true;
+        }
+    }
     changed
 }
 
@@ -2503,6 +2590,25 @@ fn save_app_config(config: &AppConfig) -> Result<()> {
     fs::write(&temp, bytes).with_context(|| format!("writing {}", temp.display()))?;
     fs::rename(&temp, &path).with_context(|| format!("saving {}", path.display()))?;
     Ok(())
+}
+
+fn set_friendly_device_name(name: String) -> Result<AppConfig> {
+    let mut config = load_app_config()?;
+    config.friendly_device_name = normalize_friendly_device_name(&name);
+    save_app_config(&config)?;
+    Ok(config)
+}
+
+fn normalize_friendly_device_name(name: &str) -> Option<String> {
+    let mut normalized = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.len() > 80 {
+        normalized.truncate(80);
+    }
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
 }
 
 fn load_app_history() -> Result<AppHistory> {
@@ -3302,6 +3408,18 @@ fn platform_name() -> &'static str {
 }
 
 fn device_name() -> String {
+    std::env::var("SYNCMYFONTS_DEVICE_NAME")
+        .ok()
+        .and_then(|name| normalize_friendly_device_name(&name))
+        .or_else(|| {
+            load_app_config()
+                .ok()
+                .and_then(|config| config.friendly_device_name)
+        })
+        .unwrap_or_else(fallback_device_name)
+}
+
+fn fallback_device_name() -> String {
     std::env::var("COMPUTERNAME")
         .or_else(|_| std::env::var("HOSTNAME"))
         .unwrap_or_else(|_| "unknown-device".to_string())
@@ -3505,7 +3623,13 @@ const APP_HTML: &str = r#"<!doctype html>
         <h1>SyncMyFonts</h1>
         <div class="muted" id="status">Loading local app status...</div>
       </div>
-      <button onclick="refresh()">Refresh</button>
+      <div class="stack">
+        <label>Device Name <input id="deviceName" placeholder="Workshop PC"></label>
+        <div class="row">
+          <button onclick="saveDeviceName()">Save Name</button>
+          <button onclick="refresh()">Refresh</button>
+        </div>
+      </div>
     </header>
 
     <section>
@@ -3632,9 +3756,22 @@ const APP_HTML: &str = r#"<!doctype html>
         const status = await request('/api/status');
         document.getElementById('status').textContent =
           `${status.device_name} · ${status.platform} · sharing: ${status.sharing ? 'on' : 'off'}`;
+        document.getElementById('deviceName').value = status.device_name;
         document.getElementById('shareUrls').textContent = status.share_urls.length
           ? `Use this URL from another computer: ${status.share_urls.join(' or ')}`
           : 'Sharing is off.';
+      } catch (error) { show(error.message); }
+    }
+    async function saveDeviceName() {
+      try {
+        const result = await request('/api/device-name', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ device_name: document.getElementById('deviceName').value })
+        });
+        showResult(result);
+        setNextStep('This name is used for LAN discovery, pairing, diagnostics, and support reports.');
+        refresh();
       } catch (error) { show(error.message); }
     }
     async function scanFonts() {
@@ -3886,6 +4023,45 @@ mod tests {
         assert!(token.starts_with("smf-"));
         assert_eq!(code.len(), 8);
         assert!(code.chars().all(|ch| ch.is_ascii_digit()));
+    }
+
+    #[test]
+    fn friendly_device_name_persists_and_normalizes() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let config_dir = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+            std::env::remove_var("SYNCMYFONTS_DEVICE_NAME");
+        }
+
+        let config = set_friendly_device_name("  Shop   PC  ".to_string()).unwrap();
+        let loaded = load_app_config().unwrap();
+        let name = device_name();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+        }
+
+        assert_eq!(config.friendly_device_name.as_deref(), Some("Shop PC"));
+        assert_eq!(loaded.friendly_device_name.as_deref(), Some("Shop PC"));
+        assert_eq!(name, "Shop PC");
+    }
+
+    #[test]
+    fn device_name_env_override_wins_over_saved_name() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let config_dir = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+            std::env::set_var("SYNCMYFONTS_DEVICE_NAME", " Event   MacBook ");
+        }
+        set_friendly_device_name("Shop PC".to_string()).unwrap();
+        let name = device_name();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_DEVICE_NAME");
+        }
+
+        assert_eq!(name, "Event MacBook");
     }
 
     #[test]
