@@ -44,7 +44,8 @@ That command launches the native SyncMyFonts GUI. It can scan fonts, start LAN
 sharing, show a copyable LAN URL and pairing code, discover sharing LAN peers,
 pair with a peer, test a LAN peer, preview missing fonts, install missing
 fonts, save LAN peers, sync all saved peers, stop LAN sharing, verify managed
-font installs, and produce a redacted diagnostics report.
+font installs, open managed/log folders, and produce a redacted diagnostics
+report.
 
 The browser control surface remains available through `syncmyfonts-agent app`
 for development and future self-hosted/server-adjacent workflows.

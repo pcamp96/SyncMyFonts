@@ -1095,6 +1095,7 @@ async fn app_serve(listen: SocketAddr, open_browser_on_start: bool) -> Result<()
         .route("/api/diagnostics", get(app_diagnostics))
         .route("/api/managed/verify", get(app_verify_managed))
         .route("/api/managed/open", post(app_open_managed_folder))
+        .route("/api/logs/open", post(app_open_logs_folder))
         .route("/api/peers", get(app_peers).post(app_add_peer))
         .route("/api/peers/forget", post(app_forget_peer))
         .route("/api/peers/discover", post(app_discover_peers))
@@ -1233,6 +1234,34 @@ async fn app_open_managed_folder() -> Result<Json<OpenFolderResponse>, LanApiErr
                 1,
                 &error.to_string(),
             );
+            Err(LanApiError::internal(error))
+        }
+    }
+}
+
+async fn app_open_logs_folder() -> Result<Json<OpenFolderResponse>, LanApiError> {
+    let result = tokio::task::spawn_blocking(|| -> Result<OpenFolderResponse> {
+        let folder = app_log_dir().and_then(|path| {
+            fs::create_dir_all(&path)
+                .with_context(|| format!("creating log folder {}", path.display()))?;
+            Ok(path)
+        })?;
+        let path = open_path(folder)?;
+        Ok(OpenFolderResponse {
+            opened: true,
+            path,
+            message: "Opened the SyncMyFonts log folder.".to_string(),
+        })
+    })
+    .await
+    .map_err(LanApiError::internal)?;
+    match result {
+        Ok(response) => {
+            record_action_best_effort("Browser Open Logs", "success", 0, &response.message);
+            Ok(Json(response))
+        }
+        Err(error) => {
+            record_action_best_effort("Browser Open Logs", "failed", 1, &error.to_string());
             Err(LanApiError::internal(error))
         }
     }
@@ -1798,25 +1827,52 @@ impl SyncMyFontsGui {
                 .with_context(|| format!("creating managed font folder {}", path.display()))?;
             Ok(path)
         });
+        self.open_folder_action(
+            "Open Managed Folder",
+            folder,
+            "This is where SyncMyFonts puts fonts it installs for this user.",
+            "SyncMyFonts could not open the managed font folder. Diagnostics will show the folder path.",
+        );
+    }
+
+    fn open_logs_folder(&mut self) {
+        let folder = app_log_dir().and_then(|path| {
+            fs::create_dir_all(&path)
+                .with_context(|| format!("creating log folder {}", path.display()))?;
+            Ok(path)
+        });
+        self.open_folder_action(
+            "Open Logs",
+            folder,
+            "This folder contains SyncMyFonts action history and support logs.",
+            "SyncMyFonts could not open the log folder. Diagnostics will show the folder path.",
+        );
+    }
+
+    fn open_folder_action(
+        &mut self,
+        action: &str,
+        folder: Result<PathBuf>,
+        success_message: &str,
+        failure_message: &str,
+    ) {
         match folder.and_then(open_path) {
             Ok(path) => {
-                self.output = format!("Opened managed font folder: {}", path.display());
-                self.next_step =
-                    "This is where SyncMyFonts puts fonts it installs for this user.".to_string();
+                self.output = format!("{action}: {}", path.display());
+                self.next_step = success_message.to_string();
                 self.last_result = format!(
-                    "Open Managed Folder completed at {}",
+                    "{action} completed at {}",
                     Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
                 );
                 self.warning_count = 0;
-                let _ = record_action("Open Managed Folder", "success", 0, &self.next_step);
+                let _ = record_action(action, "success", 0, &self.next_step);
             }
             Err(error) => {
                 self.output = error.to_string();
-                self.next_step =
-                    "SyncMyFonts could not open the managed font folder. Diagnostics will show the folder path.".to_string();
-                self.last_result = "Open Managed Folder failed.".to_string();
+                self.next_step = failure_message.to_string();
+                self.last_result = format!("{action} failed.");
                 self.warning_count = 1;
-                let _ = record_action("Open Managed Folder", "failed", 1, &self.next_step);
+                let _ = record_action(action, "failed", 1, &self.next_step);
             }
         }
     }
@@ -2159,6 +2215,9 @@ impl eframe::App for SyncMyFontsGui {
                 }
                 if ui.button("Open Managed Folder").clicked() {
                     self.open_managed_font_folder();
+                }
+                if ui.button("Open Logs").clicked() {
+                    self.open_logs_folder();
                 }
                 if ui.button("Sync Saved Peers").clicked() {
                     self.sync_saved_peers(false);
@@ -3456,6 +3515,7 @@ const APP_HTML: &str = r#"<!doctype html>
         <button onclick="verifyManaged()">Verify Managed Fonts</button>
         <button onclick="diagnostics()">Diagnostics</button>
         <button onclick="openManagedFolder()">Open Managed Folder</button>
+        <button onclick="openLogsFolder()">Open Logs</button>
         <button class="primary" onclick="syncAll(false)">Sync Saved Peers</button>
         <button onclick="syncAll(true)">Dry Run</button>
       </div>
@@ -3598,6 +3658,13 @@ const APP_HTML: &str = r#"<!doctype html>
         const result = await request('/api/managed/open', { method: 'POST' });
         showResult(result);
         setNextStep('This is where SyncMyFonts puts fonts it installs for this user.');
+      } catch (error) { show(error.message); }
+    }
+    async function openLogsFolder() {
+      try {
+        const result = await request('/api/logs/open', { method: 'POST' });
+        showResult(result);
+        setNextStep('This folder contains SyncMyFonts action history and support logs.');
       } catch (error) { show(error.message); }
     }
     async function loadPeers() {

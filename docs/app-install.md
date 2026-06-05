@@ -16,6 +16,9 @@ shared key is provided, find sharing peers on the LAN, pair with a peer, test a
 peer, preview missing fonts, install missing fonts, save peers, and run
 diagnostics. It can also verify that SyncMyFonts-managed installed font files
 still match the local manifest.
+Use `Diagnostics` for a copyable support report, `Open Managed Folder` to see
+fonts installed by SyncMyFonts, and `Open Logs` to open the per-user action
+history folder.
 
 The browser control surface is kept as an explicit development and future
 self-hosted/server-adjacent command:
@@ -62,7 +65,8 @@ packaging/macos/install-launchagent.sh sync \
   --interval 14400
 ```
 
-Logs are written to `~/Library/Logs/SyncMyFonts`.
+Logs are written to `~/Library/Logs/SyncMyFonts`. The native app's `Open Logs`
+button opens this folder.
 
 ## Windows
 
@@ -91,7 +95,8 @@ Startup shortcut:
   -Peer "http://192.168.1.50:7370"
 ```
 
-Generated wrappers and logs live under `%LOCALAPPDATA%\SyncMyFonts`.
+Generated wrappers and logs live under `%LOCALAPPDATA%\SyncMyFonts`. The native
+app's `Open Logs` button opens the log folder.
 
 ## Recommendations
 
