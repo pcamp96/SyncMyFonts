@@ -643,6 +643,43 @@ struct LanPeerSyncReport {
     error: Option<String>,
 }
 
+#[derive(Default)]
+struct SkipSummary {
+    already_present: usize,
+    would_install: usize,
+    unsupported: usize,
+    system_conflicts: usize,
+    other: usize,
+}
+
+impl SkipSummary {
+    fn from_lines<'a>(lines: impl IntoIterator<Item = &'a String>) -> Self {
+        let mut summary = Self::default();
+        for line in lines {
+            if line.starts_with("would install ") {
+                summary.would_install += 1;
+            } else if line.contains("already present") {
+                summary.already_present += 1;
+            } else if line.contains("unsupported format") || line.contains("unsupported-format") {
+                summary.unsupported += 1;
+            } else if line.contains("system-font-conflict") {
+                summary.system_conflicts += 1;
+            } else {
+                summary.other += 1;
+            }
+        }
+        summary
+    }
+
+    fn total(&self) -> usize {
+        self.already_present
+            + self.would_install
+            + self.unsupported
+            + self.system_conflicts
+            + self.other
+    }
+}
+
 #[derive(Clone)]
 struct AppState {
     share: Arc<Mutex<Option<RunningShare>>>,
@@ -2590,25 +2627,7 @@ impl SyncMyFontsGui {
         self.start_task(action, move || {
             match lan_sync(&peer_url, peer_key.as_deref(), dry_run) {
                 Ok(report) => {
-                    let next_step = if dry_run {
-                        let would_install = report
-                            .skipped
-                            .iter()
-                            .filter(|line| line.starts_with("would install "))
-                            .count();
-                        if would_install == 0 {
-                            "No missing installable fonts were found from this peer.".to_string()
-                        } else {
-                            format!(
-                                "{would_install} missing font(s) can be installed from this peer."
-                            )
-                        }
-                    } else if report.installed.is_empty() {
-                        "No new fonts were installed.".to_string()
-                    } else {
-                        "Installed fonts are ready. Reopen design apps if they do not appear yet."
-                            .to_string()
-                    };
+                    let next_step = gui_single_peer_sync_next_step(&report, dry_run);
                     gui_ok(&report, next_step)
                 }
                 Err(error) => gui_error(error),
@@ -2624,21 +2643,12 @@ impl SyncMyFontsGui {
         };
         self.start_task(action, move || match lan_sync_all(dry_run) {
             Ok(report) => {
-                let warnings = report.peers.iter().filter(|peer| peer.error.is_some()).count();
-                let installed = report
+                let warnings = report
                     .peers
                     .iter()
-                    .map(|peer| peer.installed.len())
-                    .sum::<usize>();
-                let next_step = if dry_run {
-                    "Dry run complete. Review the peer results before syncing.".to_string()
-                } else if installed == 0 {
-                    "Saved peer sync finished. No new fonts were installed.".to_string()
-                } else {
-                    format!(
-                        "Installed {installed} font(s). Reopen design apps if they do not appear yet."
-                    )
-                };
+                    .filter(|peer| peer.error.is_some())
+                    .count();
+                let next_step = gui_saved_peer_sync_next_step(&report, dry_run);
                 gui_ok_with_warning_count(&report, next_step, warnings)
             }
             Err(error) => gui_error(error),
@@ -2687,18 +2697,16 @@ impl SyncMyFontsGui {
 
         self.start_task("Auto-syncing saved peers", || match lan_sync_all(false) {
             Ok(report) => {
-                let warnings = report.peers.iter().filter(|peer| peer.error.is_some()).count();
-                let installed = report
+                let warnings = report
                     .peers
                     .iter()
-                    .map(|peer| peer.installed.len())
-                    .sum::<usize>();
-                let next_step = if installed == 0 {
-                    "Auto sync checked saved peers. No new fonts were installed.".to_string()
+                    .filter(|peer| peer.error.is_some())
+                    .count();
+                let next_step = gui_saved_peer_sync_next_step(&report, false);
+                let next_step = if next_step.starts_with("Installed ") {
+                    next_step.replacen("Installed ", "Auto sync installed ", 1)
                 } else {
-                    format!(
-                        "Auto sync installed {installed} font(s). Reopen design apps if they do not appear yet."
-                    )
+                    format!("Auto sync checked saved peers. {next_step}")
                 };
                 gui_ok_with_warning_count(&report, next_step, warnings)
             }
@@ -3208,6 +3216,131 @@ fn gui_error_next_step(error: &str) -> String {
         "That action failed. Review the output, then check the peer URL, pairing code, or network access. {}",
         platform_manual_peer_fallback_guidance()
     )
+}
+
+fn gui_single_peer_sync_next_step(report: &LanSyncReport, dry_run: bool) -> String {
+    let summary = SkipSummary::from_lines(&report.skipped);
+    if dry_run {
+        if summary.would_install > 0 {
+            return format!(
+                "{} missing installable font(s) can be installed from this peer.",
+                summary.would_install
+            );
+        }
+        return gui_no_install_summary(
+            &summary,
+            "No missing installable fonts were found from this peer.",
+        );
+    }
+
+    if !report.installed.is_empty() {
+        let mut next_step = format!(
+            "Installed {} font(s). Reopen design apps if they do not appear yet.",
+            report.installed.len()
+        );
+        append_skip_context(&mut next_step, &summary);
+        return next_step;
+    }
+
+    gui_no_install_summary(&summary, "No new fonts were installed.")
+}
+
+fn gui_saved_peer_sync_next_step(report: &LanSyncAllReport, dry_run: bool) -> String {
+    let installed = report
+        .peers
+        .iter()
+        .map(|peer| peer.installed.len())
+        .sum::<usize>();
+    let failed = report
+        .peers
+        .iter()
+        .filter(|peer| peer.error.is_some())
+        .count();
+    let summary = SkipSummary::from_lines(report.peers.iter().flat_map(|peer| peer.skipped.iter()));
+
+    if dry_run {
+        if summary.would_install > 0 {
+            let mut next_step = format!(
+                "Dry run found {} missing installable font(s) across saved peers.",
+                summary.would_install
+            );
+            append_peer_error_context(&mut next_step, failed);
+            append_skip_context(&mut next_step, &summary);
+            return next_step;
+        }
+        let mut next_step = gui_no_install_summary(
+            &summary,
+            "Dry run finished with no missing installable fonts.",
+        );
+        append_peer_error_context(&mut next_step, failed);
+        return next_step;
+    }
+
+    if installed > 0 {
+        let mut next_step =
+            format!("Installed {installed} font(s). Reopen design apps if they do not appear yet.");
+        append_peer_error_context(&mut next_step, failed);
+        append_skip_context(&mut next_step, &summary);
+        return next_step;
+    }
+
+    let mut next_step = gui_no_install_summary(
+        &summary,
+        "Saved peer sync finished. No new fonts were installed.",
+    );
+    append_peer_error_context(&mut next_step, failed);
+    next_step
+}
+
+fn gui_no_install_summary(summary: &SkipSummary, fallback: &str) -> String {
+    if summary.system_conflicts > 0 {
+        return format!(
+            "Skipped {} font(s) because their names conflict with system fonts on this computer. Those fonts were not installed.",
+            summary.system_conflicts
+        );
+    }
+    if summary.unsupported > 0 {
+        return format!(
+            "Skipped {} unsupported font file(s). SyncMyFonts installs desktop TTF/OTF/TTC/OTC fonts.",
+            summary.unsupported
+        );
+    }
+    if summary.already_present > 0 && summary.total() == summary.already_present {
+        return format!(
+            "No new fonts were installed because {} peer font(s) are already present here.",
+            summary.already_present
+        );
+    }
+    fallback.to_string()
+}
+
+fn append_skip_context(next_step: &mut String, summary: &SkipSummary) {
+    let mut details = Vec::new();
+    if summary.system_conflicts > 0 {
+        details.push(format!(
+            "{} system-font conflict(s) were safely skipped",
+            summary.system_conflicts
+        ));
+    }
+    if summary.unsupported > 0 {
+        details.push(format!(
+            "{} unsupported font file(s) were skipped",
+            summary.unsupported
+        ));
+    }
+    if !details.is_empty() {
+        next_step.push(' ');
+        next_step.push_str(&details.join("; "));
+        next_step.push('.');
+    }
+}
+
+fn append_peer_error_context(next_step: &mut String, failed: usize) {
+    if failed > 0 {
+        next_step.push_str(&format!(
+            " {failed} saved peer(s) could not be reached; check sharing and LAN access on those computers."
+        ));
+    }
 }
 
 fn redacted_peer_config(peer: &LanPeerConfig) -> RedactedPeer {
@@ -5870,6 +6003,78 @@ mod tests {
 
         assert!(result.next_step.contains("paste the sharing computer"));
         assert!(result.next_step.contains("manually"));
+    }
+
+    #[test]
+    fn gui_single_peer_sync_explains_system_font_conflict_skips() {
+        let report = LanSyncReport {
+            known_local: 1,
+            peer_fonts: 1,
+            installed: Vec::new(),
+            skipped: vec![
+                "Existing.ttf system-font-conflict: Existing.ttf conflicts with /System/Library/Fonts/Existing.ttf"
+                    .to_string(),
+            ],
+            dry_run: false,
+        };
+
+        let next_step = gui_single_peer_sync_next_step(&report, false);
+
+        assert!(next_step.contains("system fonts"));
+        assert!(next_step.contains("not installed"));
+    }
+
+    #[test]
+    fn gui_saved_peer_sync_summarizes_installs_skips_and_peer_errors() {
+        let report = LanSyncAllReport {
+            dry_run: false,
+            peers: vec![
+                LanPeerSyncReport {
+                    name: "Shop PC".to_string(),
+                    url: "http://127.0.0.1:7370".to_string(),
+                    ok: true,
+                    installed: vec![PathBuf::from("Installed.ttf")],
+                    skipped: vec!["WebFont.woff2 unsupported format".to_string()],
+                    error: None,
+                },
+                LanPeerSyncReport {
+                    name: "Offline MacBook".to_string(),
+                    url: "http://127.0.0.1:7371".to_string(),
+                    ok: false,
+                    installed: Vec::new(),
+                    skipped: Vec::new(),
+                    error: Some("connection refused".to_string()),
+                },
+            ],
+        };
+
+        let next_step = gui_saved_peer_sync_next_step(&report, false);
+
+        assert!(next_step.contains("Installed 1 font"));
+        assert!(next_step.contains("unsupported font"));
+        assert!(next_step.contains("could not be reached"));
+    }
+
+    #[test]
+    fn gui_saved_peer_dry_run_reports_missing_installable_fonts() {
+        let report = LanSyncAllReport {
+            dry_run: true,
+            peers: vec![LanPeerSyncReport {
+                name: "Shop PC".to_string(),
+                url: "http://127.0.0.1:7370".to_string(),
+                ok: true,
+                installed: Vec::new(),
+                skipped: vec![
+                    "would install Script.ttf".to_string(),
+                    "Already.ttf already present".to_string(),
+                ],
+                error: None,
+            }],
+        };
+
+        let next_step = gui_saved_peer_sync_next_step(&report, true);
+
+        assert!(next_step.contains("1 missing installable font"));
     }
 
     #[test]
