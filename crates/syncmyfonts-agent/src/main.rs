@@ -109,6 +109,8 @@ enum Commands {
     },
     /// Print a redacted support report for troubleshooting.
     Diagnostics,
+    /// Check local app readiness without installing fonts or contacting peers.
+    Doctor,
     /// Verify SyncMyFonts-managed installed font files still match the manifest.
     VerifyManaged,
     /// Install a per-user sign-in helper that syncs saved LAN peers.
@@ -212,6 +214,9 @@ fn main() -> Result<()> {
         }
         Commands::Diagnostics => {
             print_json(&diagnostics()?)?;
+        }
+        Commands::Doctor => {
+            print_json(&doctor()?)?;
         }
         Commands::VerifyManaged => {
             print_json(&verify_managed_fonts()?)?;
@@ -699,6 +704,20 @@ struct DiagnosticsReport {
 }
 
 #[derive(Debug, Serialize)]
+struct DoctorReport {
+    ok: bool,
+    checks: Vec<DoctorCheck>,
+    next_step: String,
+}
+
+#[derive(Debug, Serialize)]
+struct DoctorCheck {
+    name: String,
+    ok: bool,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
 struct RedactedPeer {
     name: String,
     url: String,
@@ -1127,6 +1146,125 @@ fn diagnostics() -> Result<DiagnosticsReport> {
         support_report_text: support_report_text(&report),
         ..report
     })
+}
+
+fn doctor() -> Result<DoctorReport> {
+    let mut checks = Vec::new();
+
+    let agent_path = agent_command_exe();
+    checks.push(match &agent_path {
+        Ok(path) if path.exists() => doctor_check(
+            "agent-binary",
+            true,
+            format!("Agent helper is available at {}.", path.display()),
+        ),
+        Ok(path) => doctor_check(
+            "agent-binary",
+            false,
+            format!(
+                "Agent helper was resolved to {}, but it does not exist.",
+                path.display()
+            ),
+        ),
+        Err(error) => doctor_check(
+            "agent-binary",
+            false,
+            format!("Agent helper could not be resolved: {error}"),
+        ),
+    });
+
+    let config_path = app_config_path()?;
+    checks.push(path_parent_check("config-dir", &config_path));
+
+    let log_dir = app_log_dir()?;
+    checks.push(directory_ready_check("log-dir", &log_dir));
+
+    let user_font_dir = user_font_dir()?;
+    checks.push(directory_ready_check("user-font-dir", &user_font_dir));
+
+    let managed_font_dir = managed_font_dir()?;
+    checks.push(directory_ready_check("managed-font-dir", &managed_font_dir));
+
+    let config = load_app_config()?;
+    checks.push(if config.peers.is_empty() {
+        doctor_check(
+            "saved-peers",
+            false,
+            "No saved peers yet. Pair or save another computer before relying on repeat sync.",
+        )
+    } else {
+        doctor_check(
+            "saved-peers",
+            true,
+            format!("{} saved peer(s) are configured.", config.peers.len()),
+        )
+    });
+
+    checks.push(match startup_sync_helper_path() {
+        Ok(path) if path.exists() => doctor_check(
+            "sign-in-sync-helper",
+            true,
+            format!("Sign-in sync helper exists at {}.", path.display()),
+        ),
+        Ok(path) => doctor_check(
+            "sign-in-sync-helper",
+            false,
+            format!(
+                "Sign-in sync helper is not installed yet. Expected location: {}.",
+                path.display()
+            ),
+        ),
+        Err(error) => doctor_check(
+            "sign-in-sync-helper",
+            false,
+            format!("Sign-in sync helper path could not be resolved: {error}"),
+        ),
+    });
+
+    let failed = checks.iter().filter(|check| !check.ok).count();
+    let next_step = if failed == 0 {
+        "This computer is ready for saved-peer LAN sync.".to_string()
+    } else if config.peers.is_empty() {
+        "Pair or save a LAN peer, then run Readiness Check again.".to_string()
+    } else {
+        "Review failed checks, then run Readiness Check again.".to_string()
+    };
+
+    Ok(DoctorReport {
+        ok: failed == 0,
+        checks,
+        next_step,
+    })
+}
+
+fn doctor_check(name: &str, ok: bool, message: impl Into<String>) -> DoctorCheck {
+    DoctorCheck {
+        name: name.to_string(),
+        ok,
+        message: message.into(),
+    }
+}
+
+fn path_parent_check(name: &str, path: &Path) -> DoctorCheck {
+    match path.parent() {
+        Some(parent) => directory_ready_check(name, parent),
+        None => doctor_check(
+            name,
+            false,
+            format!("{} does not have a parent directory.", path.display()),
+        ),
+    }
+}
+
+fn directory_ready_check(name: &str, path: &Path) -> DoctorCheck {
+    match fs::create_dir_all(path) {
+        Ok(()) => doctor_check(name, true, format!("{} is available.", path.display())),
+        Err(error) => doctor_check(
+            name,
+            false,
+            format!("{} is not available: {error}", path.display()),
+        ),
+    }
 }
 
 async fn app_serve(listen: SocketAddr, open_browser_on_start: bool) -> Result<()> {
@@ -1927,6 +2065,16 @@ impl SyncMyFontsGui {
         });
     }
 
+    fn run_doctor(&mut self) {
+        self.start_task("Checking readiness", || match doctor() {
+            Ok(report) => {
+                let warnings = report.checks.iter().filter(|check| !check.ok).count();
+                gui_ok_with_warning_count(&report, report.next_step.clone(), warnings)
+            }
+            Err(error) => gui_error(error),
+        });
+    }
+
     fn open_managed_font_folder(&mut self) {
         let folder = managed_font_dir().and_then(|path| {
             fs::create_dir_all(&path)
@@ -2341,6 +2489,9 @@ impl eframe::App for SyncMyFontsGui {
                 }
                 if ui.button("Diagnostics").clicked() {
                     self.run_diagnostics();
+                }
+                if ui.button("Readiness Check").clicked() {
+                    self.run_doctor();
                 }
                 if ui.button("Open Managed Folder").clicked() {
                     self.open_managed_font_folder();
@@ -4548,6 +4699,33 @@ mod tests {
         assert!(helper.contains("signin-sync.log"));
         assert!(!helper.contains("SYNCMYFONTS_LAN_KEY"));
         assert!(!helper.contains("--lan-key"));
+    }
+
+    #[test]
+    fn doctor_reports_missing_saved_peers_on_first_run() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", root.join("config"));
+            std::env::set_var("SYNCMYFONTS_LOG_DIR", root.join("logs"));
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", root.join("fonts"));
+        }
+
+        let report = doctor().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_LOG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+        }
+
+        assert!(!report.ok);
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| check.name == "saved-peers" && !check.ok)
+        );
+        assert!(report.next_step.contains("Pair or save a LAN peer"));
     }
 
     #[test]

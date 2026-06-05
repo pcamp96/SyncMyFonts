@@ -26,6 +26,8 @@ still match the local manifest.
 Use `Diagnostics` for a copyable support report, `Open Managed Folder` to see
 fonts installed by SyncMyFonts, and `Open Logs` to open the per-user action
 history folder.
+Use `Readiness Check` before live two-machine testing to confirm local app
+paths, saved peers, and sign-in sync helper status.
 Use `Enable Sign-In Sync` after pairing peers if this computer should pull
 missing fonts from saved peers whenever the user signs in.
 Set `Device Name` in the app header before pairing if the default computer name

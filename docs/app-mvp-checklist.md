@@ -91,6 +91,7 @@ The app MVP should reuse the current agent commands:
   startup preference.
 - [x] Per-user log directory.
 - [x] Diagnostics output that redacts API keys and LAN keys.
+- [x] Readiness check for local paths, saved peers, and sign-in sync helper.
 - [x] A short first-run setup path for manual peer URL entry.
 - [x] A copyable support report with app version, agent version, platform,
   config paths, font paths, last command, and last result.
