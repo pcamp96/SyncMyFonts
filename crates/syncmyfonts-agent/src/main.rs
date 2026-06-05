@@ -1470,7 +1470,7 @@ fn manual_validation_steps() -> Vec<String> {
         "Launch the native app on both macOS and Windows.".to_string(),
         "Run Validation Report on both computers before syncing.".to_string(),
         "On the computer that has a non-system test font, click Share Fonts On LAN with Shared Key blank.".to_string(),
-        "On the other computer, find or enter the peer URL, enter the pairing code, and click Pair Peer.".to_string(),
+        "On the other computer, find or enter the peer URL, enter the pairing code within its shown validity window, and click Pair Peer.".to_string(),
         "Run Preview From Peer and confirm the test font is missing while system fonts are not offered.".to_string(),
         "Run Get Missing Fonts and confirm the font installs into the current-user or SyncMyFonts-managed folder.".to_string(),
         "Run the same sync again and confirm the already installed font is skipped.".to_string(),
@@ -1493,6 +1493,15 @@ fn manual_validation_pass_criteria() -> Vec<String> {
         "No port forwarding, Docker container, or cloud service is required for the LAN test."
             .to_string(),
     ]
+}
+
+fn pairing_code_validity_text(seconds: Option<u64>) -> String {
+    let minutes = seconds
+        .unwrap_or_else(|| PAIRING_CODE_TTL.as_secs())
+        .saturating_add(59)
+        / 60;
+    let minute_label = if minutes == 1 { "minute" } else { "minutes" };
+    format!("valid for about {minutes} {minute_label}")
 }
 
 fn doctor_check(name: &str, ok: bool, message: impl Into<String>) -> DoctorCheck {
@@ -2101,6 +2110,7 @@ struct SyncMyFontsGui {
     share: Option<RunningShare>,
     share_urls: Vec<String>,
     last_pairing_code: Option<String>,
+    last_pairing_expires_seconds: Option<u64>,
     auto_sync_enabled: bool,
     auto_sync_interval_minutes: u64,
     last_auto_sync_at: Option<Instant>,
@@ -2145,6 +2155,7 @@ impl SyncMyFontsGui {
             share: None,
             share_urls: Vec::new(),
             last_pairing_code: None,
+            last_pairing_expires_seconds: None,
             auto_sync_enabled: preferences.auto_sync_saved_peers,
             auto_sync_interval_minutes: preferences.auto_sync_interval_minutes,
             last_auto_sync_at: None,
@@ -2794,18 +2805,19 @@ impl SyncMyFontsGui {
                 let _ = set_lan_listen_preference(listen);
                 self.refresh_status();
                 self.last_pairing_code = pairing_code.clone();
+                self.last_pairing_expires_seconds =
+                    pairing_code.as_ref().map(|_| PAIRING_CODE_TTL.as_secs());
                 let response = ShareResponse {
                     sharing: true,
                     message: format!("Sharing fonts at {}.", self.share_urls.join(", ")),
                     urls: self.share_urls.clone(),
-                    pairing_expires_seconds: pairing_code
-                        .as_ref()
-                        .map(|_| PAIRING_CODE_TTL.as_secs()),
+                    pairing_expires_seconds: self.last_pairing_expires_seconds,
                     pairing_code,
                 };
                 if let Some(code) = &response.pairing_code {
                     self.next_step = format!(
-                        "Pairing code {code} is ready. Enter it on the other computer. {}",
+                        "Pairing code {code} is ready and {}. Enter it on the other computer. {}",
+                        pairing_code_validity_text(response.pairing_expires_seconds),
                         platform_lan_sharing_guidance()
                     );
                 } else {
@@ -2825,6 +2837,7 @@ impl SyncMyFontsGui {
             }
             Err(error) => {
                 self.last_pairing_code = None;
+                self.last_pairing_expires_seconds = None;
                 self.output = error.to_string();
                 self.next_step = format!(
                     "Sharing failed to start. Check whether another SyncMyFonts share is already using that port. {}",
@@ -2846,6 +2859,7 @@ impl SyncMyFontsGui {
         let _ = share.child.wait();
         self.refresh_status();
         self.last_pairing_code = None;
+        self.last_pairing_expires_seconds = None;
         self.next_step =
             "Sharing is off. Start sharing again when another computer needs fonts.".to_string();
         self.output = "Stopped sharing fonts.".to_string();
@@ -2866,6 +2880,7 @@ impl SyncMyFontsGui {
         if stopped {
             self.share = None;
             self.last_pairing_code = None;
+            self.last_pairing_expires_seconds = None;
         }
     }
 }
@@ -3067,11 +3082,16 @@ impl eframe::App for SyncMyFontsGui {
                     }
                 }
                 if let Some(code) = &self.last_pairing_code {
-                    ui.label(format!("Pairing code: {code}"));
+                    ui.label(format!(
+                        "Pairing code: {code} ({})",
+                        pairing_code_validity_text(self.last_pairing_expires_seconds)
+                    ));
                     if ui.button("Copy Code").clicked() {
                         ui.ctx().copy_text(code.clone());
-                        self.next_step =
-                            "Pairing code copied. Enter it on the other computer.".to_string();
+                        self.next_step = format!(
+                            "Pairing code copied and {}. Enter it on the other computer.",
+                            pairing_code_validity_text(self.last_pairing_expires_seconds)
+                        );
                     }
                 }
             });
@@ -5451,6 +5471,26 @@ mod tests {
     #[test]
     fn pairing_code_normalization_keeps_only_digits() {
         assert_eq!(normalize_pairing_code(" 1234-56 78 "), "12345678");
+    }
+
+    #[test]
+    fn pairing_code_validity_text_rounds_up_to_minutes() {
+        assert_eq!(
+            pairing_code_validity_text(Some(10 * 60)),
+            "valid for about 10 minutes"
+        );
+        assert_eq!(
+            pairing_code_validity_text(Some(61)),
+            "valid for about 2 minutes"
+        );
+        assert_eq!(
+            pairing_code_validity_text(Some(60)),
+            "valid for about 1 minute"
+        );
+        assert_eq!(
+            pairing_code_validity_text(None),
+            "valid for about 10 minutes"
+        );
     }
 
     #[test]
