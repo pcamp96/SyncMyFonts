@@ -187,6 +187,29 @@ jobs:
           if (-not $diagnostics.Contains('"log_dir"')) { throw "Diagnostics log dir missing" }
           if (-not $doctor.Contains('"checks"')) { throw "Doctor checks missing" }
           if (-not $doctor.Contains('"saved-peers"')) { throw "Doctor saved peer check missing" }
+          $env:APPDATA = Join-Path $smokeRoot "appdata"
+          & $agent install-app-shortcuts | Tee-Object -FilePath (Join-Path $smokeRoot "app-shortcuts.json")
+          $shortcutsDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\SyncMyFonts"
+          $expectedShortcuts = @(
+            "SyncMyFonts.cmd",
+            "Sync Saved Peers.cmd",
+            "Preview Saved Peers.cmd",
+            "Diagnostics.cmd",
+            "Readiness Check.cmd"
+          )
+          foreach ($shortcut in $expectedShortcuts) {
+            $shortcutPath = Join-Path $shortcutsDir $shortcut
+            if (-not (Test-Path $shortcutPath)) { throw "Missing Start Menu shortcut: $shortcut" }
+          }
+          $syncShortcut = Get-Content (Join-Path $shortcutsDir "Sync Saved Peers.cmd") -Raw
+          $previewShortcut = Get-Content (Join-Path $shortcutsDir "Preview Saved Peers.cmd") -Raw
+          $diagnosticsShortcut = Get-Content (Join-Path $shortcutsDir "Diagnostics.cmd") -Raw
+          $doctorShortcut = Get-Content (Join-Path $shortcutsDir "Readiness Check.cmd") -Raw
+          if (-not $syncShortcut.Contains('"lan-sync-all"')) { throw "Sync shortcut does not run lan-sync-all" }
+          if (-not $previewShortcut.Contains('"--dry-run"')) { throw "Preview shortcut does not dry run" }
+          if (-not $diagnosticsShortcut.Contains('"diagnostics"')) { throw "Diagnostics shortcut command missing" }
+          if (-not $doctorShortcut.Contains('"doctor"')) { throw "Readiness shortcut command missing" }
+          if ($syncShortcut.Contains("SYNCMYFONTS_LAN_KEY") -or $syncShortcut.Contains("--lan-key")) { throw "Sync shortcut embeds LAN key material" }
           $sourceFonts = Join-Path $smokeRoot "source-fonts"
           $sourceConfig = Join-Path $smokeRoot "source-config"
           $targetFonts = Join-Path $smokeRoot "target-fonts"
