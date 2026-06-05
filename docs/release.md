@@ -44,3 +44,8 @@ fonts, start LAN sharing, show a copyable LAN URL and pairing code, discover
 sharing LAN peers, pair with a peer, test a LAN peer, preview missing fonts,
 install missing fonts, save LAN peers, sync all saved peers, stop LAN sharing,
 and produce a redacted diagnostics report.
+
+The release folder's `START-HERE.txt` also calls out the common LAN setup
+checks: both computers need to be on the same trusted LAN/VPN, Windows sharing
+hosts should allow SyncMyFonts on Private networks if Firewall prompts, and no
+port forwarding is needed.

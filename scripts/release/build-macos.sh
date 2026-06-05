@@ -42,6 +42,12 @@ SyncMyFonts macOS MVP
 
 5. To install launch-at-login helpers, see:
    packaging/macos/README.md
+
+Troubleshooting:
+- Both computers must be on the same trusted LAN/VPN.
+- If a Windows computer is sharing fonts, allow SyncMyFonts on Private networks
+  when Windows Firewall asks.
+- No port forwarding is needed.
 EOF
 
 archive="$repo_root/dist/syncmyfonts-macos-$version.tar.gz"

@@ -53,6 +53,12 @@ SyncMyFonts Windows MVP
 
 5. To install startup helpers, see:
    packaging\windows\README.md
+
+Troubleshooting:
+- Both computers must be on the same trusted LAN/VPN.
+- If this Windows computer is sharing fonts, allow SyncMyFonts on Private
+  networks when Windows Firewall asks.
+- No port forwarding is needed.
 "@
 
 $Archive = Join-Path $DistRoot "syncmyfonts-windows-$Version.zip"
