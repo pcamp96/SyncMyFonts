@@ -30,6 +30,7 @@ Copy-Item -Recurse (Join-Path $RepoRoot "packaging/windows") (Join-Path $DistDir
 Copy-Item (Join-Path $RepoRoot "packaging/windows/Start-SyncMyFonts.cmd") $DistDir
 Copy-Item (Join-Path $RepoRoot "README.md") $DistDir
 Copy-Item (Join-Path $RepoRoot "docs/app-install.md") (Join-Path $DistDir "docs/")
+Copy-Item (Join-Path $RepoRoot "docs/manual-clean-machine-validation.md") (Join-Path $DistDir "docs/")
 if (Test-Path (Join-Path $RepoRoot "docs/desktop-app-surface.md")) {
     Copy-Item (Join-Path $RepoRoot "docs/desktop-app-surface.md") (Join-Path $DistDir "docs/")
 }
@@ -47,21 +48,32 @@ SyncMyFonts Windows MVP
 2. The native SyncMyFonts window should open. If it does not, run:
    .\bin\syncmyfonts-agent.exe gui
 
-3. On the computer with fonts, click Share Fonts On LAN. Leave Shared Key blank
+3. Click Readiness Check. The managed font folder should be under your user
+   account, and no administrator prompt should appear.
+
+4. On the computer with fonts, click Share Fonts On LAN. Leave Shared Key blank
    for the easiest setup and copy the pairing code.
 
-4. On the other computer, click Find LAN Peers, select the sharing computer,
+5. On the other computer, click Find LAN Peers, select the sharing computer,
    enter the pairing code, and click Pair Peer. Then use Preview From Peer or
    Get Missing Fonts.
 
-5. To install startup helpers, see:
+6. To install startup helpers, click Enable Sign-In Sync after pairing peers,
+   or see:
    packaging\windows\README.md
+
+Validation:
+- For a full Mac-to-Windows and Windows-to-Mac test pass, see:
+  docs\app-install.md
+  docs\manual-clean-machine-validation.md
 
 Troubleshooting:
 - Both computers must be on the same trusted LAN/VPN.
 - If this Windows computer is sharing fonts, allow SyncMyFonts on Private
   networks when Windows Firewall asks.
 - No port forwarding is needed.
+- SyncMyFonts only syncs current-user fonts and fonts it installed itself. It
+  does not copy system font folders.
 "@
 
 $Archive = Join-Path $DistRoot "syncmyfonts-windows-$Version.zip"

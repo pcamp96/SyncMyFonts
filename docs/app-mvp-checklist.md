@@ -19,8 +19,10 @@ The app MVP should reuse the current agent commands:
 - `syncmyfonts-agent lan-sync --peer <url>`
 - `syncmyfonts-agent lan-sync --peer <url> --dry-run`
 - `syncmyfonts-agent lan-add-peer --name <name> --url <url>`
+- `syncmyfonts-agent lan-pair --name <name> --url <url> --pairing-code <code>`
 - `syncmyfonts-agent lan-peers`
 - `syncmyfonts-agent lan-sync-all`
+- `syncmyfonts-agent doctor`
 - `syncmyfonts-agent verify-managed`
 - `syncmyfonts-agent gui`
 
@@ -121,7 +123,7 @@ The app MVP should reuse the current agent commands:
   `Get Missing Fonts`, and `Diagnostics` if there is no full tray UI yet.
 - [x] Per-user startup option through a tray app, Startup folder, `HKCU\Run`, or
   a current-user Scheduled Task.
-- [ ] Plain guidance for firewall prompts when Windows is intentionally hosting:
+- [x] Plain guidance for firewall prompts when Windows is intentionally hosting:
   allow Private networks only.
 
 ## Verification Gates
@@ -137,6 +139,8 @@ The app MVP should reuse the current agent commands:
 - [x] GitHub Actions verifies the packaged GUI launcher/app wrapper is present.
 - [x] GitHub Actions smoke-tests packaged LAN serve/sync with isolated font
   roots, pairing code setup, and saved-peer sync.
+- [x] Manual clean-machine validation checklist exists for real macOS-to-Windows
+  and Windows-to-macOS app testing.
 - [ ] Clean-machine smoke tests prove the portable archives launch the native
   app on macOS and Windows.
 - [ ] `cargo run -p syncmyfonts-agent -- scan` returns JSON inventory on macOS.
@@ -259,12 +263,13 @@ The local app MVP is ready when a non-technical user can:
 
 1. Install the app on a Mac and a Windows PC.
 2. Open `Share Fonts On This Network` on the computer that has fonts.
-3. Enter the shown peer URL and shared key on the other computer.
+3. Enter the shown pairing code on the other computer.
 4. Run `Preview From Peer`.
 5. Run `Get Missing Fonts From Peer`.
 6. Repeat the flow in the other direction if needed.
-7. Reopen their design app and use the synced fonts.
-8. Read a concise result showing installed, skipped, and failed items.
+7. Optionally click `Enable Sign-In Sync` after peers are saved.
+8. Reopen their design app and use the synced fonts.
+9. Read a concise result showing installed, skipped, and failed items.
 
 No part of that path should require administrator rights, editing environment
 variables by hand, opening system font directories, or understanding the Windows

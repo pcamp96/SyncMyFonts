@@ -20,6 +20,7 @@ cp -R "$repo_root/packaging/macos" "$dist_dir/packaging/"
 cp "$repo_root/packaging/macos/Start-SyncMyFonts.command" "$dist_dir/"
 cp "$repo_root/README.md" "$dist_dir/"
 cp "$repo_root/docs/app-install.md" "$dist_dir/docs/"
+cp "$repo_root/docs/manual-clean-machine-validation.md" "$dist_dir/docs/"
 cp "$repo_root/docs/desktop-app-surface.md" "$dist_dir/docs/" 2>/dev/null || true
 chmod +x "$dist_dir/Start-SyncMyFonts.command"
 
@@ -69,21 +70,32 @@ SyncMyFonts macOS MVP
 2. The native SyncMyFonts window should open. If it does not, run:
    ./bin/syncmyfonts-agent gui
 
-3. On the computer with fonts, click Share Fonts On LAN. Leave Shared Key blank
+3. Click Readiness Check. The managed font folder should be under your user
+   account, and no administrator prompt should appear.
+
+4. On the computer with fonts, click Share Fonts On LAN. Leave Shared Key blank
    for the easiest setup and copy the pairing code.
 
-4. On the other computer, click Find LAN Peers, select the sharing computer,
+5. On the other computer, click Find LAN Peers, select the sharing computer,
    enter the pairing code, and click Pair Peer. Then use Preview From Peer or
    Get Missing Fonts.
 
-5. To install launch-at-login helpers, see:
+6. To install launch-at-login helpers, click Enable Sign-In Sync after pairing
+   peers, or see:
    packaging/macos/README.md
+
+Validation:
+- For a full Mac-to-Windows and Windows-to-Mac test pass, see:
+  docs/app-install.md
+  docs/manual-clean-machine-validation.md
 
 Troubleshooting:
 - Both computers must be on the same trusted LAN/VPN.
 - If a Windows computer is sharing fonts, allow SyncMyFonts on Private networks
   when Windows Firewall asks.
 - No port forwarding is needed.
+- SyncMyFonts only syncs current-user fonts and fonts it installed itself. It
+  does not copy system font folders.
 EOF
 
 archive="$repo_root/dist/syncmyfonts-macos-$version.tar.gz"

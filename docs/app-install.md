@@ -45,6 +45,12 @@ Installed fonts are tracked in a local managed-font manifest next to the app
 config. This record only includes fonts installed by SyncMyFonts and keeps
 system fonts outside the sync ownership model.
 
+For real Mac-to-Windows validation, use
+`docs/manual-clean-machine-validation.md`. CI proves the packaged pairing flow
+on isolated macOS and Windows runners, but a clean-machine pass is still the
+proof that local firewall prompts, macOS Local Network behavior, and real font
+visibility match the expected user experience.
+
 ## Build the Agent
 
 ```sh
@@ -125,6 +131,8 @@ app's `Open Logs` button opens the log folder.
 
 - Treat `lan-serve` as an explicit trusted-network action. It opens a local LAN
   listener on `0.0.0.0:7370` by default.
+- If Windows asks for firewall access while sharing fonts, allow Private
+  networks only. Client-only sync should not need an inbound firewall prompt.
 - Keep sync pull-only for the MVP and run both directions manually or through
   separate launchers if both devices should exchange fonts.
 - Move LAN keys into Keychain on macOS and Windows Credential Manager before
