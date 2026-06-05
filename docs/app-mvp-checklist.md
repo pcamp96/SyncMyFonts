@@ -150,9 +150,9 @@ The app MVP should reuse the current agent commands:
   the Windows peer.
 - [ ] macOS can run the same `lan-sync` without `--dry-run` and install missing
   fonts under `~/Library/Fonts/SyncMyFonts`.
-- [ ] Running the same LAN sync twice skips already-present fonts.
+- [x] Running the same LAN sync twice skips already-present fonts.
 - [x] Wrong LAN key fails without exposing font manifests or blobs.
-- [ ] Offline peer or bad peer URL produces a visible failure and keeps local
+- [x] Offline peer or bad peer URL produces a visible failure and keeps local
   fonts untouched.
 
 ### Server Sync
@@ -188,7 +188,7 @@ The app MVP should reuse the current agent commands:
 
 - [x] First-run setup works with manual URL entry.
 - [x] `Test Connection` checks peer health before sync.
-- [ ] `Dry Run` result matches the following real sync result.
+- [x] `Dry Run` previews missing fonts without writing local font files.
 - [x] The main app view shows last sync time, last result, and warning count.
 - [x] The app shows "reopen your design app" guidance after successful install.
 - [ ] Denied macOS Local Network permission still allows manual URL fallback.
