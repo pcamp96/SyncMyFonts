@@ -44,6 +44,9 @@ and readiness check.
 Set `Device Name` in the app header before pairing if the default computer name
 is unclear. This name appears in LAN discovery, pairing, diagnostics, and
 support reports.
+If you change the `Listen Address` for a custom LAN port, SyncMyFonts saves the
+valid address after sharing starts successfully and uses it the next time the
+app opens.
 
 The browser control surface is kept as an explicit development and future
 self-hosted/server-adjacent command:

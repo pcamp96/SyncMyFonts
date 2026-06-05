@@ -555,17 +555,30 @@ struct AppConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct AppPreferences {
+    #[serde(default)]
     auto_sync_saved_peers: bool,
+    #[serde(default = "default_auto_sync_interval_minutes")]
     auto_sync_interval_minutes: u64,
+    #[serde(default = "default_lan_listen_address")]
+    lan_listen_address: String,
 }
 
 impl Default for AppPreferences {
     fn default() -> Self {
         Self {
             auto_sync_saved_peers: false,
-            auto_sync_interval_minutes: 15,
+            auto_sync_interval_minutes: default_auto_sync_interval_minutes(),
+            lan_listen_address: default_lan_listen_address(),
         }
     }
+}
+
+fn default_auto_sync_interval_minutes() -> u64 {
+    15
+}
+
+fn default_lan_listen_address() -> String {
+    "0.0.0.0:7370".to_string()
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -1924,6 +1937,7 @@ async fn app_share_start(
     };
     let urls = share_urls(listen);
     *guard = Some(RunningShare { child, listen });
+    let _ = set_lan_listen_preference(listen);
     let pairing_expires_seconds = pairing_code.as_ref().map(|_| PAIRING_CODE_TTL.as_secs());
     let response = ShareResponse {
         sharing: true,
@@ -2039,7 +2053,7 @@ impl SyncMyFontsGui {
             peer_url: String::new(),
             peer_key: String::new(),
             pairing_code: String::new(),
-            listen: "0.0.0.0:7370".to_string(),
+            listen: preferences.lan_listen_address,
             share_key: String::new(),
             share: None,
             share_urls: Vec::new(),
@@ -2546,6 +2560,7 @@ impl SyncMyFontsGui {
         let preferences = AppPreferences {
             auto_sync_saved_peers: self.auto_sync_enabled,
             auto_sync_interval_minutes: self.auto_sync_interval_minutes.max(1),
+            lan_listen_address: self.listen.clone(),
         };
         self.auto_sync_interval_minutes = preferences.auto_sync_interval_minutes;
         match set_app_preferences(preferences) {
@@ -2679,6 +2694,7 @@ impl SyncMyFontsGui {
         {
             Ok(child) => {
                 self.share = Some(RunningShare { child, listen });
+                let _ = set_lan_listen_preference(listen);
                 self.refresh_status();
                 self.last_pairing_code = pairing_code.clone();
                 let response = ShareResponse {
@@ -3222,6 +3238,11 @@ fn normalize_app_config(config: &mut AppConfig) -> bool {
         config.preferences.auto_sync_interval_minutes = normalized_interval;
         changed = true;
     }
+    let normalized_listen = normalize_lan_listen_address(&config.preferences.lan_listen_address);
+    if normalized_listen != config.preferences.lan_listen_address {
+        config.preferences.lan_listen_address = normalized_listen;
+        changed = true;
+    }
     changed
 }
 
@@ -3249,9 +3270,25 @@ fn set_app_preferences(preferences: AppPreferences) -> Result<AppConfig> {
     config.preferences = AppPreferences {
         auto_sync_saved_peers: preferences.auto_sync_saved_peers,
         auto_sync_interval_minutes: preferences.auto_sync_interval_minutes.clamp(1, 1440),
+        lan_listen_address: normalize_lan_listen_address(&preferences.lan_listen_address),
     };
     save_app_config(&config)?;
     Ok(config)
+}
+
+fn set_lan_listen_preference(listen: SocketAddr) -> Result<AppConfig> {
+    let mut config = load_app_config()?;
+    config.preferences.lan_listen_address = listen.to_string();
+    save_app_config(&config)?;
+    Ok(config)
+}
+
+fn normalize_lan_listen_address(value: &str) -> String {
+    value
+        .trim()
+        .parse::<SocketAddr>()
+        .map(|listen| listen.to_string())
+        .unwrap_or_else(|_| default_lan_listen_address())
 }
 
 fn normalize_friendly_device_name(name: &str) -> Option<String> {
@@ -3381,6 +3418,10 @@ fn support_report_text(report: &DiagnosticsReport) -> String {
                 "off"
             },
             report.preferences.auto_sync_interval_minutes
+        ),
+        format!(
+            "LAN listen address: {}",
+            report.preferences.lan_listen_address
         ),
         format!("User fonts scanned: {}", report.user_font_count),
         format!(
@@ -5098,6 +5139,7 @@ mod tests {
         set_app_preferences(AppPreferences {
             auto_sync_saved_peers: true,
             auto_sync_interval_minutes: 10_000,
+            lan_listen_address: " 0.0.0.0:7474 ".to_string(),
         })
         .unwrap();
         let loaded = load_app_config().unwrap();
@@ -5107,6 +5149,24 @@ mod tests {
 
         assert!(loaded.preferences.auto_sync_saved_peers);
         assert_eq!(loaded.preferences.auto_sync_interval_minutes, 1440);
+        assert_eq!(loaded.preferences.lan_listen_address, "0.0.0.0:7474");
+    }
+
+    #[test]
+    fn lan_listen_preference_persists_after_valid_share_address() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let config_dir = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+        }
+
+        set_lan_listen_preference("127.0.0.1:7475".parse().unwrap()).unwrap();
+        let loaded = load_app_config().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+        }
+
+        assert_eq!(loaded.preferences.lan_listen_address, "127.0.0.1:7475");
     }
 
     #[test]
@@ -5135,6 +5195,40 @@ mod tests {
 
         assert!(!loaded.preferences.auto_sync_saved_peers);
         assert_eq!(loaded.preferences.auto_sync_interval_minutes, 15);
+        assert_eq!(loaded.preferences.lan_listen_address, "0.0.0.0:7370");
+    }
+
+    #[test]
+    fn partial_app_preferences_get_default_lan_listen_address() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let config_dir = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        fs::create_dir_all(&config_dir).unwrap();
+        fs::write(
+            config_dir.join("config.json"),
+            r#"{
+  "schema": 1,
+  "device_id": null,
+  "friendly_device_name": "Shop PC",
+  "preferences": {
+    "auto_sync_saved_peers": true,
+    "auto_sync_interval_minutes": 20
+  },
+  "peers": []
+}"#,
+        )
+        .unwrap();
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+        }
+
+        let loaded = load_app_config().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+        }
+
+        assert!(loaded.preferences.auto_sync_saved_peers);
+        assert_eq!(loaded.preferences.auto_sync_interval_minutes, 20);
+        assert_eq!(loaded.preferences.lan_listen_address, "0.0.0.0:7370");
     }
 
     #[test]

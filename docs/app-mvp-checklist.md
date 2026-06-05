@@ -94,8 +94,8 @@ The app MVP should reuse the current agent commands:
 - [ ] Signed or otherwise trusted app bundle/executable for each platform.
 - [x] Unsigned portable app-style launcher for each platform.
 - [x] Bundled `syncmyfonts-agent` binary compiled for the target platform.
-- [x] Per-user config file with peer URL history and local auto-sync
-  preference.
+- [x] Per-user config file with peer URL history, LAN listen address, and local
+  auto-sync preference.
 - [ ] Per-user config file with server URL and server sync mode preference.
 - [x] Per-user log directory.
 - [x] Diagnostics output that redacts API keys and LAN keys.
