@@ -548,7 +548,24 @@ struct AppConfig {
     schema: u8,
     device_id: Option<Uuid>,
     friendly_device_name: Option<String>,
+    #[serde(default)]
+    preferences: AppPreferences,
     peers: Vec<LanPeerConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AppPreferences {
+    auto_sync_saved_peers: bool,
+    auto_sync_interval_minutes: u64,
+}
+
+impl Default for AppPreferences {
+    fn default() -> Self {
+        Self {
+            auto_sync_saved_peers: false,
+            auto_sync_interval_minutes: 15,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -738,6 +755,7 @@ struct DiagnosticsReport {
     managed_font_dir: PathBuf,
     saved_peer_count: usize,
     saved_peers: Vec<RedactedPeer>,
+    preferences: AppPreferences,
     last_action: Option<ActionRecord>,
     recent_actions: Vec<ActionRecord>,
     user_font_count: usize,
@@ -1199,6 +1217,7 @@ fn diagnostics() -> Result<DiagnosticsReport> {
         managed_font_dir: managed_font_dir()?,
         saved_peer_count: config.peers.len(),
         saved_peers,
+        preferences: config.preferences,
         last_action: history.last_action,
         recent_actions: history.recent,
         user_font_count: scan.fonts.len(),
@@ -2002,6 +2021,9 @@ struct GuiTaskResult {
 
 impl SyncMyFontsGui {
     fn new() -> Self {
+        let preferences = load_app_config()
+            .map(|config| config.preferences)
+            .unwrap_or_default();
         let mut app = Self {
             status: "Loading...".to_string(),
             next_step: "Start by sharing fonts on one computer, then pair from the other computer."
@@ -2022,8 +2044,8 @@ impl SyncMyFontsGui {
             share: None,
             share_urls: Vec::new(),
             last_pairing_code: None,
-            auto_sync_enabled: false,
-            auto_sync_interval_minutes: 15,
+            auto_sync_enabled: preferences.auto_sync_saved_peers,
+            auto_sync_interval_minutes: preferences.auto_sync_interval_minutes,
             last_auto_sync_at: None,
         };
         app.refresh_status();
@@ -2520,6 +2542,33 @@ impl SyncMyFontsGui {
         });
     }
 
+    fn save_auto_sync_preferences(&mut self) {
+        let preferences = AppPreferences {
+            auto_sync_saved_peers: self.auto_sync_enabled,
+            auto_sync_interval_minutes: self.auto_sync_interval_minutes.max(1),
+        };
+        self.auto_sync_interval_minutes = preferences.auto_sync_interval_minutes;
+        match set_app_preferences(preferences) {
+            Ok(_) => {
+                self.last_auto_sync_at = None;
+                self.next_step = if self.auto_sync_enabled {
+                    "Auto sync is on and saved. SyncMyFonts will check saved LAN peers while the app stays open."
+                        .to_string()
+                } else {
+                    "Auto sync is off and saved. Manual saved-peer sync and sign-in sync are still available."
+                        .to_string()
+                };
+            }
+            Err(error) => {
+                self.output = error.to_string();
+                self.next_step = "SyncMyFonts could not save the auto-sync preference.".to_string();
+                self.last_result = "Save Auto Sync Preference failed.".to_string();
+                self.warning_count = 1;
+                let _ = record_action("Save Auto Sync Preference", "failed", 1, &self.next_step);
+            }
+        }
+    }
+
     fn maybe_auto_sync_saved_peers(&mut self) {
         if !should_auto_sync_saved_peers(
             self.auto_sync_enabled,
@@ -2794,21 +2843,16 @@ impl eframe::App for SyncMyFontsGui {
                     .checkbox(&mut self.auto_sync_enabled, "Auto Sync Saved Peers")
                     .changed();
                 ui.label("Every");
-                ui.add(
-                    eframe::egui::DragValue::new(&mut self.auto_sync_interval_minutes)
-                        .range(1..=1440)
-                        .speed(1.0),
-                );
+                let interval_changed = ui
+                    .add(
+                        eframe::egui::DragValue::new(&mut self.auto_sync_interval_minutes)
+                            .range(1..=1440)
+                            .speed(1.0),
+                    )
+                    .changed();
                 ui.label("minutes while this app is open");
-                if changed {
-                    self.last_auto_sync_at = None;
-                    self.next_step = if self.auto_sync_enabled {
-                        "Auto sync is on. SyncMyFonts will check saved LAN peers while the app stays open."
-                            .to_string()
-                    } else {
-                        "Auto sync is off. Manual saved-peer sync and sign-in sync are still available."
-                            .to_string()
-                    };
+                if changed || interval_changed {
+                    self.save_auto_sync_preferences();
                 }
             });
         });
@@ -3139,6 +3183,7 @@ fn load_app_config() -> Result<AppConfig> {
             schema: 1,
             device_id: Some(Uuid::new_v4()),
             friendly_device_name: None,
+            preferences: AppPreferences::default(),
             peers: Vec::new(),
         });
     }
@@ -3172,6 +3217,11 @@ fn normalize_app_config(config: &mut AppConfig) -> bool {
             changed = true;
         }
     }
+    let normalized_interval = config.preferences.auto_sync_interval_minutes.clamp(1, 1440);
+    if normalized_interval != config.preferences.auto_sync_interval_minutes {
+        config.preferences.auto_sync_interval_minutes = normalized_interval;
+        changed = true;
+    }
     changed
 }
 
@@ -3190,6 +3240,16 @@ fn save_app_config(config: &AppConfig) -> Result<()> {
 fn set_friendly_device_name(name: String) -> Result<AppConfig> {
     let mut config = load_app_config()?;
     config.friendly_device_name = normalize_friendly_device_name(&name);
+    save_app_config(&config)?;
+    Ok(config)
+}
+
+fn set_app_preferences(preferences: AppPreferences) -> Result<AppConfig> {
+    let mut config = load_app_config()?;
+    config.preferences = AppPreferences {
+        auto_sync_saved_peers: preferences.auto_sync_saved_peers,
+        auto_sync_interval_minutes: preferences.auto_sync_interval_minutes.clamp(1, 1440),
+    };
     save_app_config(&config)?;
     Ok(config)
 }
@@ -3313,6 +3373,15 @@ fn support_report_text(report: &DiagnosticsReport) -> String {
             report.managed_manifest_path.display()
         ),
         format!("Saved peers: {}", report.saved_peer_count),
+        format!(
+            "Auto sync saved peers: {} every {} minute(s)",
+            if report.preferences.auto_sync_saved_peers {
+                "on"
+            } else {
+                "off"
+            },
+            report.preferences.auto_sync_interval_minutes
+        ),
         format!("User fonts scanned: {}", report.user_font_count),
         format!(
             "Managed manifest records: {}",
@@ -5016,6 +5085,56 @@ mod tests {
         assert_eq!(config.friendly_device_name.as_deref(), Some("Shop PC"));
         assert_eq!(loaded.friendly_device_name.as_deref(), Some("Shop PC"));
         assert_eq!(name, "Shop PC");
+    }
+
+    #[test]
+    fn app_preferences_persist_and_clamp_auto_sync_interval() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let config_dir = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+        }
+
+        set_app_preferences(AppPreferences {
+            auto_sync_saved_peers: true,
+            auto_sync_interval_minutes: 10_000,
+        })
+        .unwrap();
+        let loaded = load_app_config().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+        }
+
+        assert!(loaded.preferences.auto_sync_saved_peers);
+        assert_eq!(loaded.preferences.auto_sync_interval_minutes, 1440);
+    }
+
+    #[test]
+    fn legacy_app_config_without_preferences_gets_defaults() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let config_dir = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        fs::create_dir_all(&config_dir).unwrap();
+        fs::write(
+            config_dir.join("config.json"),
+            r#"{
+  "schema": 1,
+  "device_id": null,
+  "friendly_device_name": "Shop PC",
+  "peers": []
+}"#,
+        )
+        .unwrap();
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+        }
+
+        let loaded = load_app_config().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+        }
+
+        assert!(!loaded.preferences.auto_sync_saved_peers);
+        assert_eq!(loaded.preferences.auto_sync_interval_minutes, 15);
     }
 
     #[test]

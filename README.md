@@ -206,8 +206,8 @@ cargo run -p syncmyfonts-agent -- lan-sync \
 
 The first LAN MVP has lightweight UDP peer discovery, manual peer URLs, and an
 8-digit app pairing code that saves the generated LAN token for future syncs.
-The native GUI can also auto-sync saved LAN peers on an interval while the app
-is open. Bonjour/mDNS discovery, QR-code pairing, and tray/menu background
+The native GUI can also auto-sync saved LAN peers on a saved interval while the
+app is open. Bonjour/mDNS discovery, QR-code pairing, and tray/menu background
 agents for syncing after the window is closed are planned next-layer app
 features.
 

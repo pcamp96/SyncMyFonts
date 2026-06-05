@@ -26,7 +26,8 @@ still match the local manifest.
 When sharing is on, use `Copy URL` and `Copy Code` to move the LAN address and
 pairing code to the other computer without retyping.
 Turn on `Auto Sync Saved Peers` if this computer should keep checking saved LAN
-peers on an interval while the app stays open.
+peers on an interval while the app stays open. The app saves that preference in
+the per-user config so it survives relaunches.
 Use `Diagnostics` for a copyable support report, `Open Managed Folder` to see
 fonts installed by SyncMyFonts, and `Open Logs` to open the per-user action
 history folder.
