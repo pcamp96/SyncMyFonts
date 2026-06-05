@@ -171,14 +171,15 @@ The app MVP should reuse the current agent commands:
 ### Platform Safety
 
 - [x] SyncMyFonts writes a local managed-font manifest for fonts it installs.
+- [x] Default scans exclude SyncMyFonts-managed fonts using manifest ownership.
 
-- [ ] macOS scan excludes `/System/Library/Fonts`, `/Library/Fonts`, and
+- [x] macOS scan excludes `/System/Library/Fonts`, `/Library/Fonts`, and
   `/Network/Library/Fonts`.
-- [ ] macOS install does not request sudo and does not run font cache reset
+- [x] macOS install does not request sudo and does not run font cache reset
   commands.
-- [ ] Windows install never writes to `C:\Windows\Fonts`.
-- [ ] Windows install never writes to `HKLM`.
-- [ ] Windows install writes only current-user font registry entries.
+- [x] Windows install never writes to `C:\Windows\Fonts`.
+- [x] Windows install never writes to `HKLM`.
+- [x] Windows install writes only current-user font registry entries.
 - [x] Unsupported `.woff`, `.woff2`, or unknown extensions are skipped.
 - [x] Same file name with different bytes creates a deterministic suffixed file
   or another documented non-overwrite outcome.

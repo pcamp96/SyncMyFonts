@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     fs,
     io::Write,
     net::{SocketAddr, TcpStream, UdpSocket},
@@ -229,6 +229,20 @@ fn scan(include_managed: bool) -> Result<ScanOutput> {
     let mut warnings = Vec::new();
     let user_font_dir = user_font_dir()?;
     let managed_dir = managed_font_dir()?;
+    let skip_managed_dir = !include_managed && managed_dir != user_font_dir;
+    let managed_paths = if include_managed {
+        HashSet::new()
+    } else {
+        load_managed_manifest()
+            .map(|manifest| {
+                manifest
+                    .installed
+                    .into_iter()
+                    .map(|record| record.path)
+                    .collect::<HashSet<_>>()
+            })
+            .unwrap_or_default()
+    };
     let mut fonts = Vec::new();
 
     if !user_font_dir.exists() {
@@ -240,7 +254,11 @@ fn scan(include_managed: bool) -> Result<ScanOutput> {
         });
     }
 
-    for entry in WalkDir::new(&user_font_dir).follow_links(false).into_iter() {
+    for entry in WalkDir::new(&user_font_dir)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|entry| !(skip_managed_dir && entry.path() == managed_dir))
+    {
         let entry = match entry {
             Ok(entry) => entry,
             Err(error) => {
@@ -250,9 +268,9 @@ fn scan(include_managed: bool) -> Result<ScanOutput> {
         };
         let path = entry.path();
         if entry.file_type().is_dir() {
-            if !include_managed && path == managed_dir {
-                continue;
-            }
+            continue;
+        }
+        if !include_managed && managed_paths.contains(path) {
             continue;
         }
         if is_hidden(path) || is_temp_file(path) {
@@ -4133,6 +4151,88 @@ mod tests {
 
         assert!(error.to_string().contains("system-font-conflict"));
         assert!(!user_dir.join("Existing.ttf").exists());
+    }
+
+    #[test]
+    fn install_font_writes_only_inside_managed_user_font_dir() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let user_dir = root.join("user-fonts");
+        let system_dir = root.join("system-fonts");
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", &user_dir);
+            std::env::set_var("SYNCMYFONTS_SYSTEM_FONT_DIRS", &system_dir);
+            std::env::set_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION", "1");
+        }
+
+        let bytes = b"syncmyfonts managed user font bytes";
+        let sha256 = hex::encode(Sha256::digest(bytes));
+        let installed = install_font("ManagedOnly.ttf", &sha256, bytes).unwrap();
+        let managed_dir = managed_font_dir().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+            std::env::remove_var("SYNCMYFONTS_SYSTEM_FONT_DIRS");
+            std::env::remove_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION");
+        }
+
+        assert!(installed.starts_with(&managed_dir));
+        assert!(managed_dir.starts_with(&user_dir));
+        assert_eq!(fs::read(installed).unwrap(), bytes);
+        assert!(!system_dir.exists());
+    }
+
+    #[test]
+    fn scan_ignores_managed_fonts_by_default() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let config_dir = root.join("config");
+        let user_dir = root.join("user-fonts");
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", &user_dir);
+            std::env::set_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION", "1");
+        }
+
+        fs::create_dir_all(&user_dir).unwrap();
+        fs::write(user_dir.join("UserFont.ttf"), b"user font").unwrap();
+        let managed_dir = managed_font_dir().unwrap();
+        fs::create_dir_all(&managed_dir).unwrap();
+        let managed_path = managed_dir.join("ManagedFont.ttf");
+        let managed_bytes = b"managed font";
+        let managed_sha = hex::encode(Sha256::digest(managed_bytes));
+        fs::write(&managed_path, managed_bytes).unwrap();
+        record_managed_install(
+            "ManagedFont.ttf",
+            &managed_sha,
+            &managed_path,
+            "lan:http://127.0.0.1:7370",
+            managed_bytes.len() as u64,
+        )
+        .unwrap();
+
+        let default_scan = scan(false).unwrap();
+        let managed_scan = scan(true).unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+            std::env::remove_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION");
+        }
+
+        assert_eq!(
+            default_scan
+                .fonts
+                .iter()
+                .map(|font| font.file_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["UserFont.ttf"]
+        );
+        assert_eq!(managed_scan.fonts.len(), 2);
+        assert!(
+            managed_scan
+                .fonts
+                .iter()
+                .any(|font| font.file_name == "ManagedFont.ttf")
+        );
     }
 
     #[test]
