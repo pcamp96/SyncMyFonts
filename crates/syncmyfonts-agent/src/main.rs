@@ -1513,7 +1513,7 @@ async fn app_share_start(
             pairing_expires_seconds: None,
         }));
     }
-    let exe = std::env::current_exe().map_err(LanApiError::internal)?;
+    let exe = agent_command_exe().map_err(LanApiError::internal)?;
     let listen: SocketAddr = request
         .listen
         .unwrap_or_else(|| "0.0.0.0:7370".to_string())
@@ -2139,7 +2139,7 @@ impl SyncMyFontsGui {
                 return;
             }
         };
-        let exe = match std::env::current_exe() {
+        let exe = match agent_command_exe() {
             Ok(exe) => exe,
             Err(error) => {
                 self.output = format!("locating current executable failed: {error}");
@@ -2484,6 +2484,27 @@ fn platform_open_command(path: &Path) -> Command {
         command.arg(path);
         command
     }
+}
+
+fn agent_command_exe() -> Result<PathBuf> {
+    let current = std::env::current_exe().context("locating current executable")?;
+    let agent_name = if cfg!(target_os = "windows") {
+        "syncmyfonts-agent.exe"
+    } else {
+        "syncmyfonts-agent"
+    };
+    if current
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case(agent_name))
+    {
+        return Ok(current);
+    }
+    let sibling = current.with_file_name(agent_name);
+    if sibling.exists() {
+        return Ok(sibling);
+    }
+    Ok(current)
 }
 
 fn current_share_listen(state: &AppState) -> Result<Option<SocketAddr>, LanApiError> {

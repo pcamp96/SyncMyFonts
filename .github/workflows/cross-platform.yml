@@ -42,7 +42,7 @@ jobs:
         run: cargo test --workspace
 
       - name: Build agent release
-        run: cargo build --release -p syncmyfonts-agent
+        run: cargo build --release -p syncmyfonts-agent --bins
 
       - name: Verify macOS launcher scripts
         if: runner.os == 'macOS'
@@ -84,7 +84,11 @@ jobs:
           tar -C "$smoke_root" -xzf "$archive"
           package_dir=$(find "$smoke_root" -maxdepth 1 -type d -name 'syncmyfonts-macos-*' | head -n 1)
           test -x "$package_dir/bin/syncmyfonts-agent"
+          test -x "$package_dir/bin/syncmyfonts-gui"
           test -x "$package_dir/Start-SyncMyFonts.command"
+          test -x "$package_dir/SyncMyFonts.app/Contents/MacOS/SyncMyFonts"
+          test -x "$package_dir/SyncMyFonts.app/Contents/MacOS/syncmyfonts-agent"
+          plutil -lint "$package_dir/SyncMyFonts.app/Contents/Info.plist"
           SYNCMYFONTS_CONFIG_DIR="$smoke_root/config" \
           SYNCMYFONTS_LOG_DIR="$smoke_root/logs" \
           SYNCMYFONTS_USER_FONT_DIR="$smoke_root/fonts" \
@@ -116,8 +120,10 @@ jobs:
           Expand-Archive -Path $archive.FullName -DestinationPath $smokeRoot
           $packageDir = Get-ChildItem $smokeRoot -Directory -Filter "syncmyfonts-windows-*" | Select-Object -First 1
           $agent = Join-Path $packageDir.FullName "bin\syncmyfonts-agent.exe"
+          $gui = Join-Path $packageDir.FullName "bin\syncmyfonts-gui.exe"
           $launcher = Join-Path $packageDir.FullName "Start-SyncMyFonts.cmd"
           if (-not (Test-Path $agent)) { throw "Packaged agent missing" }
+          if (-not (Test-Path $gui)) { throw "Packaged GUI launcher missing" }
           if (-not (Test-Path $launcher)) { throw "Packaged launcher missing" }
           $env:SYNCMYFONTS_CONFIG_DIR = Join-Path $smokeRoot "config"
           $env:SYNCMYFONTS_LOG_DIR = Join-Path $smokeRoot "logs"

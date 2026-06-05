@@ -3,7 +3,11 @@ set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
-if [ -x "$script_dir/../../bin/syncmyfonts-agent" ]; then
+if [ -x "$script_dir/bin/syncmyfonts-gui" ]; then
+  agent="$script_dir/bin/syncmyfonts-gui"
+elif [ -x "$script_dir/../../bin/syncmyfonts-gui" ]; then
+  agent="$script_dir/../../bin/syncmyfonts-gui"
+elif [ -x "$script_dir/../../bin/syncmyfonts-agent" ]; then
   agent="$script_dir/../../bin/syncmyfonts-agent"
 elif [ -x "$script_dir/bin/syncmyfonts-agent" ]; then
   agent="$script_dir/bin/syncmyfonts-agent"
@@ -14,4 +18,7 @@ else
   exit 1
 fi
 
-"$agent" gui
+case "$(basename "$agent")" in
+  syncmyfonts-gui) "$agent" ;;
+  *) "$agent" gui ;;
+esac

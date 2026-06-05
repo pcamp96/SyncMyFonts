@@ -80,8 +80,11 @@ cargo build
 The agent includes a native cross-platform desktop GUI:
 
 ```bash
-cargo run -p syncmyfonts-agent -- gui
+cargo run -p syncmyfonts-agent --bin syncmyfonts-agent -- gui
 ```
+
+Release archives also include app-style launchers: `SyncMyFonts.app` on macOS
+and `bin\syncmyfonts-gui.exe` on Windows.
 
 The GUI can scan fonts, discover sharing LAN peers, test a LAN peer, preview
 missing fonts from a peer, install missing fonts, save LAN peers, sync all saved

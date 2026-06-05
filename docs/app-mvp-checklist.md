@@ -85,7 +85,8 @@ The app MVP should reuse the current agent commands:
 ### Shared
 
 - [ ] Signed or otherwise trusted app bundle/executable for each platform.
-- [ ] Bundled `syncmyfonts-agent` binary compiled for the target platform.
+- [x] Unsigned portable app-style launcher for each platform.
+- [x] Bundled `syncmyfonts-agent` binary compiled for the target platform.
 - [ ] Per-user config file with server URL, peer URL history, sync mode, and
   startup preference.
 - [x] Per-user log directory.
@@ -96,7 +97,7 @@ The app MVP should reuse the current agent commands:
 
 ### macOS
 
-- [ ] App bundle with Local Network usage copy if Bonjour, discovery, or bundled
+- [x] App bundle with Local Network usage copy if Bonjour, discovery, or bundled
   LAN access is used.
 - [x] Managed install folder:
   `~/Library/Fonts/SyncMyFonts`.
@@ -131,12 +132,13 @@ The app MVP should reuse the current agent commands:
   release archives.
 - [x] GitHub Actions smoke-tests the packaged agent inside each portable
   archive.
+- [x] GitHub Actions verifies the packaged GUI launcher/app wrapper is present.
 - [ ] Clean-machine smoke tests prove the portable archives launch the native
   app on macOS and Windows.
 - [ ] `cargo run -p syncmyfonts-agent -- scan` returns JSON inventory on macOS.
 - [ ] `cargo run -p syncmyfonts-agent -- scan` returns JSON inventory on
   Windows.
-- [ ] The packaged app invokes the same agent binary or library path as the CLI.
+- [x] The packaged app invokes the same agent binary or library path as the CLI.
 
 ### LAN Peer Sync
 

@@ -1,8 +1,9 @@
 # Release Build Notes
 
 The MVP release artifact is a portable archive containing the
-`syncmyfonts-agent` binary, platform launcher helpers, and app install docs.
-It is not yet a signed installer, notarized macOS `.app`, DMG, MSI, or MSIX.
+`syncmyfonts-agent` binary, a native GUI launcher, platform launcher helpers,
+and app install docs. It is not yet a signed installer, notarized app, DMG,
+MSI, or MSIX.
 
 ## macOS
 
@@ -34,13 +35,20 @@ dist\syncmyfonts-windows-<version>.zip
 
 ## MVP App Entry Point
 
-Both release folders start from the same command:
+The portable releases include app-style entry points:
+
+```text
+macOS:   SyncMyFonts.app
+Windows: bin\syncmyfonts-gui.exe
+```
+
+The fallback command remains:
 
 ```text
 syncmyfonts-agent gui
 ```
 
-That command launches the native SyncMyFonts GUI. It can scan fonts, start LAN
+Both paths launch the native SyncMyFonts GUI. It can scan fonts, start LAN
 sharing, show a copyable LAN URL and pairing code, discover sharing LAN peers,
 pair with a peer, test a LAN peer, preview missing fonts, install missing
 fonts, save LAN peers, sync all saved peers, stop LAN sharing, verify managed
@@ -63,7 +71,7 @@ Current artifacts are meant for MVP testing:
 - Windows: portable `.zip`; no MSI/MSIX or code-signed installer yet.
 
 The GitHub Actions build proves that the Rust workspace builds/tests on macOS
-and Windows, that portable archives are produced, and that the packaged agent
-inside each archive can run `diagnostics` with isolated per-user paths. It does
-not replace a clean-machine GUI launch test, code signing, notarization, or
-installer QA.
+and Windows, that portable archives are produced, that the app-style launchers
+are present, and that the packaged agent inside each archive can run
+`diagnostics` with isolated per-user paths. It does not replace a clean-machine
+GUI launch test, code signing, notarization, or installer QA.

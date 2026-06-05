@@ -19,12 +19,13 @@ New-Item -ItemType Directory -Force -Path (Join-Path $DistDir "bin"), (Join-Path
 
 Push-Location $RepoRoot
 try {
-    cargo build --release -p syncmyfonts-agent
+    cargo build --release -p syncmyfonts-agent --bins
 } finally {
     Pop-Location
 }
 
 Copy-Item (Join-Path $RepoRoot "target/release/syncmyfonts-agent.exe") (Join-Path $DistDir "bin/")
+Copy-Item (Join-Path $RepoRoot "target/release/syncmyfonts-gui.exe") (Join-Path $DistDir "bin/")
 Copy-Item -Recurse (Join-Path $RepoRoot "packaging/windows") (Join-Path $DistDir "packaging/")
 Copy-Item (Join-Path $RepoRoot "packaging/windows/Start-SyncMyFonts.cmd") $DistDir
 Copy-Item (Join-Path $RepoRoot "README.md") $DistDir
@@ -37,6 +38,10 @@ Set-Content -Path (Join-Path $DistDir "START-HERE.txt") -Encoding UTF8 -Value @"
 SyncMyFonts Windows MVP
 
 1. Double-click:
+   bin\syncmyfonts-gui.exe
+
+   If Windows asks whether to run the app, choose to run it for this MVP build.
+   You can also use:
    Start-SyncMyFonts.cmd
 
 2. The native SyncMyFonts window should open. If it does not, run:

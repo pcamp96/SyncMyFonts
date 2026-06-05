@@ -5,7 +5,14 @@ also exposes CLI commands for scripting and diagnostics.
 
 ## Start The Local App
 
-Run the native GUI from the release folder or a local build:
+Run the native GUI from the release folder:
+
+```text
+macOS:   SyncMyFonts.app
+Windows: bin\syncmyfonts-gui.exe
+```
+
+Or use the fallback command from a local build:
 
 ```sh
 syncmyfonts-agent gui
@@ -37,13 +44,18 @@ system fonts outside the sync ownership model.
 ## Build the Agent
 
 ```sh
-cargo build --release -p syncmyfonts-agent
+cargo build --release -p syncmyfonts-agent --bins
 ```
 
 The launcher helpers expect the built binary:
 
 - macOS: `target/release/syncmyfonts-agent`
 - Windows: `target\release\syncmyfonts-agent.exe`
+
+The portable GUI launchers are:
+
+- macOS: `target/release/syncmyfonts-gui`, wrapped as `SyncMyFonts.app`
+- Windows: `target\release\syncmyfonts-gui.exe`
 
 ## macOS
 
