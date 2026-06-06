@@ -160,6 +160,8 @@ The app MVP should reuse the current agent commands:
 - [x] GitHub Actions verifies the packaged GUI launcher/app wrapper is present.
 - [x] GitHub Actions smoke-tests packaged LAN serve/sync with isolated font
   roots, pairing code setup, and saved-peer sync.
+- [x] GitHub Actions Windows package smoke uses a generated valid TrueType font
+  and verifies current-user font registration after sync.
 - [x] GitHub Actions smoke-tests native GUI state initialization from the
   packaged macOS and Windows GUI launchers.
 - [x] GitHub Actions validation reports include managed-font registration

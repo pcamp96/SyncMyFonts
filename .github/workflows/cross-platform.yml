@@ -144,7 +144,7 @@ jobs:
           target_fonts="$smoke_root/target-fonts"
           target_config="$smoke_root/target-config"
           mkdir -p "$source_fonts" "$source_config" "$target_fonts" "$target_config"
-          printf 'packaged LAN smoke font\n' > "$source_fonts/PackagedSmoke.ttf"
+          python3 scripts/testing/generate-smoke-font.py "$source_fonts/PackagedSmoke.ttf"
           smoke_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
           SYNCMYFONTS_CONFIG_DIR="$source_config" \
           SYNCMYFONTS_LOG_DIR="$smoke_root/source-logs" \
@@ -162,17 +162,20 @@ jobs:
           SYNCMYFONTS_CONFIG_DIR="$target_config" \
           SYNCMYFONTS_LOG_DIR="$smoke_root/target-logs" \
           SYNCMYFONTS_USER_FONT_DIR="$target_fonts" \
-          SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION=1 \
           "$package_dir/bin/syncmyfonts-agent" lan-pair --name "Packaged Peer" --url "http://127.0.0.1:$smoke_port" --pairing-code 12345678 > "$smoke_root/lan-pair.json"
           grep -q '"has_lan_key"' "$smoke_root/lan-pair.json"
           SYNCMYFONTS_CONFIG_DIR="$target_config" \
           SYNCMYFONTS_LOG_DIR="$smoke_root/target-logs" \
           SYNCMYFONTS_USER_FONT_DIR="$target_fonts" \
-          SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION=1 \
           "$package_dir/bin/syncmyfonts-agent" lan-sync-all > "$smoke_root/lan-sync.json"
           grep -q '"ok": true' "$smoke_root/lan-sync.json"
           grep -q '"installed"' "$smoke_root/lan-sync.json"
           test -f "$target_fonts/SyncMyFonts/PackagedSmoke.ttf"
+          SYNCMYFONTS_CONFIG_DIR="$target_config" \
+          SYNCMYFONTS_LOG_DIR="$smoke_root/target-logs" \
+          SYNCMYFONTS_USER_FONT_DIR="$target_fonts" \
+          "$package_dir/bin/syncmyfonts-agent" verify-managed > "$smoke_root/verify-managed-after-sync.json"
+          grep -q '"registration_issues": \[\]' "$smoke_root/verify-managed-after-sync.json"
 
       - name: Upload macOS archive
         if: runner.os == 'macOS'
@@ -261,7 +264,7 @@ jobs:
           $targetFonts = Join-Path $smokeRoot "target-fonts"
           $targetConfig = Join-Path $smokeRoot "target-config"
           New-Item -ItemType Directory -Force -Path $sourceFonts, $sourceConfig, $targetFonts, $targetConfig | Out-Null
-          Set-Content -Path (Join-Path $sourceFonts "PackagedSmoke.ttf") -Encoding UTF8 -Value "packaged LAN smoke font"
+          python scripts/testing/generate-smoke-font.py (Join-Path $sourceFonts "PackagedSmoke.ttf")
           $serveEnv = @{
             SYNCMYFONTS_CONFIG_DIR = $sourceConfig
             SYNCMYFONTS_LOG_DIR = Join-Path $smokeRoot "source-logs"
@@ -287,7 +290,7 @@ jobs:
             $env:SYNCMYFONTS_CONFIG_DIR = $targetConfig
             $env:SYNCMYFONTS_LOG_DIR = Join-Path $smokeRoot "target-logs"
             $env:SYNCMYFONTS_USER_FONT_DIR = $targetFonts
-            $env:SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION = "1"
+            Remove-Item Env:SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION -ErrorAction SilentlyContinue
             & $agent lan-pair --name "Packaged Peer" --url "http://127.0.0.1:$smokePort" --pairing-code "12345678" | Tee-Object -FilePath (Join-Path $smokeRoot "lan-pair.json")
             $lanPair = Get-Content (Join-Path $smokeRoot "lan-pair.json") -Raw
             if (-not $lanPair.Contains('"has_lan_key"')) { throw "Packaged LAN pair did not report saved key state" }
@@ -295,6 +298,12 @@ jobs:
             $lanSync = Get-Content (Join-Path $smokeRoot "lan-sync.json") -Raw
             if (-not $lanSync.Contains('"ok": true')) { throw "Packaged LAN sync did not report success" }
             if (-not (Test-Path (Join-Path $targetFonts "PackagedSmoke.ttf"))) { throw "Packaged LAN sync did not install the font" }
+            & $agent verify-managed | Tee-Object -FilePath (Join-Path $smokeRoot "verify-managed-after-sync.json")
+            $verifyManagedAfterSync = Get-Content (Join-Path $smokeRoot "verify-managed-after-sync.json") -Raw
+            if (-not $verifyManagedAfterSync.Contains('"registration_issues": []')) { throw "Managed font registration verification was not clean after sync" }
+            reg query "HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts" /v "PackagedSmoke (SyncMyFonts)" | Tee-Object -FilePath (Join-Path $smokeRoot "font-registry.txt")
+            $fontRegistry = Get-Content (Join-Path $smokeRoot "font-registry.txt") -Raw
+            if (-not $fontRegistry.Contains((Join-Path $targetFonts "PackagedSmoke.ttf"))) { throw "Windows font registry did not point at synced smoke font" }
           } finally {
             if ($serve -and -not $serve.HasExited) {
               Stop-Process -Id $serve.Id -Force
