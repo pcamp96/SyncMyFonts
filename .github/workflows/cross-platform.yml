@@ -160,6 +160,8 @@ jobs:
           assert "paste the sharing computer" in gui["manual_peer_fallback_guidance"]
           matrix_names = {direction["name"] for direction in gui["sync_validation_matrix"]}
           assert matrix_names == {"macOS to Windows", "Windows to macOS"}
+          assert "SyncMyFonts LAN MVP validation" in gui["validation_checklist_text"]
+          assert "system fonts were not offered" in gui["validation_checklist_text"]
           assert gui["message"].startswith("Native GUI state initialized")
           PY
           grep -q '"log_dir"' "$smoke_root/diagnostics.json"
@@ -308,6 +310,8 @@ jobs:
           $matrixNames = @($guiSelfTestJson.sync_validation_matrix | ForEach-Object { $_.name })
           if (-not ($matrixNames -contains "macOS to Windows")) { throw "GUI self-test macOS-to-Windows matrix row missing" }
           if (-not ($matrixNames -contains "Windows to macOS")) { throw "GUI self-test Windows-to-macOS matrix row missing" }
+          if (-not $guiSelfTestJson.validation_checklist_text.Contains("SyncMyFonts LAN MVP validation")) { throw "GUI self-test validation checklist missing" }
+          if (-not $guiSelfTestJson.validation_checklist_text.Contains("system fonts were not offered")) { throw "GUI self-test system-font validation note missing" }
           if (-not $diagnostics.Contains('"support_report_text"')) { throw "Diagnostics support report missing" }
           if (-not $diagnostics.Contains('"log_dir"')) { throw "Diagnostics log dir missing" }
           if (-not $doctor.Contains('"checks"')) { throw "Doctor checks missing" }

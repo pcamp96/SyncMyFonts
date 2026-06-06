@@ -899,6 +899,7 @@ struct GuiSelfTestReport {
     lan_sharing_guidance: &'static str,
     manual_peer_fallback_guidance: &'static str,
     sync_validation_matrix: Vec<SyncValidationDirection>,
+    validation_checklist_text: String,
     saved_peer_count: usize,
     selected_peer_name: String,
     listen: String,
@@ -1625,6 +1626,41 @@ fn sync_validation_matrix() -> Vec<SyncValidationDirection> {
     ]
 }
 
+fn validation_checklist_text() -> String {
+    let mut lines = vec![
+        "SyncMyFonts LAN MVP validation".to_string(),
+        "".to_string(),
+        "Before syncing on both computers:".to_string(),
+    ];
+    lines.extend(
+        manual_validation_steps()
+            .into_iter()
+            .take(2)
+            .map(|step| format!("- {step}")),
+    );
+    lines.push(
+        "- Confirm the managed font folder is a per-user path and no administrator prompt appears."
+            .to_string(),
+    );
+    lines.push("".to_string());
+    lines.push("Required sync directions:".to_string());
+    for direction in sync_validation_matrix() {
+        lines.push(format!("- {}", direction.name));
+        lines.push(format!("  Source: {}", direction.source_computer));
+        lines.push(format!("  Target: {}", direction.target_computer));
+        lines.push("  Prove:".to_string());
+        for criterion in direction.pass_criteria {
+            lines.push(format!("  - {criterion}"));
+        }
+    }
+    lines.push("".to_string());
+    lines.push("After syncing on both computers:".to_string());
+    lines.push("- Run Validation Report and Verify Managed Fonts.".to_string());
+    lines.push("- Confirm system fonts were not offered for sync.".to_string());
+    lines.push("- Reopen the design app and confirm the synced font appears.".to_string());
+    lines.join("\n")
+}
+
 fn manual_validation_pass_criteria() -> Vec<String> {
     vec![
         "Native GUI launches on both platforms without administrator privileges.".to_string(),
@@ -2253,6 +2289,7 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         lan_sharing_guidance: platform_lan_sharing_guidance(),
         manual_peer_fallback_guidance: platform_manual_peer_fallback_guidance(),
         sync_validation_matrix: sync_validation_matrix(),
+        validation_checklist_text: validation_checklist_text(),
         saved_peer_count: app.saved_peer_names.len(),
         selected_peer_name: app.selected_peer_name.clone(),
         listen: app.listen.clone(),
@@ -3282,6 +3319,23 @@ impl eframe::App for SyncMyFontsGui {
                 }
                 if ui.button("Validation Report").clicked() {
                     self.run_validation_report();
+                }
+                if ui.button("Copy Validation Plan").clicked() {
+                    let checklist = validation_checklist_text();
+                    ui.ctx().copy_text(checklist.clone());
+                    self.next_step = "Validation plan copied. Use it on the Mac and Windows PC while proving both sync directions.".to_string();
+                    self.output = checklist;
+                    self.last_result = format!(
+                        "Copy Validation Plan completed at {}",
+                        Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+                    );
+                    self.warning_count = 0;
+                    let _ = record_action(
+                        "Copy Validation Plan",
+                        "success",
+                        0,
+                        &self.next_step,
+                    );
                 }
                 if ui.button("Open Managed Folder").clicked() {
                     self.open_managed_font_folder();
@@ -6341,7 +6395,33 @@ mod tests {
                 .iter()
                 .any(|direction| direction.name == "Windows to macOS")
         );
+        assert!(
+            report
+                .validation_checklist_text
+                .contains("SyncMyFonts LAN MVP validation")
+        );
+        assert!(
+            report
+                .validation_checklist_text
+                .contains("macOS to Windows")
+        );
+        assert!(
+            report
+                .validation_checklist_text
+                .contains("Windows to macOS")
+        );
         assert!(!json.contains("super-secret-lan-key"));
+    }
+
+    #[test]
+    fn validation_checklist_text_summarizes_real_clean_machine_proof() {
+        let checklist = validation_checklist_text();
+
+        assert!(checklist.contains("current user"));
+        assert!(checklist.contains("system fonts were not offered"));
+        assert!(checklist.contains("macOS to Windows"));
+        assert!(checklist.contains("Windows to macOS"));
+        assert!(checklist.contains("Reopen the design app"));
     }
 
     #[test]

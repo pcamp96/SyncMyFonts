@@ -69,6 +69,8 @@ The app MVP should reuse the current agent commands:
 - [x] `Sync Saved Peers` wraps `syncmyfonts-agent lan-sync-all`.
 - [x] `Diagnostics` wraps `syncmyfonts-agent diagnostics`.
 - [x] `Validation Report` wraps `syncmyfonts-agent validation-report`.
+- [x] `Copy Validation Plan` copies a concise Mac-to-Windows and
+  Windows-to-Mac clean-machine proof checklist from the native GUI.
 - [x] `Verify Managed Fonts` wraps `syncmyfonts-agent verify-managed`.
 - [x] `Repair Managed Fonts` wraps `syncmyfonts-agent repair-managed`.
 - [x] `Install Validation Font` wraps
@@ -120,6 +122,8 @@ The app MVP should reuse the current agent commands:
   config paths, font paths, last command, and last result.
 - [x] Native GUI copy buttons for the current result and latest redacted
   support report.
+- [x] Native GUI can copy the clean-machine validation plan without opening
+  docs or a browser.
 
 ### macOS
 
@@ -179,6 +183,8 @@ The app MVP should reuse the current agent commands:
   health signals.
 - [x] GitHub Actions verifies packaged validation reports include both
   Mac-to-Windows and Windows-to-Mac evidence rows.
+- [x] GitHub Actions verifies packaged GUI self-test exposes a copyable
+  clean-machine validation checklist.
 - [x] macOS managed verification checks CoreText loadability for intact managed
   font files.
 - [x] Manual clean-machine validation checklist exists for real macOS-to-Windows
