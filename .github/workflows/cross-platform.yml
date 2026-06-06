@@ -156,6 +156,8 @@ jobs:
           assert any("Preview From Peer" in step for step in gui["first_run_steps"])
           assert gui["saved_peer_count"] == 0
           assert "Pairing mode" in gui["setup_phase"]
+          assert "This computer" in gui["role_card_text"]
+          assert "Other computer" in gui["role_card_text"]
           assert "Local Network access" in gui["lan_sharing_guidance"]
           assert "No port forwarding" in gui["lan_sharing_guidance"]
           assert "paste the sharing computer" in gui["manual_peer_fallback_guidance"]
@@ -305,6 +307,8 @@ jobs:
           if (-not ($firstRunSteps | Where-Object { $_.Contains("Preview From Peer") })) { throw "GUI first-run steps omitted preview guidance" }
           if ($guiSelfTestJson.saved_peer_count -ne 0) { throw "GUI self-test unexpectedly loaded saved peers" }
           if (-not $guiSelfTestJson.setup_phase.Contains("Pairing mode")) { throw "GUI self-test setup phase did not explain pairing mode" }
+          if (-not $guiSelfTestJson.role_card_text.Contains("This computer")) { throw "GUI self-test role card omitted this-computer guidance" }
+          if (-not $guiSelfTestJson.role_card_text.Contains("Other computer")) { throw "GUI self-test role card omitted other-computer guidance" }
           if (-not $guiSelfTestJson.lan_sharing_guidance.Contains("Windows Firewall")) { throw "GUI self-test omitted Windows firewall hosting guidance" }
           if (-not $guiSelfTestJson.lan_sharing_guidance.Contains("No port forwarding")) { throw "GUI self-test omitted no-port-forwarding guidance" }
           if (-not $guiSelfTestJson.manual_peer_fallback_guidance.Contains("Client-only sync should not need an inbound firewall prompt")) { throw "GUI self-test omitted Windows client-only firewall guidance" }
