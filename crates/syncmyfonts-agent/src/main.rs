@@ -867,7 +867,18 @@ struct ValidationReport {
     managed_fonts: ManagedVerifyReport,
     evidence_summary: Vec<String>,
     manual_validation_steps: Vec<String>,
+    sync_validation_matrix: Vec<SyncValidationDirection>,
     pass_criteria: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct SyncValidationDirection {
+    name: &'static str,
+    source_computer: &'static str,
+    target_computer: &'static str,
+    source_evidence: Vec<&'static str>,
+    target_evidence: Vec<&'static str>,
+    pass_criteria: Vec<&'static str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1485,6 +1496,7 @@ fn validation_report() -> Result<ValidationReport> {
         managed_fonts,
         evidence_summary,
         manual_validation_steps: manual_validation_steps(),
+        sync_validation_matrix: sync_validation_matrix(),
         pass_criteria: manual_validation_pass_criteria(),
     })
 }
@@ -1562,6 +1574,53 @@ fn manual_validation_steps() -> Vec<String> {
         "Run the same sync again and confirm the already installed font is skipped.".to_string(),
         "Repeat the flow in the other direction with a different non-system test font.".to_string(),
         "Run Validation Report again on both computers and keep the before/after JSON as evidence.".to_string(),
+    ]
+}
+
+fn sync_validation_matrix() -> Vec<SyncValidationDirection> {
+    vec![
+        SyncValidationDirection {
+            name: "macOS to Windows",
+            source_computer: "macOS computer that already has a licensed non-system test font",
+            target_computer: "Windows computer missing that test font",
+            source_evidence: vec![
+                "Before-sync Validation Report from macOS",
+                "Screenshot or copied result after Share Fonts On LAN shows a LAN URL and pairing code",
+                "After-sync Validation Report from macOS",
+            ],
+            target_evidence: vec![
+                "Before-sync Validation Report from Windows",
+                "Copied Preview From Peer result showing the test font as missing/installable",
+                "Copied Get Missing Fonts result showing the test font installed",
+                "After-sync Validation Report from Windows with clean managed-font verification",
+            ],
+            pass_criteria: vec![
+                "Windows installs the font for the current user without an administrator prompt",
+                "Windows scan sees the synced font after install",
+                "Running the same sync again skips the already installed font",
+            ],
+        },
+        SyncValidationDirection {
+            name: "Windows to macOS",
+            source_computer: "Windows computer that already has a different licensed non-system test font",
+            target_computer: "macOS computer missing that test font",
+            source_evidence: vec![
+                "Before-sync Validation Report from Windows",
+                "Screenshot or copied result after Share Fonts On LAN shows a LAN URL and pairing code",
+                "After-sync Validation Report from Windows",
+            ],
+            target_evidence: vec![
+                "Before-sync Validation Report from macOS",
+                "Copied Preview From Peer result showing the test font as missing/installable",
+                "Copied Get Missing Fonts result showing the test font installed",
+                "After-sync Validation Report from macOS with clean managed-font verification",
+            ],
+            pass_criteria: vec![
+                "macOS installs the font into the SyncMyFonts managed user font folder",
+                "macOS scan sees the synced font after install",
+                "Running the same sync again skips the already installed font",
+            ],
+        },
     ]
 }
 
@@ -6776,6 +6835,21 @@ mod tests {
                 .iter()
                 .any(|step| step.contains("Repeat the flow in the other direction"))
         );
+        assert_eq!(report.sync_validation_matrix.len(), 2);
+        assert!(report.sync_validation_matrix.iter().any(|direction| {
+            direction.name == "macOS to Windows"
+                && direction
+                    .target_evidence
+                    .iter()
+                    .any(|evidence| evidence.contains("Preview From Peer"))
+        }));
+        assert!(report.sync_validation_matrix.iter().any(|direction| {
+            direction.name == "Windows to macOS"
+                && direction
+                    .pass_criteria
+                    .iter()
+                    .any(|criterion| criterion.contains("managed user font folder"))
+        }));
         assert!(
             report
                 .pass_criteria
@@ -6815,6 +6889,9 @@ mod tests {
                 .starts_with("validation-report-")
         );
         assert!(file.contains("\"manual_validation_steps\""));
+        assert!(file.contains("\"sync_validation_matrix\""));
+        assert!(file.contains("macOS to Windows"));
+        assert!(file.contains("Windows to macOS"));
         assert!(file.contains("\"pass_criteria\""));
         assert!(saved.message.contains("Validation report saved"));
     }

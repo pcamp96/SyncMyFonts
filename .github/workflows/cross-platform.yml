@@ -165,6 +165,9 @@ jobs:
           grep -q '"saved-peers"' "$smoke_root/doctor.json"
           grep -q '"registration_issues"' "$smoke_root/validation-report.json"
           grep -q '"manual_validation_steps"' "$smoke_root/validation-report.json"
+          grep -q '"sync_validation_matrix"' "$smoke_root/validation-report.json"
+          grep -q 'macOS to Windows' "$smoke_root/validation-report.json"
+          grep -q 'Windows to macOS' "$smoke_root/validation-report.json"
           grep -q '"pass_criteria"' "$smoke_root/validation-report.json"
           grep -q '"path"' "$smoke_root/validation-report-file.json"
           grep -q '"repaired"' "$smoke_root/repair-managed.json"
@@ -306,6 +309,9 @@ jobs:
           if (-not $doctor.Contains('"saved-peers"')) { throw "Doctor saved peer check missing" }
           if (-not $validationReport.Contains('"registration_issues"')) { throw "Validation report registration issues missing" }
           if (-not $validationReport.Contains('"manual_validation_steps"')) { throw "Validation report manual steps missing" }
+          if (-not $validationReport.Contains('"sync_validation_matrix"')) { throw "Validation report sync validation matrix missing" }
+          if (-not $validationReport.Contains("macOS to Windows")) { throw "Validation report macOS-to-Windows matrix row missing" }
+          if (-not $validationReport.Contains("Windows to macOS")) { throw "Validation report Windows-to-macOS matrix row missing" }
           if (-not $validationReport.Contains('"pass_criteria"')) { throw "Validation report pass criteria missing" }
           if (-not $validationReportFile.Contains('"path"')) { throw "Validation report file path missing" }
           if (-not $repairManaged.Contains('"repaired"')) { throw "Repair managed report repaired list missing" }

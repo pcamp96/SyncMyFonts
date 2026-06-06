@@ -113,6 +113,8 @@ The app MVP should reuse the current agent commands:
 - [x] Readiness check for local paths, saved peers, and sign-in sync helper.
 - [x] Validation report that bundles diagnostics, readiness, managed font
   verification, and manual clean-machine pass criteria.
+- [x] Validation report includes a Mac-to-Windows and Windows-to-Mac evidence
+  matrix for before/after clean-machine testing.
 - [x] A short first-run setup path for manual peer URL entry.
 - [x] A copyable support report with app version, agent version, platform,
   config paths, font paths, last command, and last result.
@@ -175,6 +177,8 @@ The app MVP should reuse the current agent commands:
   and Windows after installing the OFL validation font.
 - [x] GitHub Actions validation reports include managed-font registration
   health signals.
+- [x] GitHub Actions verifies packaged validation reports include both
+  Mac-to-Windows and Windows-to-Mac evidence rows.
 - [x] macOS managed verification checks CoreText loadability for intact managed
   font files.
 - [x] Manual clean-machine validation checklist exists for real macOS-to-Windows
