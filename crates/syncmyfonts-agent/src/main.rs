@@ -884,6 +884,7 @@ struct GuiSelfTestReport {
     version: &'static str,
     status: String,
     next_step: String,
+    first_run_steps: Vec<String>,
     saved_peer_count: usize,
     selected_peer_name: String,
     listen: String,
@@ -2186,6 +2187,7 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         version: env!("CARGO_PKG_VERSION"),
         status: app.status.clone(),
         next_step: app.next_step.clone(),
+        first_run_steps: app.first_run_steps(),
         saved_peer_count: app.saved_peer_names.len(),
         selected_peer_name: app.selected_peer_name.clone(),
         listen: app.listen.clone(),
@@ -3018,6 +3020,73 @@ impl SyncMyFontsGui {
         }
     }
 
+    fn first_run_steps(&self) -> Vec<String> {
+        let mut steps = Vec::new();
+        steps.push(
+            "1. Optional test font: click Install Validation Font on one computer, or use another non-system font you are licensed to sync."
+                .to_string(),
+        );
+
+        if self.share.is_some() {
+            let pairing_hint = self
+                .last_pairing_code
+                .as_ref()
+                .map(|code| format!(" Pairing code {code} is active."))
+                .unwrap_or_else(|| {
+                    " Use the shared key you typed here, or restart sharing with Shared Key blank for a short pairing code."
+                        .to_string()
+                });
+            steps.push(format!(
+                "2. This computer is sharing fonts on the LAN.{} Copy the URL or let the other computer discover it.",
+                pairing_hint
+            ));
+        } else {
+            steps.push(
+                "2. On the computer that already has the font, leave Shared Key blank and click Share Fonts On LAN."
+                    .to_string(),
+            );
+        }
+
+        if self.peer_url.trim().is_empty() {
+            steps.push(
+                "3. On the other computer, click Find LAN Peers, select the sharing computer, then enter the pairing code."
+                    .to_string(),
+            );
+        } else if self.peer_key.trim().is_empty() && self.pairing_code.trim().is_empty() {
+            steps.push(format!(
+                "3. Peer URL loaded for {}. Enter its pairing code, then click Pair Peer.",
+                if self.peer_name.trim().is_empty() {
+                    "that computer"
+                } else {
+                    self.peer_name.trim()
+                }
+            ));
+        } else {
+            steps.push(
+                "3. Peer details are filled in. Click Pair Peer to save the secure LAN token for future syncs."
+                    .to_string(),
+            );
+        }
+
+        if self.saved_peer_names.is_empty() {
+            steps.push(
+                "4. After pairing, click Preview From Peer first, then Get Missing Fonts when the preview looks right."
+                    .to_string(),
+            );
+        } else {
+            steps.push(format!(
+                "4. Saved peers ready: {}. Use Preview From Peer or Sync Saved Peers before installing.",
+                self.saved_peer_names.join(", ")
+            ));
+        }
+
+        steps.push(
+            "5. Reopen design apps after installing fonts if they do not appear immediately."
+                .to_string(),
+        );
+        steps
+    }
+
     fn stop_share(&mut self) {
         let Some(mut share) = self.share.take() else {
             self.next_step = "Sharing is already off.".to_string();
@@ -3116,6 +3185,12 @@ impl eframe::App for SyncMyFontsGui {
         });
         if let Some(action) = &self.current_action {
             ui.label(format!("{action} is still running..."));
+        }
+
+        ui.separator();
+        ui.heading("First LAN Sync");
+        for step in self.first_run_steps() {
+            ui.label(step);
         }
 
         ui.separator();
@@ -6168,7 +6243,53 @@ mod tests {
         assert_eq!(report.selected_peer_name, "Shop PC");
         assert_eq!(report.listen, AppPreferences::default().lan_listen_address);
         assert!(report.message.contains("Native GUI state initialized"));
+        assert!(
+            report
+                .first_run_steps
+                .iter()
+                .any(|step| step.contains("Install Validation Font"))
+        );
+        assert!(
+            report
+                .first_run_steps
+                .iter()
+                .any(|step| step.contains("Preview From Peer"))
+        );
         assert!(!json.contains("super-secret-lan-key"));
+    }
+
+    #[test]
+    fn gui_first_run_steps_react_to_pairing_state() {
+        let mut app = SyncMyFontsGui::new();
+
+        let initial_steps = app.first_run_steps();
+        assert!(
+            initial_steps
+                .iter()
+                .any(|step| step.contains("Shared Key blank"))
+        );
+        assert!(
+            initial_steps
+                .iter()
+                .any(|step| step.contains("Find LAN Peers"))
+        );
+
+        app.peer_name = "Shop PC".to_string();
+        app.peer_url = "http://192.168.1.25:7370".to_string();
+        let loaded_peer_steps = app.first_run_steps();
+        assert!(
+            loaded_peer_steps
+                .iter()
+                .any(|step| step.contains("Enter its pairing code"))
+        );
+
+        app.peer_key = "saved-token".to_string();
+        let keyed_steps = app.first_run_steps();
+        assert!(
+            keyed_steps
+                .iter()
+                .any(|step| step.contains("Peer details are filled in"))
+        );
     }
 
     #[test]
