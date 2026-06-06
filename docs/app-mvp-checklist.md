@@ -154,8 +154,8 @@ The app MVP should reuse the current agent commands:
 
 ### Repo And Build
 
-- [ ] `cargo build` succeeds on macOS.
-- [ ] `cargo build` succeeds on Windows.
+- [x] `cargo build` succeeds on macOS.
+- [x] `cargo build` succeeds on Windows.
 - [x] GitHub Actions builds/tests on macOS and Windows and produces portable
   release archives.
 - [x] GitHub Actions smoke-tests the packaged agent inside each portable
@@ -167,6 +167,10 @@ The app MVP should reuse the current agent commands:
   and verifies current-user font registration after sync.
 - [x] GitHub Actions smoke-tests native GUI state initialization from the
   packaged macOS and Windows GUI launchers.
+- [x] GitHub Actions verifies the Windows release archive uses the resolved
+  Cargo package version instead of the workspace-inheritance marker.
+- [x] GitHub Actions parses packaged `scan` output as JSON inventory on macOS
+  and Windows after installing the OFL validation font.
 - [x] GitHub Actions validation reports include managed-font registration
   health signals.
 - [x] macOS managed verification checks CoreText loadability for intact managed
@@ -175,9 +179,8 @@ The app MVP should reuse the current agent commands:
   and Windows-to-macOS app testing.
 - [ ] Clean-machine smoke tests prove the portable archives launch the native
   app on macOS and Windows.
-- [ ] `cargo run -p syncmyfonts-agent -- scan` returns JSON inventory on macOS.
-- [ ] `cargo run -p syncmyfonts-agent -- scan` returns JSON inventory on
-  Windows.
+- [x] Packaged `syncmyfonts-agent scan` returns JSON inventory on macOS.
+- [x] Packaged `syncmyfonts-agent scan` returns JSON inventory on Windows.
 - [x] The packaged app invokes the same agent binary or library path as the CLI.
 
 ### LAN Peer Sync
