@@ -133,6 +133,8 @@ enum Commands {
     InstallAppShortcuts,
     /// Run the native desktop GUI.
     Gui,
+    /// Initialize native GUI state without opening a window.
+    GuiSelfTest,
     /// Run the local desktop control surface.
     App {
         #[arg(long, default_value = "127.0.0.1:7380")]
@@ -260,6 +262,9 @@ fn main() -> Result<()> {
         }
         Commands::Gui => {
             run_gui()?;
+        }
+        Commands::GuiSelfTest => {
+            print_json(&gui_self_test()?)?;
         }
         Commands::App { listen, no_open } => {
             let runtime = tokio::runtime::Runtime::new().context("starting app runtime")?;
@@ -853,6 +858,25 @@ struct ValidationReport {
 struct ValidationReportFile {
     path: PathBuf,
     report: ValidationReport,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+struct GuiSelfTestReport {
+    ok: bool,
+    platform: &'static str,
+    version: &'static str,
+    status: String,
+    next_step: String,
+    saved_peer_count: usize,
+    selected_peer_name: String,
+    listen: String,
+    auto_sync_enabled: bool,
+    auto_sync_interval_minutes: u64,
+    config_path: PathBuf,
+    log_dir: PathBuf,
+    user_font_dir: PathBuf,
+    managed_font_dir: PathBuf,
     message: String,
 }
 
@@ -2086,6 +2110,37 @@ fn run_gui() -> Result<()> {
         Box::new(|_cc| Ok(Box::new(SyncMyFontsGui::new()))),
     )
     .map_err(|error| anyhow!("running SyncMyFonts GUI: {error}"))
+}
+
+fn gui_self_test() -> Result<GuiSelfTestReport> {
+    let app = SyncMyFontsGui::new();
+    Ok(GuiSelfTestReport {
+        ok: true,
+        platform: platform_name(),
+        version: env!("CARGO_PKG_VERSION"),
+        status: app.status.clone(),
+        next_step: app.next_step.clone(),
+        saved_peer_count: app.saved_peer_names.len(),
+        selected_peer_name: app.selected_peer_name.clone(),
+        listen: app.listen.clone(),
+        auto_sync_enabled: app.auto_sync_enabled,
+        auto_sync_interval_minutes: app.auto_sync_interval_minutes,
+        config_path: app_config_path()?,
+        log_dir: app_log_dir()?,
+        user_font_dir: user_font_dir()?,
+        managed_font_dir: managed_font_dir()?,
+        message:
+            "Native GUI state initialized without opening a window. Use clean-machine testing to prove interactive launch."
+                .to_string(),
+    })
+}
+
+pub fn run_native_gui_from_args() -> Result<()> {
+    if std::env::args().nth(1).as_deref() == Some("--self-test") {
+        print_json(&gui_self_test()?)?;
+        return Ok(());
+    }
+    run_gui()
 }
 
 struct SyncMyFontsGui {
@@ -5692,6 +5747,38 @@ mod tests {
         assert_eq!(app.peer_name, "Shop PC");
         assert_eq!(app.peer_url, "http://192.168.1.20:7370");
         assert_eq!(app.peer_key, "shop-key");
+    }
+
+    #[test]
+    fn gui_self_test_initializes_native_gui_state_without_secrets() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", root.join("config"));
+            std::env::set_var("SYNCMYFONTS_LOG_DIR", root.join("logs"));
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", root.join("fonts"));
+        }
+        add_lan_peer(
+            "Shop PC".to_string(),
+            "http://127.0.0.1:7370".to_string(),
+            Some("super-secret-lan-key".to_string()),
+        )
+        .unwrap();
+
+        let report = gui_self_test().unwrap();
+        let json = serde_json::to_string(&report).unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_LOG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+        }
+
+        assert!(report.ok);
+        assert_eq!(report.saved_peer_count, 1);
+        assert_eq!(report.selected_peer_name, "Shop PC");
+        assert_eq!(report.listen, AppPreferences::default().lan_listen_address);
+        assert!(report.message.contains("Native GUI state initialized"));
+        assert!(!json.contains("super-secret-lan-key"));
     }
 
     #[test]
