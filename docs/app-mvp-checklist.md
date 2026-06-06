@@ -118,6 +118,8 @@ The app MVP should reuse the current agent commands:
 - [x] Validation report includes a Mac-to-Windows and Windows-to-Mac evidence
   matrix for before/after clean-machine testing.
 - [x] A short first-run setup path for manual peer URL entry.
+- [x] Native GUI shows the current first-run phase: pairing, sharing, preview,
+  or sync.
 - [x] A copyable support report with app version, agent version, platform,
   config paths, font paths, last command, and last result.
 - [x] Native GUI copy buttons for the current result and latest redacted

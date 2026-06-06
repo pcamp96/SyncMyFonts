@@ -894,6 +894,7 @@ struct GuiSelfTestReport {
     platform: &'static str,
     version: &'static str,
     status: String,
+    setup_phase: String,
     next_step: String,
     first_run_steps: Vec<String>,
     lan_sharing_guidance: &'static str,
@@ -2284,6 +2285,7 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         platform: platform_name(),
         version: env!("CARGO_PKG_VERSION"),
         status: app.status.clone(),
+        setup_phase: app.setup_phase(),
         next_step: app.next_step.clone(),
         first_run_steps: app.first_run_steps(),
         lan_sharing_guidance: platform_lan_sharing_guidance(),
@@ -3189,6 +3191,36 @@ impl SyncMyFontsGui {
         steps
     }
 
+    fn setup_phase(&self) -> String {
+        if self.share.is_some() {
+            if let Some(code) = &self.last_pairing_code {
+                return format!(
+                    "Sharing mode: copy this computer's LAN URL and pairing code {code} to the other computer."
+                );
+            }
+            return "Sharing mode: copy this computer's LAN URL and use the shared key on the other computer."
+                .to_string();
+        }
+
+        if self.peer_url.trim().is_empty() {
+            return "Pairing mode: this computer is ready to find or enter the sharing computer's LAN URL."
+                .to_string();
+        }
+
+        if self.peer_key.trim().is_empty() && self.pairing_code.trim().is_empty() {
+            return "Pairing mode: enter the code shown on the sharing computer, then click Pair Peer."
+                .to_string();
+        }
+
+        if self.saved_peer_names.is_empty() {
+            return "Preview mode: peer details are filled in; preview before installing missing fonts."
+                .to_string();
+        }
+
+        "Sync mode: saved peers are ready; preview or sync missing fonts, then repeat in the other direction if needed."
+            .to_string()
+    }
+
     fn stop_share(&mut self) {
         let Some(mut share) = self.share.take() else {
             self.next_step = "Sharing is already off.".to_string();
@@ -3291,6 +3323,7 @@ impl eframe::App for SyncMyFontsGui {
 
         ui.separator();
         ui.heading("First LAN Sync");
+        ui.label(self.setup_phase());
         for step in self.first_run_steps() {
             ui.label(step);
         }
@@ -6360,6 +6393,7 @@ mod tests {
         }
 
         assert!(report.ok);
+        assert!(report.setup_phase.contains("Sync mode"));
         assert_eq!(report.saved_peer_count, 1);
         assert_eq!(report.selected_peer_name, "Shop PC");
         assert_eq!(report.listen, AppPreferences::default().lan_listen_address);
@@ -6452,9 +6486,11 @@ mod tests {
                 .any(|step| step.contains("Find LAN Peers"))
         );
         assert!(platform_manual_peer_fallback_guidance().contains("manually"));
+        assert!(app.setup_phase().contains("Pairing mode"));
 
         app.peer_name = "Shop PC".to_string();
         app.peer_url = "http://192.168.1.25:7370".to_string();
+        assert!(app.setup_phase().contains("enter the code"));
         let loaded_peer_steps = app.first_run_steps();
         assert!(
             loaded_peer_steps
@@ -6463,12 +6499,16 @@ mod tests {
         );
 
         app.peer_key = "saved-token".to_string();
+        assert!(app.setup_phase().contains("Preview mode"));
         let keyed_steps = app.first_run_steps();
         assert!(
             keyed_steps
                 .iter()
                 .any(|step| step.contains("Peer details are filled in"))
         );
+
+        app.saved_peer_names = vec!["Shop PC".to_string()];
+        assert!(app.setup_phase().contains("Sync mode"));
     }
 
     #[test]
