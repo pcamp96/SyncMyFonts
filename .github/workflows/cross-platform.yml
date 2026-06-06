@@ -139,6 +139,21 @@ jobs:
           grep -q '"support_report_text"' "$smoke_root/diagnostics.json"
           grep -q '"ok": true' "$smoke_root/gui-self-test.json"
           grep -q '"Native GUI state initialized' "$smoke_root/gui-self-test.json"
+          python3 - "$smoke_root/gui-self-test.json" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], "r", encoding="utf-8") as handle:
+              gui = json.load(handle)
+          assert gui["ok"] is True
+          assert gui["platform"] == "macos"
+          assert isinstance(gui["first_run_steps"], list)
+          assert any("Install Validation Font" in step for step in gui["first_run_steps"])
+          assert any("Share Fonts On LAN" in step for step in gui["first_run_steps"])
+          assert any("Preview From Peer" in step for step in gui["first_run_steps"])
+          assert gui["saved_peer_count"] == 0
+          assert gui["message"].startswith("Native GUI state initialized")
+          PY
           grep -q '"log_dir"' "$smoke_root/diagnostics.json"
           grep -q '"checks"' "$smoke_root/doctor.json"
           grep -q '"saved-peers"' "$smoke_root/doctor.json"
@@ -264,6 +279,15 @@ jobs:
           $scanAfterValidationFont = Get-Content (Join-Path $smokeRoot "scan-after-validation-font.json") -Raw
           if (-not $guiSelfTest.Contains('"ok": true')) { throw "GUI self-test did not report ok" }
           if (-not $guiSelfTest.Contains('"Native GUI state initialized')) { throw "GUI self-test message missing" }
+          $guiSelfTestJson = $guiSelfTest | ConvertFrom-Json
+          if ($guiSelfTestJson.ok -ne $true) { throw "GUI self-test JSON did not report ok" }
+          if ($guiSelfTestJson.platform -ne "windows") { throw "GUI self-test platform was not windows" }
+          if ($null -eq $guiSelfTestJson.first_run_steps) { throw "GUI self-test first-run steps were missing" }
+          $firstRunSteps = @($guiSelfTestJson.first_run_steps)
+          if (-not ($firstRunSteps | Where-Object { $_.Contains("Install Validation Font") })) { throw "GUI first-run steps omitted validation font guidance" }
+          if (-not ($firstRunSteps | Where-Object { $_.Contains("Share Fonts On LAN") })) { throw "GUI first-run steps omitted LAN sharing guidance" }
+          if (-not ($firstRunSteps | Where-Object { $_.Contains("Preview From Peer") })) { throw "GUI first-run steps omitted preview guidance" }
+          if ($guiSelfTestJson.saved_peer_count -ne 0) { throw "GUI self-test unexpectedly loaded saved peers" }
           if (-not $diagnostics.Contains('"support_report_text"')) { throw "Diagnostics support report missing" }
           if (-not $diagnostics.Contains('"log_dir"')) { throw "Diagnostics log dir missing" }
           if (-not $doctor.Contains('"checks"')) { throw "Doctor checks missing" }
