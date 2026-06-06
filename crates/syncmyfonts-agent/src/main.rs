@@ -1244,11 +1244,19 @@ fn lan_sync_all(dry_run: bool) -> Result<LanSyncAllReport> {
                 ok: false,
                 installed: Vec::new(),
                 skipped: Vec::new(),
-                error: Some(error.to_string()),
+                error: Some(format_error_chain(&error)),
             }),
         }
     }
     Ok(LanSyncAllReport { peers, dry_run })
+}
+
+fn format_error_chain(error: &anyhow::Error) -> String {
+    error
+        .chain()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(": ")
 }
 
 fn discover_lan_peers(port: u16) -> Result<Vec<LanDiscoveredPeer>> {
@@ -6264,6 +6272,18 @@ mod tests {
         assert!(error_text.contains("rolled back"));
         assert!(!managed_dir.join("Rollback.ttf").exists());
         assert!(!config_dir.join("managed-fonts.json").exists());
+    }
+
+    #[test]
+    fn format_error_chain_includes_inner_causes() {
+        let error = anyhow!("inner failure")
+            .context("middle failure")
+            .context("outer failure");
+
+        assert_eq!(
+            format_error_chain(&error),
+            "outer failure: middle failure: inner failure"
+        );
     }
 
     #[test]
