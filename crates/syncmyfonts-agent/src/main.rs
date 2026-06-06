@@ -1360,9 +1360,9 @@ fn doctor() -> Result<DoctorReport> {
         ),
         Ok(path) => doctor_check(
             "sign-in-sync-helper",
-            false,
+            true,
             format!(
-                "Sign-in sync helper is not installed yet. Expected location: {}.",
+                "Optional sign-in sync helper is not installed. Use Enable Sign-In Sync if you want saved peers to sync when you sign in. Expected location: {}.",
                 path.display()
             ),
         ),
@@ -4673,10 +4673,8 @@ fn platform_post_install(path: &Path) -> Result<()> {
             .file_stem()
             .and_then(|stem| stem.to_str())
             .unwrap_or("SyncMyFonts Font");
-        let file_name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or_else(|| anyhow!("invalid installed font path"))?;
+        let registry_path = path.to_string_lossy().to_string();
+        add_windows_font_resource(path)?;
         let status = std::process::Command::new("reg")
             .args([
                 "add",
@@ -4686,12 +4684,14 @@ fn platform_post_install(path: &Path) -> Result<()> {
                 "/t",
                 "REG_SZ",
                 "/d",
-                file_name,
+                &registry_path,
                 "/f",
             ])
             .status()
             .context("registering font in HKCU")?;
         if !status.success() {
+            remove_windows_font_resource(path);
+            notify_windows_font_change();
             bail!("RegistryWriteFailed: reg.exe returned {}", status);
         }
         notify_windows_font_change();
@@ -4704,6 +4704,32 @@ fn platform_post_install(path: &Path) -> Result<()> {
         );
     }
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn add_windows_font_resource(path: &Path) -> Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Graphics::Gdi::AddFontResourceW;
+
+    let mut wide_path = path.as_os_str().encode_wide().collect::<Vec<_>>();
+    wide_path.push(0);
+    let loaded_count = unsafe { AddFontResourceW(wide_path.as_ptr()) };
+    if loaded_count == 0 {
+        bail!("WindowsFontLoadFailed: AddFontResourceW loaded zero fonts");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn remove_windows_font_resource(path: &Path) {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Graphics::Gdi::RemoveFontResourceW;
+
+    let mut wide_path = path.as_os_str().encode_wide().collect::<Vec<_>>();
+    wide_path.push(0);
+    unsafe {
+        RemoveFontResourceW(wide_path.as_ptr());
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -5972,6 +5998,17 @@ mod tests {
                 .checks
                 .iter()
                 .any(|check| check.name == "saved-peers" && !check.ok)
+        );
+        let sign_in_helper = report
+            .checks
+            .iter()
+            .find(|check| check.name == "sign-in-sync-helper")
+            .expect("doctor should include sign-in sync helper guidance");
+        assert!(sign_in_helper.ok);
+        assert!(
+            sign_in_helper
+                .message
+                .contains("Optional sign-in sync helper")
         );
         assert!(report.next_step.contains("Pair or save a LAN peer"));
     }
