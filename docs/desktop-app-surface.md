@@ -109,6 +109,7 @@ Use the bundled `syncmyfonts-agent` executable directly.
 | Scan Local Fonts | `syncmyfonts-agent scan` |
 | Scan Including Managed Fonts | `syncmyfonts-agent scan --include-managed` |
 | Verify Managed Fonts | `syncmyfonts-agent verify-managed` |
+| Repair Managed Fonts | `syncmyfonts-agent repair-managed` |
 | Share | `syncmyfonts-agent lan-serve --listen 0.0.0.0:7370 --lan-key <key>` |
 | Stop | Terminate the running `lan-serve` child process cleanly |
 | Test Peer | `GET <peer>/api/lan/v1/health` or `syncmyfonts-agent lan-sync --peer <peer> --lan-key <key> --dry-run` |

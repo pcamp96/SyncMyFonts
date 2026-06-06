@@ -169,6 +169,12 @@ Verify SyncMyFonts-managed font installs:
 cargo run -p syncmyfonts-agent -- verify-managed
 ```
 
+Repair platform registration for intact SyncMyFonts-managed fonts:
+
+```bash
+cargo run -p syncmyfonts-agent -- repair-managed
+```
+
 Create a clean-machine validation evidence bundle:
 
 ```bash

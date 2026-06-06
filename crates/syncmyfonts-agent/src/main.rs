@@ -127,6 +127,8 @@ enum Commands {
     },
     /// Verify SyncMyFonts-managed installed font files still match the manifest.
     VerifyManaged,
+    /// Re-run platform registration for intact SyncMyFonts-managed fonts.
+    RepairManaged,
     /// Install a per-user sign-in helper that syncs saved LAN peers.
     InstallStartupSync,
     /// Install per-user app shortcuts for common SyncMyFonts actions.
@@ -253,6 +255,9 @@ fn main() -> Result<()> {
         }
         Commands::VerifyManaged => {
             print_json(&verify_managed_fonts()?)?;
+        }
+        Commands::RepairManaged => {
+            print_json(&repair_managed_fonts()?)?;
         }
         Commands::InstallStartupSync => {
             print_json(&install_startup_sync()?)?;
@@ -922,6 +927,23 @@ struct ManagedVerifyIssue {
     message: String,
 }
 
+#[derive(Debug, Serialize)]
+struct ManagedRepairReport {
+    manifest_path: PathBuf,
+    total: usize,
+    repaired: Vec<ManagedRepairEntry>,
+    skipped: Vec<ManagedVerifyIssue>,
+    failed: Vec<ManagedVerifyIssue>,
+}
+
+#[derive(Debug, Serialize)]
+struct ManagedRepairEntry {
+    sha256: String,
+    file_name: String,
+    path: PathBuf,
+    message: String,
+}
+
 async fn lan_serve(
     listen: SocketAddr,
     lan_key: Option<String>,
@@ -1467,10 +1489,7 @@ fn validation_evidence_summary(
     managed_fonts: &ManagedVerifyReport,
 ) -> Vec<String> {
     let failed_readiness = readiness.checks.iter().filter(|check| !check.ok).count();
-    let managed_issues = managed_fonts.missing.len()
-        + managed_fonts.modified.len()
-        + managed_fonts.unreadable.len()
-        + managed_fonts.registration_issues.len();
+    let managed_issues = managed_verify_issue_count(managed_fonts);
     vec![
         format!("Platform: {}", diagnostics.platform),
         format!("Device: {}", diagnostics.device_name),
@@ -1490,6 +1509,13 @@ fn validation_evidence_summary(
         "Secrets are redacted in diagnostics, saved peer summaries, and action history."
             .to_string(),
     ]
+}
+
+fn managed_verify_issue_count(report: &ManagedVerifyReport) -> usize {
+    report.missing.len()
+        + report.modified.len()
+        + report.unreadable.len()
+        + report.registration_issues.len()
 }
 
 fn manual_validation_steps() -> Vec<String> {
@@ -1513,7 +1539,7 @@ fn manual_validation_pass_criteria() -> Vec<String> {
         "Fonts install only into current-user or SyncMyFonts-managed locations.".to_string(),
         "System fonts are not listed as missing sync candidates.".to_string(),
         "Re-running sync skips fonts that are already present.".to_string(),
-        "Managed font verification has no missing, modified, or unreadable entries after sync."
+        "Managed font verification has no missing, modified, unreadable, or registration issue entries after sync."
             .to_string(),
         "Diagnostics and validation reports do not expose LAN keys, pairing codes, or API keys."
             .to_string(),
@@ -2446,16 +2472,41 @@ impl SyncMyFontsGui {
     fn verify_managed(&mut self) {
         self.start_task("Verifying managed fonts", || match verify_managed_fonts() {
             Ok(report) => {
-                let issues = report.missing.len() + report.modified.len() + report.unreadable.len();
+                let issues = managed_verify_issue_count(&report);
                 let next_step = if issues == 0 {
                     "All SyncMyFonts-managed fonts still match the local manifest.".to_string()
                 } else {
-                    format!("{issues} managed font issue(s) found. Review before syncing more.")
+                    format!("{issues} managed font issue(s) found. Click Repair Managed Fonts if registration is the only problem, then verify again.")
                 };
                 gui_ok_with_warning_count(&report, next_step, issues)
             }
             Err(error) => gui_error(error),
         });
+    }
+
+    fn repair_managed(&mut self) {
+        self.start_task(
+            "Repairing managed font registration",
+            || match repair_managed_fonts() {
+                Ok(report) => {
+                    let warnings = report.skipped.len() + report.failed.len();
+                    let next_step = if warnings == 0 {
+                        format!(
+                            "Repaired {} managed font registration(s). Run Verify Managed Fonts again, then reopen design apps if needed.",
+                            report.repaired.len()
+                        )
+                    } else {
+                        format!(
+                            "Repaired {} managed font registration(s); {} item(s) still need attention.",
+                            report.repaired.len(),
+                            warnings
+                        )
+                    };
+                    gui_ok_with_warning_count(&report, next_step, warnings)
+                }
+                Err(error) => gui_error(error),
+            },
+        );
     }
 
     fn run_diagnostics(&mut self) {
@@ -2490,7 +2541,8 @@ impl SyncMyFontsGui {
                     .count()
                     + file.report.managed_fonts.missing.len()
                     + file.report.managed_fonts.modified.len()
-                    + file.report.managed_fonts.unreadable.len();
+                    + file.report.managed_fonts.unreadable.len()
+                    + file.report.managed_fonts.registration_issues.len();
                 gui_ok_with_warning_count(
                     &file,
                     format!(
@@ -2995,6 +3047,9 @@ impl eframe::App for SyncMyFontsGui {
                 }
                 if ui.button("Verify Managed Fonts").clicked() {
                     self.verify_managed();
+                }
+                if ui.button("Repair Managed Fonts").clicked() {
+                    self.repair_managed();
                 }
                 if ui.button("Diagnostics").clicked() {
                     self.run_diagnostics();
@@ -4452,12 +4507,92 @@ fn verify_managed_fonts() -> Result<ManagedVerifyReport> {
     Ok(report)
 }
 
+fn repair_managed_fonts() -> Result<ManagedRepairReport> {
+    let manifest_path = managed_manifest_path()?;
+    let manifest = load_managed_manifest()?;
+    let total = manifest.installed.len();
+    let mut report = ManagedRepairReport {
+        manifest_path,
+        total,
+        repaired: Vec::new(),
+        skipped: Vec::new(),
+        failed: Vec::new(),
+    };
+
+    for record in manifest.installed {
+        match managed_record_file_is_intact(&record) {
+            Ok(()) => {}
+            Err(error) => {
+                report.skipped.push(managed_verify_issue(
+                    &record,
+                    &format!("managed font was not repaired because it is not intact: {error}"),
+                ));
+                continue;
+            }
+        }
+
+        match platform_post_install(&record.path) {
+            Ok(()) => report.repaired.push(ManagedRepairEntry {
+                sha256: record.sha256,
+                file_name: record.file_name,
+                path: record.path,
+                message: platform_repair_message(),
+            }),
+            Err(error) => report.failed.push(managed_verify_issue(
+                &record,
+                &format!("platform registration repair failed: {error}"),
+            )),
+        }
+    }
+
+    Ok(report)
+}
+
+fn managed_record_file_is_intact(record: &ManagedFontRecord) -> Result<()> {
+    if !record.path.exists() {
+        bail!("managed font file is missing");
+    }
+    let bytes =
+        fs::read(&record.path).with_context(|| format!("reading {}", record.path.display()))?;
+    let actual_sha256 = hex::encode(Sha256::digest(&bytes));
+    if actual_sha256 != record.sha256 {
+        bail!(
+            "managed font hash changed from {} to {}",
+            record.sha256,
+            actual_sha256
+        );
+    }
+    if bytes.len() as u64 != record.size_bytes {
+        bail!(
+            "managed font size changed from {} to {} bytes",
+            record.size_bytes,
+            bytes.len()
+        );
+    }
+    Ok(())
+}
+
 fn managed_verify_issue(record: &ManagedFontRecord, message: &str) -> ManagedVerifyIssue {
     ManagedVerifyIssue {
         sha256: record.sha256.clone(),
         file_name: record.file_name.clone(),
         path: record.path.clone(),
         message: message.to_string(),
+    }
+}
+
+fn platform_repair_message() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        "Re-registered the font in the current user's Windows font table.".to_string()
+    }
+    #[cfg(target_os = "macos")]
+    {
+        "Confirmed the intact managed font is in the current user's macOS font folder.".to_string()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        "Confirmed the intact managed font record.".to_string()
     }
 }
 
@@ -6712,6 +6847,86 @@ mod tests {
         assert!(report.registration_issues.is_empty());
         assert_eq!(report.missing[0].file_name, "Missing.ttf");
         assert_eq!(report.modified[0].file_name, "Modified.ttf");
+    }
+
+    #[test]
+    fn repair_managed_fonts_repairs_only_intact_records() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let config_dir = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let fonts_dir = config_dir.join("fonts");
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", &fonts_dir);
+            std::env::set_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION", "1");
+        }
+
+        let managed_dir = managed_font_dir().unwrap();
+        fs::create_dir_all(&managed_dir).unwrap();
+        let intact_path = managed_dir.join("intact.ttf");
+        let intact_bytes = b"intact managed font";
+        let intact_sha = hex::encode(Sha256::digest(intact_bytes));
+        fs::write(&intact_path, intact_bytes).unwrap();
+        let modified_path = managed_dir.join("modified.ttf");
+        let modified_original_bytes = b"original repair font";
+        let modified_sha = hex::encode(Sha256::digest(modified_original_bytes));
+        fs::write(&modified_path, b"changed repair font").unwrap();
+        let missing_path = managed_dir.join("missing.ttf");
+        let manifest = ManagedManifest {
+            schema: 1,
+            installed: vec![
+                ManagedFontRecord {
+                    sha256: intact_sha,
+                    file_name: "Intact.ttf".to_string(),
+                    path: intact_path,
+                    source: "lan:http://127.0.0.1:7370".to_string(),
+                    installed_at: Utc::now().to_rfc3339(),
+                    size_bytes: intact_bytes.len() as u64,
+                },
+                ManagedFontRecord {
+                    sha256: modified_sha,
+                    file_name: "Modified.ttf".to_string(),
+                    path: modified_path,
+                    source: "lan:http://127.0.0.1:7370".to_string(),
+                    installed_at: Utc::now().to_rfc3339(),
+                    size_bytes: modified_original_bytes.len() as u64,
+                },
+                ManagedFontRecord {
+                    sha256: "00112233445566778899aabbccddeeff0123456789abcdef0123456789abcdef"
+                        .to_string(),
+                    file_name: "Missing.ttf".to_string(),
+                    path: missing_path,
+                    source: "lan:http://127.0.0.1:7370".to_string(),
+                    installed_at: Utc::now().to_rfc3339(),
+                    size_bytes: 10,
+                },
+            ],
+        };
+        save_managed_manifest(&manifest).unwrap();
+
+        let report = repair_managed_fonts().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+            std::env::remove_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION");
+        }
+
+        assert_eq!(report.total, 3);
+        assert_eq!(report.repaired.len(), 1);
+        assert_eq!(report.repaired[0].file_name, "Intact.ttf");
+        assert_eq!(report.skipped.len(), 2);
+        assert!(report.failed.is_empty());
+        assert!(
+            report
+                .skipped
+                .iter()
+                .any(|issue| issue.file_name == "Modified.ttf")
+        );
+        assert!(
+            report
+                .skipped
+                .iter()
+                .any(|issue| issue.file_name == "Missing.ttf")
+        );
     }
 
     #[cfg(target_os = "macos")]

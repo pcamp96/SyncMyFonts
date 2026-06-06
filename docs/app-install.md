@@ -22,7 +22,8 @@ The local app can start LAN sharing, show an 8-digit pairing code when no
 shared key is provided, find sharing peers on the LAN, pair with a peer, test a
 peer, preview missing fonts, install missing fonts, save peers, and run
 diagnostics. It can also verify that SyncMyFonts-managed installed font files
-still match the local manifest.
+still match the local manifest and re-run platform registration for intact
+managed fonts if they stop appearing correctly.
 When sharing is on, use `Copy URL` and `Copy Code` to move the LAN address and
 pairing code to the other computer without retyping.
 Turn on `Auto Sync Saved Peers` if this computer should keep checking saved LAN
