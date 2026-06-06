@@ -72,6 +72,22 @@ def os2_table() -> bytes:
 
 
 def build_font() -> bytes:
+    notdef_glyph = i16(0) + i16(0) + i16(0) + i16(0) + i16(0)
+    maxp_fields = [
+        0,  # maxPoints
+        0,  # maxContours
+        0,  # maxCompositePoints
+        0,  # maxCompositeContours
+        1,  # maxZones
+        0,  # maxTwilightPoints
+        0,  # maxStorage
+        0,  # maxFunctionDefs
+        0,  # maxInstructionDefs
+        0,  # maxStackElements
+        0,  # maxSizeOfInstructions
+        0,  # maxComponentElements
+        0,  # maxComponentDepth
+    ]
     tables: dict[str, bytes] = {
         "cmap": (
             u16(0)
@@ -84,7 +100,7 @@ def build_font() -> bytes:
             + u16(0)
             + bytes(256)
         ),
-        "glyf": b"",
+        "glyf": notdef_glyph,
         "head": (
             u32(0x00010000)
             + u32(0x00010000)
@@ -113,12 +129,14 @@ def build_font() -> bytes:
             + i16(0)
             + i16(600)
             + i16(1)
-            + b"".join(i16(0) for _ in range(8))
+            + i16(0)
+            + b"".join(i16(0) for _ in range(4))
+            + i16(0)
             + u16(1)
         ),
         "hmtx": u16(600) + i16(0),
-        "loca": u16(0) + u16(0),
-        "maxp": u32(0x00010000) + u16(1) + b"".join(u16(0) for _ in range(14)),
+        "loca": u16(0) + u16(len(notdef_glyph) // 2),
+        "maxp": u32(0x00010000) + u16(1) + b"".join(u16(value) for value in maxp_fields),
         "name": name_table(),
         "OS/2": os2_table(),
         "post": u32(0x00030000) + i32(0) + u32(0) + u32(0) + u32(0) + u32(0) + u32(0) + u32(0),
