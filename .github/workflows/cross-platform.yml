@@ -103,7 +103,8 @@ jobs:
           grep -q 'syncmyfonts-gui' "$package_dir/Start-SyncMyFonts.command"
           grep -q 'Install Validation' "$package_dir/START-HERE.txt"
           grep -q 'OFL test font' "$package_dir/START-HERE.txt"
-          grep -q "paste the sharing computer's LAN URL" "$package_dir/START-HERE.txt"
+          grep -q "sharing computer's LAN URL" "$package_dir/START-HERE.txt"
+          grep -q 'URL field manually' "$package_dir/START-HERE.txt"
           grep -q 'Local Network discovery is denied' "$package_dir/START-HERE.txt"
           SYNCMYFONTS_CONFIG_DIR="$smoke_root/config" \
           SYNCMYFONTS_LOG_DIR="$smoke_root/logs" \
