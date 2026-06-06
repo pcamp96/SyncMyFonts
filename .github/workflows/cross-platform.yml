@@ -158,6 +158,8 @@ jobs:
           assert "Local Network access" in gui["lan_sharing_guidance"]
           assert "No port forwarding" in gui["lan_sharing_guidance"]
           assert "paste the sharing computer" in gui["manual_peer_fallback_guidance"]
+          matrix_names = {direction["name"] for direction in gui["sync_validation_matrix"]}
+          assert matrix_names == {"macOS to Windows", "Windows to macOS"}
           assert gui["message"].startswith("Native GUI state initialized")
           PY
           grep -q '"log_dir"' "$smoke_root/diagnostics.json"
@@ -303,6 +305,9 @@ jobs:
           if (-not $guiSelfTestJson.lan_sharing_guidance.Contains("No port forwarding")) { throw "GUI self-test omitted no-port-forwarding guidance" }
           if (-not $guiSelfTestJson.manual_peer_fallback_guidance.Contains("Client-only sync should not need an inbound firewall prompt")) { throw "GUI self-test omitted Windows client-only firewall guidance" }
           if (-not $guiSelfTestJson.manual_peer_fallback_guidance.Contains("paste the sharing computer")) { throw "GUI self-test omitted manual peer URL fallback guidance" }
+          $matrixNames = @($guiSelfTestJson.sync_validation_matrix | ForEach-Object { $_.name })
+          if (-not ($matrixNames -contains "macOS to Windows")) { throw "GUI self-test macOS-to-Windows matrix row missing" }
+          if (-not ($matrixNames -contains "Windows to macOS")) { throw "GUI self-test Windows-to-macOS matrix row missing" }
           if (-not $diagnostics.Contains('"support_report_text"')) { throw "Diagnostics support report missing" }
           if (-not $diagnostics.Contains('"log_dir"')) { throw "Diagnostics log dir missing" }
           if (-not $doctor.Contains('"checks"')) { throw "Doctor checks missing" }

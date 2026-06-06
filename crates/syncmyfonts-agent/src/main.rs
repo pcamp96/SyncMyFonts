@@ -898,6 +898,7 @@ struct GuiSelfTestReport {
     first_run_steps: Vec<String>,
     lan_sharing_guidance: &'static str,
     manual_peer_fallback_guidance: &'static str,
+    sync_validation_matrix: Vec<SyncValidationDirection>,
     saved_peer_count: usize,
     selected_peer_name: String,
     listen: String,
@@ -2251,6 +2252,7 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         first_run_steps: app.first_run_steps(),
         lan_sharing_guidance: platform_lan_sharing_guidance(),
         manual_peer_fallback_guidance: platform_manual_peer_fallback_guidance(),
+        sync_validation_matrix: sync_validation_matrix(),
         saved_peer_count: app.saved_peer_names.len(),
         selected_peer_name: app.selected_peer_name.clone(),
         listen: app.listen.clone(),
@@ -6325,6 +6327,19 @@ mod tests {
                 .first_run_steps
                 .iter()
                 .any(|step| step.contains("Preview From Peer"))
+        );
+        assert_eq!(report.sync_validation_matrix.len(), 2);
+        assert!(
+            report
+                .sync_validation_matrix
+                .iter()
+                .any(|direction| direction.name == "macOS to Windows")
+        );
+        assert!(
+            report
+                .sync_validation_matrix
+                .iter()
+                .any(|direction| direction.name == "Windows to macOS")
         );
         assert!(!json.contains("super-secret-lan-key"));
     }
