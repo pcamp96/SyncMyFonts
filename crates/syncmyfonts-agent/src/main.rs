@@ -1557,6 +1557,13 @@ fn pairing_code_validity_text(seconds: Option<u64>) -> String {
     format!("valid for about {minutes} {minute_label}")
 }
 
+fn pairing_code_remaining_seconds(started_at: Instant, now: Instant) -> Option<u64> {
+    PAIRING_CODE_TTL
+        .checked_sub(now.saturating_duration_since(started_at))
+        .map(|remaining| remaining.as_secs())
+        .filter(|remaining| *remaining > 0)
+}
+
 fn doctor_check(name: &str, ok: bool, message: impl Into<String>) -> DoctorCheck {
     DoctorCheck {
         name: name.to_string(),
@@ -2195,6 +2202,7 @@ struct SyncMyFontsGui {
     share_urls: Vec<String>,
     last_pairing_code: Option<String>,
     last_pairing_expires_seconds: Option<u64>,
+    last_pairing_started_at: Option<Instant>,
     auto_sync_enabled: bool,
     auto_sync_interval_minutes: u64,
     last_auto_sync_at: Option<Instant>,
@@ -2240,6 +2248,7 @@ impl SyncMyFontsGui {
             share_urls: Vec::new(),
             last_pairing_code: None,
             last_pairing_expires_seconds: None,
+            last_pairing_started_at: None,
             auto_sync_enabled: preferences.auto_sync_saved_peers,
             auto_sync_interval_minutes: preferences.auto_sync_interval_minutes,
             last_auto_sync_at: None,
@@ -2917,6 +2926,7 @@ impl SyncMyFontsGui {
                 self.last_pairing_code = pairing_code.clone();
                 self.last_pairing_expires_seconds =
                     pairing_code.as_ref().map(|_| PAIRING_CODE_TTL.as_secs());
+                self.last_pairing_started_at = pairing_code.as_ref().map(|_| Instant::now());
                 let response = ShareResponse {
                     sharing: true,
                     message: format!("Sharing fonts at {}.", self.share_urls.join(", ")),
@@ -2948,6 +2958,7 @@ impl SyncMyFontsGui {
             Err(error) => {
                 self.last_pairing_code = None;
                 self.last_pairing_expires_seconds = None;
+                self.last_pairing_started_at = None;
                 self.output = error.to_string();
                 self.next_step = format!(
                     "Sharing failed to start. Check whether another SyncMyFonts share is already using that port. {}",
@@ -2970,6 +2981,7 @@ impl SyncMyFontsGui {
         self.refresh_status();
         self.last_pairing_code = None;
         self.last_pairing_expires_seconds = None;
+        self.last_pairing_started_at = None;
         self.next_step =
             "Sharing is off. Start sharing again when another computer needs fonts.".to_string();
         self.output = "Stopped sharing fonts.".to_string();
@@ -2991,6 +3003,24 @@ impl SyncMyFontsGui {
             self.share = None;
             self.last_pairing_code = None;
             self.last_pairing_expires_seconds = None;
+            self.last_pairing_started_at = None;
+        }
+    }
+
+    fn prune_expired_pairing_code(&mut self) {
+        let Some(started_at) = self.last_pairing_started_at else {
+            return;
+        };
+        if pairing_code_remaining_seconds(started_at, Instant::now()).is_some() {
+            return;
+        }
+        self.last_pairing_code = None;
+        self.last_pairing_expires_seconds = None;
+        self.last_pairing_started_at = None;
+        if self.share.is_some() {
+            self.next_step =
+                "The pairing code expired. Stop sharing and start sharing again to create a fresh code."
+                    .to_string();
         }
     }
 }
@@ -3007,11 +3037,14 @@ impl Drop for SyncMyFontsGui {
 impl eframe::App for SyncMyFontsGui {
     fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
         self.prune_stopped_share();
+        self.prune_expired_pairing_code();
         self.poll_task();
         self.maybe_auto_sync_saved_peers();
         let task_running = self.task.is_some();
         if task_running {
             ui.ctx().request_repaint_after(Duration::from_millis(100));
+        } else if self.last_pairing_started_at.is_some() {
+            ui.ctx().request_repaint_after(Duration::from_secs(1));
         } else if self.auto_sync_enabled {
             ui.ctx().request_repaint_after(Duration::from_secs(5));
         }
@@ -3195,15 +3228,21 @@ impl eframe::App for SyncMyFontsGui {
                     }
                 }
                 if let Some(code) = &self.last_pairing_code {
+                    let remaining_seconds = self
+                        .last_pairing_started_at
+                        .and_then(|started_at| {
+                            pairing_code_remaining_seconds(started_at, Instant::now())
+                        })
+                        .or(self.last_pairing_expires_seconds);
                     ui.label(format!(
                         "Pairing code: {code} ({})",
-                        pairing_code_validity_text(self.last_pairing_expires_seconds)
+                        pairing_code_validity_text(remaining_seconds)
                     ));
                     if ui.button("Copy Code").clicked() {
                         ui.ctx().copy_text(code.clone());
                         self.next_step = format!(
                             "Pairing code copied and {}. Enter it on the other computer.",
-                            pairing_code_validity_text(self.last_pairing_expires_seconds)
+                            pairing_code_validity_text(remaining_seconds)
                         );
                     }
                 }
@@ -4588,7 +4627,7 @@ fn platform_repair_message() -> String {
     }
     #[cfg(target_os = "macos")]
     {
-        "Confirmed the intact managed font is in the current user's macOS font folder.".to_string()
+        "Confirmed the intact managed font is in the current user's macOS font folder and can be parsed by CoreText.".to_string()
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
@@ -4643,7 +4682,28 @@ fn verify_platform_registration(record: &ManagedFontRecord) -> Result<()> {
             managed_dir.display()
         );
     }
+    macos_font_loadability_summary(&record.path)?;
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_font_loadability_summary(path: &Path) -> Result<String> {
+    let font = font_kit::font::Font::from_path(path, 0)
+        .with_context(|| format!("loading {} through CoreText", path.display()))?;
+    let family_name = font.family_name();
+    let full_name = font.full_name();
+    let postscript_name = font
+        .postscript_name()
+        .unwrap_or_else(|| "unknown PostScript name".to_string());
+    if family_name.trim().is_empty() || full_name.trim().is_empty() {
+        bail!(
+            "CoreText loaded {} but returned an empty family or full name",
+            path.display()
+        );
+    }
+    Ok(format!(
+        "CoreText loaded {family_name} / {full_name} / {postscript_name}"
+    ))
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -6060,6 +6120,26 @@ mod tests {
     }
 
     #[test]
+    fn pairing_code_remaining_seconds_expires_after_ttl() {
+        let started_at = Instant::now();
+        assert_eq!(
+            pairing_code_remaining_seconds(started_at, started_at + Duration::from_secs(1)),
+            Some(PAIRING_CODE_TTL.as_secs() - 1)
+        );
+        assert_eq!(
+            pairing_code_remaining_seconds(started_at, started_at + PAIRING_CODE_TTL),
+            None
+        );
+        assert_eq!(
+            pairing_code_remaining_seconds(
+                started_at,
+                started_at + PAIRING_CODE_TTL + Duration::from_secs(30)
+            ),
+            None
+        );
+    }
+
+    #[test]
     fn gui_error_guidance_distinguishes_invalid_urls_and_share_ports() {
         assert!(
             gui_error_next_step("builder error: relative URL without a base")
@@ -6972,5 +7052,51 @@ mod tests {
         assert!(report.unreadable.is_empty());
         assert_eq!(report.registration_issues.len(), 1);
         assert!(report.registration_issues[0].message.contains("outside"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn verify_managed_fonts_reports_macos_unloadable_managed_font() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let config_dir = root.join("config");
+        let user_font_dir = root.join("user-fonts");
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", &user_font_dir);
+        }
+
+        let managed_dir = managed_font_dir().unwrap();
+        let unloadable_path = managed_dir.join("Unloadable.ttf");
+        let bytes = b"not actually a font";
+        let sha = hex::encode(Sha256::digest(bytes));
+        fs::create_dir_all(&managed_dir).unwrap();
+        fs::write(&unloadable_path, bytes).unwrap();
+        let manifest = ManagedManifest {
+            schema: 1,
+            installed: vec![ManagedFontRecord {
+                sha256: sha,
+                file_name: "Unloadable.ttf".to_string(),
+                path: unloadable_path,
+                source: "lan:http://127.0.0.1:7370".to_string(),
+                installed_at: Utc::now().to_rfc3339(),
+                size_bytes: bytes.len() as u64,
+            }],
+        };
+        save_managed_manifest(&manifest).unwrap();
+
+        let report = verify_managed_fonts().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+        }
+
+        assert_eq!(report.total, 1);
+        assert_eq!(report.ok, 0);
+        assert!(report.missing.is_empty());
+        assert!(report.modified.is_empty());
+        assert!(report.unreadable.is_empty());
+        assert_eq!(report.registration_issues.len(), 1);
+        assert!(report.registration_issues[0].message.contains("CoreText"));
     }
 }

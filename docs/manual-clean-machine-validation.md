@@ -59,7 +59,9 @@ Windows validation report:
    missing.
 8. Click `Get Missing Fonts`.
 9. Confirm the font installs for the current Windows user.
-10. Run the same sync again and confirm it skips the already installed font.
+10. Reopen a normal Windows design or text app and confirm the test font appears
+    in the font picker.
+11. Run the same sync again and confirm it skips the already installed font.
 
 Evidence:
 
@@ -67,6 +69,7 @@ Evidence:
 macOS peer URL:
 Windows preview result:
 Windows install result:
+Windows font picker visibility:
 Windows second sync result:
 Installed Windows font path:
 ```
@@ -86,7 +89,9 @@ Installed Windows font path:
    missing.
 9. Click `Get Missing Fonts`.
 10. Confirm the font installs under `~/Library/Fonts/SyncMyFonts`.
-11. Run the same sync again and confirm it skips the already installed font.
+11. Reopen Font Book or a normal macOS design/text app and confirm the test font
+    appears in the font picker.
+12. Run the same sync again and confirm it skips the already installed font.
 
 Evidence:
 
@@ -94,6 +99,7 @@ Evidence:
 Windows peer URL:
 macOS preview result:
 macOS install result:
+macOS font picker visibility:
 macOS second sync result:
 Installed macOS font path:
 ```
@@ -105,7 +111,8 @@ On both computers:
 1. Click `Scan Local Fonts`.
 2. Confirm fonts from known system folders are not listed as sync candidates.
 3. Confirm fonts installed by SyncMyFonts are tracked as managed fonts.
-4. Click `Verify Managed Fonts` and confirm the report is clean.
+4. Click `Verify Managed Fonts` and confirm the report is clean. On macOS this
+   also checks that managed font files can be parsed through CoreText.
 5. Click `Validation Report` and keep the saved JSON as the after-sync
    evidence.
 

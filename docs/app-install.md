@@ -24,6 +24,9 @@ peer, preview missing fonts, install missing fonts, save peers, and run
 diagnostics. It can also verify that SyncMyFonts-managed installed font files
 still match the local manifest and re-run platform registration for intact
 managed fonts if they stop appearing correctly.
+On macOS, managed verification also checks that each managed font can be parsed
+through CoreText, which is a stronger signal than only confirming the file path
+and hash.
 When sharing is on, use `Copy URL` and `Copy Code` to move the LAN address and
 pairing code to the other computer without retyping.
 Turn on `Auto Sync Saved Peers` if this computer should keep checking saved LAN

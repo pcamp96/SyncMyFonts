@@ -164,6 +164,8 @@ The app MVP should reuse the current agent commands:
   packaged macOS and Windows GUI launchers.
 - [x] GitHub Actions validation reports include managed-font registration
   health signals.
+- [x] macOS managed verification checks CoreText loadability for intact managed
+  font files.
 - [x] Manual clean-machine validation checklist exists for real macOS-to-Windows
   and Windows-to-macOS app testing.
 - [ ] Clean-machine smoke tests prove the portable archives launch the native
