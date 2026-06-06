@@ -84,8 +84,9 @@ SyncMyFonts macOS MVP
    for the easiest setup and copy the pairing code.
 
 7. On the other computer, click Find LAN Peers, select the sharing computer,
-   enter the pairing code, and click Pair Peer. Then use Preview From Peer or
-   Get Missing Fonts.
+   enter the pairing code, and click Pair Peer. If discovery does not work, copy
+   the sharing computer's LAN URL and paste it into the URL field manually. Then
+   use Preview From Peer before Get Missing Fonts.
 
 8. Reopen your design apps if an installed font does not appear immediately.
 
@@ -100,6 +101,8 @@ Validation:
 
 Troubleshooting:
 - Both computers must be on the same trusted LAN/VPN.
+- If macOS Local Network discovery is denied or unavailable, paste the sharing
+  computer's LAN URL manually.
 - If a Windows computer is sharing fonts, allow SyncMyFonts on Private networks
   when Windows Firewall asks.
 - No port forwarding is needed.

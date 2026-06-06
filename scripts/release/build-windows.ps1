@@ -62,8 +62,9 @@ SyncMyFonts Windows MVP
    for the easiest setup and copy the pairing code.
 
 7. On the other computer, click Find LAN Peers, select the sharing computer,
-   enter the pairing code, and click Pair Peer. Then use Preview From Peer or
-   Get Missing Fonts.
+   enter the pairing code, and click Pair Peer. If discovery does not work, copy
+   the sharing computer's LAN URL and paste it into the URL field manually. Then
+   use Preview From Peer before Get Missing Fonts.
 
 8. Reopen your design apps if an installed font does not appear immediately.
 
@@ -81,6 +82,8 @@ Validation:
 
 Troubleshooting:
 - Both computers must be on the same trusted LAN/VPN.
+- Client-only sync should not need an inbound firewall prompt. If discovery
+  does not work, paste the sharing computer's LAN URL manually.
 - If this Windows computer is sharing fonts, allow SyncMyFonts on Private
   networks when Windows Firewall asks.
 - No port forwarding is needed.

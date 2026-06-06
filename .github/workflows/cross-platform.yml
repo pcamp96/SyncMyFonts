@@ -103,6 +103,8 @@ jobs:
           grep -q 'syncmyfonts-gui' "$package_dir/Start-SyncMyFonts.command"
           grep -q 'Install Validation' "$package_dir/START-HERE.txt"
           grep -q 'OFL test font' "$package_dir/START-HERE.txt"
+          grep -q "paste the sharing computer's LAN URL" "$package_dir/START-HERE.txt"
+          grep -q 'Local Network discovery is denied' "$package_dir/START-HERE.txt"
           SYNCMYFONTS_CONFIG_DIR="$smoke_root/config" \
           SYNCMYFONTS_LOG_DIR="$smoke_root/logs" \
           SYNCMYFONTS_USER_FONT_DIR="$smoke_root/fonts" \
@@ -261,6 +263,8 @@ jobs:
           if (-not $launcherText.Contains("syncmyfonts-gui.exe")) { throw "Packaged launcher does not target GUI binary" }
           $startHereText = Get-Content (Join-Path $packageDir.FullName "START-HERE.txt") -Raw
           if (-not $startHereText.Contains("Install Validation") -or -not $startHereText.Contains("OFL test font")) { throw "Packaged START-HERE does not mention the validation font setup" }
+          if (-not $startHereText.Contains("paste the sharing computer's LAN URL")) { throw "Packaged START-HERE does not mention manual LAN URL fallback" }
+          if (-not $startHereText.Contains("Client-only sync should not need an inbound firewall prompt")) { throw "Packaged START-HERE does not distinguish Windows client-only firewall behavior" }
           $env:SYNCMYFONTS_CONFIG_DIR = Join-Path $smokeRoot "config"
           $env:SYNCMYFONTS_LOG_DIR = Join-Path $smokeRoot "logs"
           $env:SYNCMYFONTS_USER_FONT_DIR = Join-Path $smokeRoot "fonts"
