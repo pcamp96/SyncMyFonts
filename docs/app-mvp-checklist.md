@@ -3,6 +3,10 @@
 Scope: concrete MVP checklist for a macOS plus Windows local sync app built on
 the existing Rust CLI agent and LAN engine.
 
+This checklist tracks the native desktop app first. The browser control surface
+is retained for development and future self-hosted/server-adjacent workflows,
+but it is not the normal user-facing app.
+
 ## MVP Goal
 
 Ship a user-scoped app or thin wrapper that lets a normal macOS user and a
@@ -154,6 +158,10 @@ The app MVP should reuse the current agent commands:
 - [x] GitHub Actions verifies the packaged GUI launcher/app wrapper is present.
 - [x] GitHub Actions smoke-tests packaged LAN serve/sync with isolated font
   roots, pairing code setup, and saved-peer sync.
+- [x] GitHub Actions smoke-tests native GUI state initialization from the
+  packaged macOS and Windows GUI launchers.
+- [x] GitHub Actions validation reports include managed-font registration
+  health signals.
 - [x] Manual clean-machine validation checklist exists for real macOS-to-Windows
   and Windows-to-macOS app testing.
 - [ ] Clean-machine smoke tests prove the portable archives launch the native
