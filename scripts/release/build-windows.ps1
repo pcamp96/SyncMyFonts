@@ -5,11 +5,11 @@ param(
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "../..")
-$CargoToml = Join-Path $RepoRoot "crates/syncmyfonts-agent/Cargo.toml"
-$VersionLine = Select-String -Path $CargoToml -Pattern '^version' -ErrorAction SilentlyContinue | Select-Object -First 1
 $Version = "0.1.0"
-if ($VersionLine) {
-    $Version = ($VersionLine.Line -replace '.*"([^"]+)".*', '$1')
+$Metadata = cargo metadata --no-deps --format-version 1 | ConvertFrom-Json
+$AgentPackage = $Metadata.packages | Where-Object { $_.name -eq "syncmyfonts-agent" } | Select-Object -First 1
+if ($AgentPackage -and $AgentPackage.version) {
+    $Version = $AgentPackage.version
 }
 
 $DistRoot = Join-Path $RepoRoot "dist"
