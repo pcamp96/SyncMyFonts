@@ -101,6 +101,7 @@ jobs:
           plutil -lint "$package_dir/SyncMyFonts.app/Contents/Info.plist"
           plutil -extract CFBundleExecutable raw -o - "$package_dir/SyncMyFonts.app/Contents/Info.plist" | grep -q '^SyncMyFonts$'
           grep -q 'syncmyfonts-gui' "$package_dir/Start-SyncMyFonts.command"
+          grep -q 'Install Validation Font' "$package_dir/START-HERE.txt"
           SYNCMYFONTS_CONFIG_DIR="$smoke_root/config" \
           SYNCMYFONTS_LOG_DIR="$smoke_root/logs" \
           SYNCMYFONTS_USER_FONT_DIR="$smoke_root/fonts" \
@@ -218,6 +219,8 @@ jobs:
           if (-not (Test-Path $launcher)) { throw "Packaged launcher missing" }
           $launcherText = Get-Content $launcher -Raw
           if (-not $launcherText.Contains("syncmyfonts-gui.exe")) { throw "Packaged launcher does not target GUI binary" }
+          $startHereText = Get-Content (Join-Path $packageDir.FullName "START-HERE.txt") -Raw
+          if (-not $startHereText.Contains("Install Validation Font")) { throw "Packaged START-HERE does not mention the validation font setup" }
           $env:SYNCMYFONTS_CONFIG_DIR = Join-Path $smokeRoot "config"
           $env:SYNCMYFONTS_LOG_DIR = Join-Path $smokeRoot "logs"
           $env:SYNCMYFONTS_USER_FONT_DIR = Join-Path $smokeRoot "fonts"

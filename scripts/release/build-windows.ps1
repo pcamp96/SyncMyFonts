@@ -54,18 +54,24 @@ SyncMyFonts Windows MVP
 4. Click Validation Report before and after a real two-computer sync test to
    save clean-machine evidence in the log folder.
 
-5. On the computer with fonts, click Share Fonts On LAN. Leave Shared Key blank
+5. If you need a safe non-system font for testing, click Install Validation
+   Font. SyncMyFonts installs an OFL test font into your normal user font
+   folder so the other computer has something legitimate to pull.
+
+6. On the computer with fonts, click Share Fonts On LAN. Leave Shared Key blank
    for the easiest setup and copy the pairing code.
 
-6. On the other computer, click Find LAN Peers, select the sharing computer,
+7. On the other computer, click Find LAN Peers, select the sharing computer,
    enter the pairing code, and click Pair Peer. Then use Preview From Peer or
    Get Missing Fonts.
 
-7. To install startup helpers, click Enable Sign-In Sync after pairing peers,
+8. Reopen your design apps if an installed font does not appear immediately.
+
+9. To install startup helpers, click Enable Sign-In Sync after pairing peers,
    or see:
    packaging\windows\README.md
 
-8. To add Start Menu launchers for SyncMyFonts, saved-peer sync, dry-run
+10. To add Start Menu launchers for SyncMyFonts, saved-peer sync, dry-run
    preview, diagnostics, and readiness, click Install App Shortcuts.
 
 Validation:
