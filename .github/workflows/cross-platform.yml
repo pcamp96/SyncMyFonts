@@ -152,6 +152,9 @@ jobs:
           assert any("Share Fonts On LAN" in step for step in gui["first_run_steps"])
           assert any("Preview From Peer" in step for step in gui["first_run_steps"])
           assert gui["saved_peer_count"] == 0
+          assert "Local Network access" in gui["lan_sharing_guidance"]
+          assert "No port forwarding" in gui["lan_sharing_guidance"]
+          assert "paste the sharing computer" in gui["manual_peer_fallback_guidance"]
           assert gui["message"].startswith("Native GUI state initialized")
           PY
           grep -q '"log_dir"' "$smoke_root/diagnostics.json"
@@ -288,6 +291,10 @@ jobs:
           if (-not ($firstRunSteps | Where-Object { $_.Contains("Share Fonts On LAN") })) { throw "GUI first-run steps omitted LAN sharing guidance" }
           if (-not ($firstRunSteps | Where-Object { $_.Contains("Preview From Peer") })) { throw "GUI first-run steps omitted preview guidance" }
           if ($guiSelfTestJson.saved_peer_count -ne 0) { throw "GUI self-test unexpectedly loaded saved peers" }
+          if (-not $guiSelfTestJson.lan_sharing_guidance.Contains("Windows Firewall")) { throw "GUI self-test omitted Windows firewall hosting guidance" }
+          if (-not $guiSelfTestJson.lan_sharing_guidance.Contains("No port forwarding")) { throw "GUI self-test omitted no-port-forwarding guidance" }
+          if (-not $guiSelfTestJson.manual_peer_fallback_guidance.Contains("Client-only sync should not need an inbound firewall prompt")) { throw "GUI self-test omitted Windows client-only firewall guidance" }
+          if (-not $guiSelfTestJson.manual_peer_fallback_guidance.Contains("paste the sharing computer")) { throw "GUI self-test omitted manual peer URL fallback guidance" }
           if (-not $diagnostics.Contains('"support_report_text"')) { throw "Diagnostics support report missing" }
           if (-not $diagnostics.Contains('"log_dir"')) { throw "Diagnostics log dir missing" }
           if (-not $doctor.Contains('"checks"')) { throw "Doctor checks missing" }

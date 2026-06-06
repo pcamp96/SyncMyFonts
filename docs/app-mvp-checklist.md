@@ -167,6 +167,8 @@ The app MVP should reuse the current agent commands:
   and verifies current-user font registration after sync.
 - [x] GitHub Actions smoke-tests native GUI state initialization from the
   packaged macOS and Windows GUI launchers.
+- [x] GitHub Actions verifies packaged GUI first-run setup includes validation
+  font, LAN sharing, manual URL fallback, and preview guidance.
 - [x] GitHub Actions verifies the Windows release archive uses the resolved
   Cargo package version instead of the workspace-inheritance marker.
 - [x] GitHub Actions parses packaged `scan` output as JSON inventory on macOS
@@ -237,8 +239,10 @@ The app MVP should reuse the current agent commands:
 - [x] `Dry Run` previews missing fonts without writing local font files.
 - [x] The main app view shows last sync time, last result, and warning count.
 - [x] The app shows "reopen your design app" guidance after successful install.
-- [ ] Denied macOS Local Network permission still allows manual URL fallback.
-- [ ] Windows client-only mode does not request an inbound firewall exception.
+- [x] Denied macOS Local Network permission still has manual URL fallback
+  guidance in the native app.
+- [x] Windows client-only mode does not ask users to open an inbound firewall
+  path; firewall guidance is scoped to hosted peer mode.
 - [x] Hosted peer mode clearly says it is only for trusted local networks.
 
 ## Current Engine Coverage

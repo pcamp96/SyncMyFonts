@@ -885,6 +885,8 @@ struct GuiSelfTestReport {
     status: String,
     next_step: String,
     first_run_steps: Vec<String>,
+    lan_sharing_guidance: &'static str,
+    manual_peer_fallback_guidance: &'static str,
     saved_peer_count: usize,
     selected_peer_name: String,
     listen: String,
@@ -2188,6 +2190,8 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         status: app.status.clone(),
         next_step: app.next_step.clone(),
         first_run_steps: app.first_run_steps(),
+        lan_sharing_guidance: platform_lan_sharing_guidance(),
+        manual_peer_fallback_guidance: platform_manual_peer_fallback_guidance(),
         saved_peer_count: app.saved_peer_names.len(),
         selected_peer_name: app.selected_peer_name.clone(),
         listen: app.listen.clone(),
@@ -3261,6 +3265,7 @@ impl eframe::App for SyncMyFontsGui {
 
         ui.separator();
         ui.heading("Saved LAN Peer");
+        ui.label(platform_manual_peer_fallback_guidance());
         ui.horizontal(|ui| {
             ui.label("Saved Peer");
             eframe::egui::ComboBox::from_id_salt("saved-peer-selector")
@@ -3322,6 +3327,7 @@ impl eframe::App for SyncMyFontsGui {
 
         ui.separator();
         ui.heading("Share This Device");
+        ui.label(platform_lan_sharing_guidance());
         ui.horizontal(|ui| {
             ui.label("Listen Address");
             ui.text_edit_singleline(&mut self.listen);
@@ -6243,6 +6249,12 @@ mod tests {
         assert_eq!(report.selected_peer_name, "Shop PC");
         assert_eq!(report.listen, AppPreferences::default().lan_listen_address);
         assert!(report.message.contains("Native GUI state initialized"));
+        assert!(report.lan_sharing_guidance.contains("No port forwarding"));
+        assert!(
+            report
+                .manual_peer_fallback_guidance
+                .contains("paste the sharing computer")
+        );
         assert!(
             report
                 .first_run_steps
@@ -6285,6 +6297,7 @@ mod tests {
                 .iter()
                 .any(|step| step.contains("Find LAN Peers"))
         );
+        assert!(platform_manual_peer_fallback_guidance().contains("manually"));
 
         app.peer_name = "Shop PC".to_string();
         app.peer_url = "http://192.168.1.25:7370".to_string();
