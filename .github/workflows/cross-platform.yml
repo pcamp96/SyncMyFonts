@@ -128,6 +128,7 @@ jobs:
           grep -q '"log_dir"' "$smoke_root/diagnostics.json"
           grep -q '"checks"' "$smoke_root/doctor.json"
           grep -q '"saved-peers"' "$smoke_root/doctor.json"
+          grep -q '"registration_issues"' "$smoke_root/validation-report.json"
           grep -q '"manual_validation_steps"' "$smoke_root/validation-report.json"
           grep -q '"pass_criteria"' "$smoke_root/validation-report.json"
           grep -q '"path"' "$smoke_root/validation-report-file.json"
@@ -217,6 +218,7 @@ jobs:
           if (-not $diagnostics.Contains('"log_dir"')) { throw "Diagnostics log dir missing" }
           if (-not $doctor.Contains('"checks"')) { throw "Doctor checks missing" }
           if (-not $doctor.Contains('"saved-peers"')) { throw "Doctor saved peer check missing" }
+          if (-not $validationReport.Contains('"registration_issues"')) { throw "Validation report registration issues missing" }
           if (-not $validationReport.Contains('"manual_validation_steps"')) { throw "Validation report manual steps missing" }
           if (-not $validationReport.Contains('"pass_criteria"')) { throw "Validation report pass criteria missing" }
           if (-not $validationReportFile.Contains('"path"')) { throw "Validation report file path missing" }

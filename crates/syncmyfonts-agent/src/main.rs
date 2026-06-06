@@ -911,6 +911,7 @@ struct ManagedVerifyReport {
     missing: Vec<ManagedVerifyIssue>,
     modified: Vec<ManagedVerifyIssue>,
     unreadable: Vec<ManagedVerifyIssue>,
+    registration_issues: Vec<ManagedVerifyIssue>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1466,8 +1467,10 @@ fn validation_evidence_summary(
     managed_fonts: &ManagedVerifyReport,
 ) -> Vec<String> {
     let failed_readiness = readiness.checks.iter().filter(|check| !check.ok).count();
-    let managed_issues =
-        managed_fonts.missing.len() + managed_fonts.modified.len() + managed_fonts.unreadable.len();
+    let managed_issues = managed_fonts.missing.len()
+        + managed_fonts.modified.len()
+        + managed_fonts.unreadable.len()
+        + managed_fonts.registration_issues.len();
     vec![
         format!("Platform: {}", diagnostics.platform),
         format!("Device: {}", diagnostics.device_name),
@@ -4388,6 +4391,7 @@ fn verify_managed_fonts() -> Result<ManagedVerifyReport> {
         missing: Vec::new(),
         modified: Vec::new(),
         unreadable: Vec::new(),
+        registration_issues: Vec::new(),
     };
 
     for record in manifest.installed {
@@ -4432,6 +4436,16 @@ fn verify_managed_fonts() -> Result<ManagedVerifyReport> {
             continue;
         }
 
+        if !skip_platform_font_registration()
+            && let Err(error) = verify_platform_registration(&record)
+        {
+            report.registration_issues.push(managed_verify_issue(
+                &record,
+                &format!("platform registration check failed: {error}"),
+            ));
+            continue;
+        }
+
         report.ok += 1;
     }
 
@@ -4445,6 +4459,61 @@ fn managed_verify_issue(record: &ManagedFontRecord, message: &str) -> ManagedVer
         path: record.path.clone(),
         message: message.to_string(),
     }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_registry_value_name_for_font_path(path: &Path) -> String {
+    let stem = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("SyncMyFonts Font");
+    format!("{stem} (SyncMyFonts)")
+}
+
+#[cfg(target_os = "windows")]
+fn verify_platform_registration(record: &ManagedFontRecord) -> Result<()> {
+    let value_name = windows_registry_value_name_for_font_path(&record.path);
+    let output = Command::new("reg")
+        .args([
+            "query",
+            r"HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts",
+            "/v",
+            &value_name,
+        ])
+        .output()
+        .context("querying font registration in HKCU")?;
+    if !output.status.success() {
+        bail!("Windows registry value {value_name:?} is missing");
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let expected_path = record.path.to_string_lossy();
+    if !stdout.contains(expected_path.as_ref()) {
+        bail!(
+            "Windows registry value {value_name:?} does not point to {}",
+            record.path.display()
+        );
+    }
+    add_windows_font_resource(&record.path).context("probing Windows font loadability")?;
+    remove_windows_font_resource(&record.path);
+    notify_windows_font_change();
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn verify_platform_registration(record: &ManagedFontRecord) -> Result<()> {
+    let managed_dir = managed_font_dir()?;
+    if !record.path.starts_with(&managed_dir) {
+        bail!(
+            "managed macOS font is outside {}; clean-machine testing must confirm app visibility",
+            managed_dir.display()
+        );
+    }
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn verify_platform_registration(_record: &ManagedFontRecord) -> Result<()> {
+    Ok(())
 }
 
 fn diagnostics_warnings(
@@ -4711,8 +4780,12 @@ fn managed_install_dir() -> Result<PathBuf> {
     managed_font_dir()
 }
 
+fn skip_platform_font_registration() -> bool {
+    std::env::var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION").as_deref() == Ok("1")
+}
+
 fn platform_post_install(path: &Path) -> Result<()> {
-    if std::env::var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION").as_deref() == Ok("1") {
+    if skip_platform_font_registration() {
         let _ = path;
         return Ok(());
     }
@@ -4724,10 +4797,7 @@ fn platform_post_install(path: &Path) -> Result<()> {
 
     #[cfg(target_os = "windows")]
     {
-        let stem = path
-            .file_stem()
-            .and_then(|stem| stem.to_str())
-            .unwrap_or("SyncMyFonts Font");
+        let value_name = windows_registry_value_name_for_font_path(path);
         let registry_path = path.to_string_lossy().to_string();
         add_windows_font_resource(path)?;
         let status = std::process::Command::new("reg")
@@ -4735,7 +4805,7 @@ fn platform_post_install(path: &Path) -> Result<()> {
                 "add",
                 r"HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts",
                 "/v",
-                &format!("{} (SyncMyFonts)", stem),
+                &value_name,
                 "/t",
                 "REG_SZ",
                 "/d",
@@ -6576,13 +6646,17 @@ mod tests {
     fn verify_managed_fonts_reports_ok_missing_and_modified_files() {
         let _guard = ENV_LOCK.lock().unwrap();
         let config_dir = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let fonts_dir = config_dir.join("fonts");
         unsafe {
             std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", &fonts_dir);
+            std::env::set_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION", "1");
         }
 
-        let fonts_dir = config_dir.join("fonts");
+        let managed_dir = managed_font_dir().unwrap();
         fs::create_dir_all(&fonts_dir).unwrap();
-        let ok_path = fonts_dir.join("ok.ttf");
+        fs::create_dir_all(&managed_dir).unwrap();
+        let ok_path = managed_dir.join("ok.ttf");
         let ok_bytes = b"stable managed font";
         let ok_sha = hex::encode(Sha256::digest(ok_bytes));
         fs::write(&ok_path, ok_bytes).unwrap();
@@ -6626,6 +6700,8 @@ mod tests {
         let report = verify_managed_fonts().unwrap();
         unsafe {
             std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+            std::env::remove_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION");
         }
 
         assert_eq!(report.total, 3);
@@ -6633,7 +6709,53 @@ mod tests {
         assert_eq!(report.missing.len(), 1);
         assert_eq!(report.modified.len(), 1);
         assert!(report.unreadable.is_empty());
+        assert!(report.registration_issues.is_empty());
         assert_eq!(report.missing[0].file_name, "Missing.ttf");
         assert_eq!(report.modified[0].file_name, "Modified.ttf");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn verify_managed_fonts_reports_macos_records_outside_managed_folder() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let config_dir = root.join("config");
+        let user_font_dir = root.join("user-fonts");
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", &user_font_dir);
+        }
+
+        let outside_path = user_font_dir.join("OutsideManaged.ttf");
+        let bytes = b"outside managed folder";
+        let sha = hex::encode(Sha256::digest(bytes));
+        fs::create_dir_all(&user_font_dir).unwrap();
+        fs::write(&outside_path, bytes).unwrap();
+        let manifest = ManagedManifest {
+            schema: 1,
+            installed: vec![ManagedFontRecord {
+                sha256: sha,
+                file_name: "OutsideManaged.ttf".to_string(),
+                path: outside_path,
+                source: "lan:http://127.0.0.1:7370".to_string(),
+                installed_at: Utc::now().to_rfc3339(),
+                size_bytes: bytes.len() as u64,
+            }],
+        };
+        save_managed_manifest(&manifest).unwrap();
+
+        let report = verify_managed_fonts().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+        }
+
+        assert_eq!(report.total, 1);
+        assert_eq!(report.ok, 0);
+        assert!(report.missing.is_empty());
+        assert!(report.modified.is_empty());
+        assert!(report.unreadable.is_empty());
+        assert_eq!(report.registration_issues.len(), 1);
+        assert!(report.registration_issues[0].message.contains("outside"));
     }
 }
