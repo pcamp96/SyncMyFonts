@@ -13,6 +13,9 @@ use std::{
 const LAN_DISCOVERY_REQUEST: &[u8] = b"SYNCMYFONTS_DISCOVER_V1";
 const LAN_DISCOVERY_TIMEOUT: Duration = Duration::from_millis(1400);
 const PAIRING_CODE_TTL: Duration = Duration::from_secs(10 * 60);
+const VALIDATION_FONT_URL: &str =
+    "https://raw.githubusercontent.com/google/fonts/main/ofl/basic/Basic-Regular.ttf";
+const VALIDATION_FONT_FILE_NAME: &str = "SyncMyFontsValidation-Basic-Regular.ttf";
 
 use anyhow::{Context, Result, anyhow, bail};
 use axum::{
@@ -129,6 +132,11 @@ enum Commands {
     VerifyManaged,
     /// Re-run platform registration for intact SyncMyFonts-managed fonts.
     RepairManaged,
+    /// Install a known OFL test font into this user's normal font folder.
+    InstallValidationFont {
+        #[arg(long, default_value = VALIDATION_FONT_URL)]
+        url: String,
+    },
     /// Install a per-user sign-in helper that syncs saved LAN peers.
     InstallStartupSync,
     /// Install per-user app shortcuts for common SyncMyFonts actions.
@@ -258,6 +266,9 @@ fn main() -> Result<()> {
         }
         Commands::RepairManaged => {
             print_json(&repair_managed_fonts()?)?;
+        }
+        Commands::InstallValidationFont { url } => {
+            print_json(&install_validation_font(&url)?)?;
         }
         Commands::InstallStartupSync => {
             print_json(&install_startup_sync()?)?;
@@ -941,6 +952,17 @@ struct ManagedRepairEntry {
     sha256: String,
     file_name: String,
     path: PathBuf,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ValidationFontInstallReport {
+    source_url: String,
+    file_name: String,
+    path: PathBuf,
+    sha256: String,
+    size_bytes: u64,
+    already_present: bool,
     message: String,
 }
 
@@ -2526,6 +2548,23 @@ impl SyncMyFontsGui {
         );
     }
 
+    fn install_validation_font(&mut self) {
+        self.start_task(
+            "Installing validation font",
+            || match install_validation_font(VALIDATION_FONT_URL) {
+                Ok(report) => {
+                    let next_step = if report.already_present {
+                        "The validation font is already installed for this user. Share this computer, then sync from the other computer.".to_string()
+                    } else {
+                        "Validation font installed. Share this computer, then sync from the other computer and confirm the font appears there.".to_string()
+                    };
+                    gui_ok(&report, next_step)
+                }
+                Err(error) => gui_error(error),
+            },
+        );
+    }
+
     fn run_diagnostics(&mut self) {
         self.start_task("Collecting diagnostics", || match diagnostics() {
             Ok(report) => {
@@ -3091,6 +3130,9 @@ impl eframe::App for SyncMyFontsGui {
                 }
                 if ui.button("Repair Managed Fonts").clicked() {
                     self.repair_managed();
+                }
+                if ui.button("Install Validation Font").clicked() {
+                    self.install_validation_font();
                 }
                 if ui.button("Diagnostics").clicked() {
                     self.run_diagnostics();
@@ -4593,6 +4635,81 @@ fn repair_managed_fonts() -> Result<ManagedRepairReport> {
     }
 
     Ok(report)
+}
+
+fn install_validation_font(url: &str) -> Result<ValidationFontInstallReport> {
+    let bytes = http_client()?
+        .get(url)
+        .send()
+        .with_context(|| format!("downloading validation font from {url}"))?
+        .error_for_status()
+        .with_context(|| format!("validation font download was rejected by {url}"))?
+        .bytes()
+        .context("reading validation font bytes")?;
+    install_validation_font_bytes(url, bytes.as_ref())
+}
+
+fn install_validation_font_bytes(url: &str, bytes: &[u8]) -> Result<ValidationFontInstallReport> {
+    let sha256 = hex::encode(Sha256::digest(bytes));
+    let safe_name = safe_file_name(VALIDATION_FONT_FILE_NAME, &sha256);
+    if let Some(conflict_path) = system_font_filename_conflict(&safe_name)? {
+        bail!(
+            "system-font-conflict: {} conflicts with {}",
+            safe_name,
+            conflict_path.display()
+        );
+    }
+
+    let install_dir = user_font_dir()?;
+    fs::create_dir_all(&install_dir)
+        .with_context(|| format!("creating {}", install_dir.display()))?;
+    let destination = unique_destination(&install_dir, &safe_name, &sha256)?;
+    let already_present = destination.exists();
+    if !already_present {
+        let temp = destination.with_extension(format!(
+            "{}.tmp",
+            destination
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .unwrap_or("font")
+        ));
+        {
+            let mut file =
+                fs::File::create(&temp).with_context(|| format!("creating {}", temp.display()))?;
+            file.write_all(bytes)
+                .with_context(|| format!("writing {}", temp.display()))?;
+            file.sync_all().ok();
+        }
+        fs::rename(&temp, &destination)
+            .with_context(|| format!("installing {}", destination.display()))?;
+    }
+
+    if let Err(error) = platform_post_install(&destination) {
+        if !already_present {
+            fs::remove_file(&destination).with_context(|| {
+                format!(
+                    "validation font registration failed and cleanup could not remove {}",
+                    destination.display()
+                )
+            })?;
+        }
+        return Err(error).with_context(|| {
+            format!(
+                "validation font registration failed after installing {}",
+                destination.display()
+            )
+        });
+    }
+
+    Ok(ValidationFontInstallReport {
+        source_url: url.to_string(),
+        file_name: safe_name,
+        path: destination,
+        sha256,
+        size_bytes: bytes.len() as u64,
+        already_present,
+        message: "Installed a known OFL validation font for this user. Share this computer, then sync from the other computer to prove LAN font sync.".to_string(),
+    })
 }
 
 fn managed_record_file_is_intact(record: &ManagedFontRecord) -> Result<()> {
@@ -6239,6 +6356,42 @@ mod tests {
         assert!(managed_dir.starts_with(&user_dir));
         assert_eq!(fs::read(installed).unwrap(), bytes);
         assert!(!system_dir.exists());
+    }
+
+    #[test]
+    fn validation_font_installs_as_user_source_font_not_managed() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let user_dir = root.join("user-fonts");
+        let config_dir = root.join("config");
+        let system_dir = root.join("system-fonts");
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", &user_dir);
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+            std::env::set_var("SYNCMYFONTS_SYSTEM_FONT_DIRS", &system_dir);
+            std::env::set_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION", "1");
+        }
+
+        let bytes = b"syncmyfonts validation font bytes";
+        let report = install_validation_font_bytes("https://example.test/font.ttf", bytes).unwrap();
+        let default_scan = scan(false).unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_SYSTEM_FONT_DIRS");
+            std::env::remove_var("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION");
+        }
+
+        assert!(report.path.starts_with(&user_dir));
+        assert_eq!(fs::read(&report.path).unwrap(), bytes);
+        assert!(report.file_name.starts_with("SyncMyFontsValidation"));
+        assert!(
+            default_scan
+                .fonts
+                .iter()
+                .any(|font| font.path == report.path)
+        );
+        assert!(!config_dir.join("managed-fonts.json").exists());
     }
 
     #[test]

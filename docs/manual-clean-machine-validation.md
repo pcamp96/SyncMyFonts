@@ -47,8 +47,9 @@ Windows validation report:
 
 ## macOS To Windows
 
-1. On macOS, install or place a non-system test font in the current user's font
-   folder. Do not use a font that shipped with macOS or Windows.
+1. On macOS, click `Install Validation Font`, or install/place another
+   non-system test font in the current user's font folder. Do not use a font
+   that shipped with macOS or Windows.
 2. On macOS, click `Share Fonts On LAN`.
 3. Leave `Shared Key` blank and use `Copy URL` plus `Copy Code` for the
    displayed peer URL and pairing code.
@@ -76,8 +77,8 @@ Installed Windows font path:
 
 ## Windows To macOS
 
-1. On Windows, install or place a different non-system test font in the current
-   user's font folder.
+1. On Windows, click `Install Validation Font`, or install/place a different
+   non-system test font in the current user's font folder.
 2. On Windows, click `Share Fonts On LAN`.
 3. If Windows Firewall prompts, allow Private networks only.
 4. Leave `Shared Key` blank and use `Copy URL` plus `Copy Code` for the

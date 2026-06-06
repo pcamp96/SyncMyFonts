@@ -30,6 +30,7 @@ The app MVP should reuse the current agent commands:
 - `syncmyfonts-agent validation-report`
 - `syncmyfonts-agent verify-managed`
 - `syncmyfonts-agent repair-managed`
+- `syncmyfonts-agent install-validation-font`
 - `syncmyfonts-agent install-app-shortcuts`
 - `syncmyfonts-agent gui`
 
@@ -70,6 +71,8 @@ The app MVP should reuse the current agent commands:
 - [x] `Validation Report` wraps `syncmyfonts-agent validation-report`.
 - [x] `Verify Managed Fonts` wraps `syncmyfonts-agent verify-managed`.
 - [x] `Repair Managed Fonts` wraps `syncmyfonts-agent repair-managed`.
+- [x] `Install Validation Font` wraps
+  `syncmyfonts-agent install-validation-font`.
 - [x] `Install App Shortcuts` wraps
   `syncmyfonts-agent install-app-shortcuts`.
 - [x] `Open Native GUI` wraps `syncmyfonts-agent gui`.

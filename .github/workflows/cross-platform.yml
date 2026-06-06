@@ -126,6 +126,14 @@ jobs:
           SYNCMYFONTS_LOG_DIR="$smoke_root/logs" \
           SYNCMYFONTS_USER_FONT_DIR="$smoke_root/fonts" \
           "$package_dir/bin/syncmyfonts-agent" repair-managed > "$smoke_root/repair-managed.json"
+          SYNCMYFONTS_CONFIG_DIR="$smoke_root/config" \
+          SYNCMYFONTS_LOG_DIR="$smoke_root/logs" \
+          SYNCMYFONTS_USER_FONT_DIR="$smoke_root/fonts" \
+          "$package_dir/bin/syncmyfonts-agent" install-validation-font > "$smoke_root/install-validation-font.json"
+          SYNCMYFONTS_CONFIG_DIR="$smoke_root/config" \
+          SYNCMYFONTS_LOG_DIR="$smoke_root/logs" \
+          SYNCMYFONTS_USER_FONT_DIR="$smoke_root/fonts" \
+          "$package_dir/bin/syncmyfonts-agent" scan > "$smoke_root/scan-after-validation-font.json"
           grep -q '"support_report_text"' "$smoke_root/diagnostics.json"
           grep -q '"ok": true' "$smoke_root/gui-self-test.json"
           grep -q '"Native GUI state initialized' "$smoke_root/gui-self-test.json"
@@ -138,6 +146,8 @@ jobs:
           grep -q '"path"' "$smoke_root/validation-report-file.json"
           grep -q '"repaired"' "$smoke_root/repair-managed.json"
           grep -q '"failed"' "$smoke_root/repair-managed.json"
+          grep -q '"file_name": "SyncMyFontsValidation-Basic-Regular.ttf"' "$smoke_root/install-validation-font.json"
+          grep -q '"SyncMyFontsValidation-Basic-Regular.ttf"' "$smoke_root/scan-after-validation-font.json"
           find "$smoke_root/logs" -name 'validation-report-*.json' | grep -q .
           source_fonts="$smoke_root/source-fonts"
           source_config="$smoke_root/source-config"
@@ -217,12 +227,16 @@ jobs:
           & $agent validation-report | Tee-Object -FilePath (Join-Path $smokeRoot "validation-report.json")
           & $agent validation-report --write | Tee-Object -FilePath (Join-Path $smokeRoot "validation-report-file.json")
           & $agent repair-managed | Tee-Object -FilePath (Join-Path $smokeRoot "repair-managed.json")
+          & $agent install-validation-font | Tee-Object -FilePath (Join-Path $smokeRoot "install-validation-font.json")
+          & $agent scan | Tee-Object -FilePath (Join-Path $smokeRoot "scan-after-validation-font.json")
           $diagnostics = Get-Content (Join-Path $smokeRoot "diagnostics.json") -Raw
           $guiSelfTest = Get-Content (Join-Path $smokeRoot "gui-self-test.json") -Raw
           $doctor = Get-Content (Join-Path $smokeRoot "doctor.json") -Raw
           $validationReport = Get-Content (Join-Path $smokeRoot "validation-report.json") -Raw
           $validationReportFile = Get-Content (Join-Path $smokeRoot "validation-report-file.json") -Raw
           $repairManaged = Get-Content (Join-Path $smokeRoot "repair-managed.json") -Raw
+          $installValidationFont = Get-Content (Join-Path $smokeRoot "install-validation-font.json") -Raw
+          $scanAfterValidationFont = Get-Content (Join-Path $smokeRoot "scan-after-validation-font.json") -Raw
           if (-not $guiSelfTest.Contains('"ok": true')) { throw "GUI self-test did not report ok" }
           if (-not $guiSelfTest.Contains('"Native GUI state initialized')) { throw "GUI self-test message missing" }
           if (-not $diagnostics.Contains('"support_report_text"')) { throw "Diagnostics support report missing" }
@@ -235,6 +249,8 @@ jobs:
           if (-not $validationReportFile.Contains('"path"')) { throw "Validation report file path missing" }
           if (-not $repairManaged.Contains('"repaired"')) { throw "Repair managed report repaired list missing" }
           if (-not $repairManaged.Contains('"failed"')) { throw "Repair managed report failed list missing" }
+          if (-not $installValidationFont.Contains('"file_name": "SyncMyFontsValidation-Basic-Regular.ttf"')) { throw "Validation font install did not report the expected file name" }
+          if (-not $scanAfterValidationFont.Contains('"SyncMyFontsValidation-Basic-Regular.ttf"')) { throw "Validation font was not visible to normal scan" }
           if (-not (Get-ChildItem (Join-Path $smokeRoot "logs") -Filter "validation-report-*.json" -ErrorAction SilentlyContinue)) { throw "Validation report file was not saved" }
           $env:APPDATA = Join-Path $smokeRoot "appdata"
           & $agent install-app-shortcuts | Tee-Object -FilePath (Join-Path $smokeRoot "app-shortcuts.json")

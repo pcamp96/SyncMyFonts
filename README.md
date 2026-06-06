@@ -118,10 +118,11 @@ The GUI can scan fonts, discover sharing LAN peers, test a LAN peer, preview
 missing fonts from a peer, install missing fonts, save LAN peers, sync all saved
 peers, start/stop LAN sharing, show the copyable LAN URL for this device, set a
 friendly device name, verify managed font installs, and produce a redacted
-diagnostics report. It can also install a per-user sign-in helper that runs
-saved-peer sync without putting LAN keys in shortcut or plist arguments, and
-run a readiness check before live two-machine testing. Folder shortcuts open
-the managed font folder, action logs, and app support/config folder.
+diagnostics report. It can also install a known OFL validation font into the
+current user's normal font folder, install a per-user sign-in helper that runs
+saved-peer sync without putting LAN keys in shortcut or plist arguments, and run
+a readiness check before live two-machine testing. Folder shortcuts open the
+managed font folder, action logs, and app support/config folder.
 When multiple computers are saved, the GUI includes a saved-peer selector so a
 user can load the exact Mac or Windows PC they want to test, preview, sync, or
 forget.
