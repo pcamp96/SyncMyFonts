@@ -144,7 +144,7 @@ jobs:
           target_fonts="$smoke_root/target-fonts"
           target_config="$smoke_root/target-config"
           mkdir -p "$source_fonts" "$source_config" "$target_fonts" "$target_config"
-          python3 scripts/testing/generate-smoke-font.py "$source_fonts/PackagedSmoke.ttf"
+          curl -fsSL "https://raw.githubusercontent.com/google/fonts/main/ofl/basic/Basic-Regular.ttf" -o "$source_fonts/PackagedSmoke.ttf"
           smoke_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
           SYNCMYFONTS_CONFIG_DIR="$source_config" \
           SYNCMYFONTS_LOG_DIR="$smoke_root/source-logs" \
@@ -264,7 +264,7 @@ jobs:
           $targetFonts = Join-Path $smokeRoot "target-fonts"
           $targetConfig = Join-Path $smokeRoot "target-config"
           New-Item -ItemType Directory -Force -Path $sourceFonts, $sourceConfig, $targetFonts, $targetConfig | Out-Null
-          python scripts/testing/generate-smoke-font.py (Join-Path $sourceFonts "PackagedSmoke.ttf")
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/google/fonts/main/ofl/basic/Basic-Regular.ttf" -OutFile (Join-Path $sourceFonts "PackagedSmoke.ttf")
           $serveEnv = @{
             SYNCMYFONTS_CONFIG_DIR = $sourceConfig
             SYNCMYFONTS_LOG_DIR = Join-Path $smokeRoot "source-logs"
