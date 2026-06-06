@@ -3,6 +3,7 @@ use std::{
     net::{SocketAddr, TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command},
+    sync::{Mutex, MutexGuard, OnceLock},
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -19,8 +20,18 @@ impl Drop for ChildGuard {
     }
 }
 
+static LAN_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn lan_test_guard() -> MutexGuard<'static, ()> {
+    LAN_TEST_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .expect("LAN test lock should not be poisoned")
+}
+
 #[test]
 fn saved_peer_sync_all_installs_matching_font_bytes() {
+    let _guard = lan_test_guard();
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
     let root = unique_temp_dir("syncmyfonts-lan-sync");
     let peer_a_fonts = root.join("peer-a-fonts");
@@ -144,6 +155,7 @@ fn saved_peer_sync_all_installs_matching_font_bytes() {
 
 #[test]
 fn bidirectional_saved_peer_sync_converges_without_duplicates() {
+    let _guard = lan_test_guard();
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
     let root = unique_temp_dir("syncmyfonts-lan-bidirectional");
     let peer_a_fonts = root.join("peer-a-fonts");
@@ -253,6 +265,7 @@ fn bidirectional_saved_peer_sync_converges_without_duplicates() {
 
 #[test]
 fn lan_sync_dry_run_reports_missing_without_installing_fonts() {
+    let _guard = lan_test_guard();
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
     let root = unique_temp_dir("syncmyfonts-lan-dry-run");
     let peer_a_fonts = root.join("peer-a-fonts");
@@ -311,6 +324,7 @@ fn lan_sync_dry_run_reports_missing_without_installing_fonts() {
 
 #[test]
 fn lan_pair_saves_key_then_sync_all_installs_font() {
+    let _guard = lan_test_guard();
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
     let root = unique_temp_dir("syncmyfonts-lan-pair");
     let peer_a_fonts = root.join("peer-a-fonts");
@@ -380,6 +394,7 @@ fn lan_pair_saves_key_then_sync_all_installs_font() {
 
 #[test]
 fn lan_sync_with_wrong_key_fails_without_installing_fonts() {
+    let _guard = lan_test_guard();
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
     let root = unique_temp_dir("syncmyfonts-lan-wrong-key");
     let peer_a_fonts = root.join("peer-a-fonts");
@@ -435,6 +450,7 @@ fn lan_sync_with_wrong_key_fails_without_installing_fonts() {
 
 #[test]
 fn lan_sync_skips_system_font_conflict_without_installing_fonts() {
+    let _guard = lan_test_guard();
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
     let root = unique_temp_dir("syncmyfonts-lan-system-conflict");
     let peer_a_fonts = root.join("peer-a-fonts");
@@ -499,6 +515,7 @@ fn lan_sync_skips_system_font_conflict_without_installing_fonts() {
 
 #[test]
 fn lan_manifest_and_blobs_do_not_expose_system_fonts() {
+    let _guard = lan_test_guard();
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
     let root = unique_temp_dir("syncmyfonts-lan-system-exposure");
     let peer_fonts = root.join("peer-fonts");
@@ -575,6 +592,7 @@ fn lan_manifest_and_blobs_do_not_expose_system_fonts() {
 
 #[test]
 fn saved_peer_sync_all_reports_offline_peer_without_installing_fonts() {
+    let _guard = lan_test_guard();
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_syncmyfonts-agent"));
     let root = unique_temp_dir("syncmyfonts-lan-offline");
     let peer_b_fonts = root.join("peer-b-fonts");
