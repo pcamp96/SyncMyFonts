@@ -899,6 +899,7 @@ struct GuiSelfTestReport {
     next_step: String,
     first_run_steps: Vec<String>,
     lan_sharing_guidance: &'static str,
+    pre_share_guidance: &'static str,
     manual_peer_fallback_guidance: &'static str,
     sync_validation_matrix: Vec<SyncValidationDirection>,
     validation_checklist_text: String,
@@ -2291,6 +2292,7 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         next_step: app.next_step.clone(),
         first_run_steps: app.first_run_steps(),
         lan_sharing_guidance: platform_lan_sharing_guidance(),
+        pre_share_guidance: platform_pre_share_guidance(),
         manual_peer_fallback_guidance: platform_manual_peer_fallback_guidance(),
         sync_validation_matrix: sync_validation_matrix(),
         validation_checklist_text: validation_checklist_text(),
@@ -3259,6 +3261,30 @@ impl SyncMyFontsGui {
             .to_string()
     }
 
+    fn peer_url_ready(&self) -> bool {
+        !self.peer_url.trim().is_empty()
+    }
+
+    fn peer_pairing_ready(&self) -> bool {
+        self.peer_url_ready() && !self.pairing_code.trim().is_empty()
+    }
+
+    fn peer_sync_ready(&self) -> bool {
+        self.peer_url_ready() && !self.peer_key.trim().is_empty()
+    }
+
+    fn peer_action_hint(&self) -> &'static str {
+        if !self.peer_url_ready() {
+            "Find a LAN peer or paste the sharing computer's URL first."
+        } else if !self.peer_sync_ready() && !self.peer_pairing_ready() {
+            "Enter the pairing code from the sharing computer, then pair before previewing."
+        } else if self.peer_pairing_ready() && !self.peer_sync_ready() {
+            "Pair this peer to save its LAN token, then preview before installing."
+        } else {
+            "Peer is ready. Preview first; Get Missing Fonts installs into this user's font folder."
+        }
+    }
+
     fn stop_share(&mut self) {
         let Some(mut share) = self.share.take() else {
             self.next_step = "Sharing is already off.".to_string();
@@ -3363,6 +3389,20 @@ impl eframe::App for SyncMyFontsGui {
         ui.heading("First LAN Sync");
         ui.label(self.setup_phase());
         ui.label(self.role_card_text());
+        if ui.button("Copy Role Card").clicked() {
+            let role_card = self.role_card_text();
+            ui.ctx().copy_text(role_card.clone());
+            self.output = role_card;
+            self.next_step =
+                "Role card copied. Use it to coordinate this computer with the other computer."
+                    .to_string();
+            self.last_result = format!(
+                "Copy Role Card completed at {}",
+                Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+            );
+            self.warning_count = 0;
+            let _ = record_action("Copy Role Card", "success", 0, &self.next_step);
+        }
         for step in self.first_run_steps() {
             ui.label(step);
         }
@@ -3418,12 +3458,14 @@ impl eframe::App for SyncMyFontsGui {
                 if ui.button("Open App Support").clicked() {
                     self.open_app_support_folder();
                 }
-                if ui.button("Sync Saved Peers").clicked() {
-                    self.sync_saved_peers(false);
-                }
-                if ui.button("Dry Run Saved Peers").clicked() {
-                    self.sync_saved_peers(true);
-                }
+                ui.add_enabled_ui(!self.saved_peer_names.is_empty(), |ui| {
+                    if ui.button("Sync Saved Peers").clicked() {
+                        self.sync_saved_peers(false);
+                    }
+                    if ui.button("Dry Run Saved Peers").clicked() {
+                        self.sync_saved_peers(true);
+                    }
+                });
                 if ui.button("Enable Sign-In Sync").clicked() {
                     self.install_startup_sync();
                 }
@@ -3486,35 +3528,48 @@ impl eframe::App for SyncMyFontsGui {
             ui.label("Pairing Code");
             ui.text_edit_singleline(&mut self.pairing_code);
         });
+        ui.label(self.peer_action_hint());
         ui.add_enabled_ui(!task_running, |ui| {
             ui.horizontal_wrapped(|ui| {
                 if ui.button("Find LAN Peers").clicked() {
                     self.discover_peers();
                 }
-                if ui.button("Pair Peer").clicked() {
-                    self.pair_peer();
-                }
-                if ui.button("Test Peer").clicked() {
-                    self.test_peer();
-                }
-                if ui.button("Preview From Peer").clicked() {
-                    self.sync_peer(true);
-                }
-                if ui.button("Get Missing Fonts").clicked() {
-                    self.sync_peer(false);
-                }
-                if ui.button("Save Peer").clicked() {
-                    self.save_peer();
-                }
-                if ui.button("Forget Peer").clicked() {
-                    self.forget_peer();
-                }
+                ui.add_enabled_ui(self.peer_pairing_ready(), |ui| {
+                    if ui.button("Pair Peer").clicked() {
+                        self.pair_peer();
+                    }
+                });
+                ui.add_enabled_ui(self.peer_sync_ready(), |ui| {
+                    if ui.button("Test Peer").clicked() {
+                        self.test_peer();
+                    }
+                    if ui.button("Preview From Peer").clicked() {
+                        self.sync_peer(true);
+                    }
+                    if ui.button("Get Missing Fonts").clicked() {
+                        self.sync_peer(false);
+                    }
+                });
+                ui.add_enabled_ui(self.peer_url_ready(), |ui| {
+                    if ui.button("Save Peer").clicked() {
+                        self.save_peer();
+                    }
+                });
+                ui.add_enabled_ui(!self.peer_name.trim().is_empty(), |ui| {
+                    if ui.button("Forget Peer").clicked() {
+                        self.forget_peer();
+                    }
+                });
             });
         });
 
         ui.separator();
         ui.heading("Share This Device");
-        ui.label(platform_lan_sharing_guidance());
+        if self.share.is_some() {
+            ui.label(platform_lan_sharing_guidance());
+        } else {
+            ui.label(platform_pre_share_guidance());
+        }
         ui.horizontal(|ui| {
             ui.label("Listen Address");
             ui.text_edit_singleline(&mut self.listen);
@@ -3853,6 +3908,21 @@ fn platform_lan_sharing_guidance() -> &'static str {
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
         "Allow local network access if your OS asks. No port forwarding is needed."
+    }
+}
+
+fn platform_pre_share_guidance() -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        "Only click Share Fonts On LAN when this Windows PC has fonts another computer needs. Receiving fonts from another computer does not require an inbound firewall prompt."
+    }
+    #[cfg(target_os = "macos")]
+    {
+        "Only click Share Fonts On LAN when this Mac has fonts another computer needs. Receiving fonts from another computer can use Find LAN Peers or a pasted LAN URL."
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        "Only click Share Fonts On LAN when this computer has fonts another computer needs. Receiving fonts can use Find LAN Peers or a pasted LAN URL."
     }
 }
 
@@ -6450,6 +6520,11 @@ mod tests {
         assert!(report.lan_sharing_guidance.contains("No port forwarding"));
         assert!(
             report
+                .pre_share_guidance
+                .contains("Only click Share Fonts On LAN")
+        );
+        assert!(
+            report
                 .manual_peer_fallback_guidance
                 .contains("paste the sharing computer")
         );
@@ -6508,6 +6583,15 @@ mod tests {
     }
 
     #[test]
+    fn pre_share_guidance_distinguishes_receiving_from_hosting() {
+        let guidance = platform_pre_share_guidance();
+
+        assert!(guidance.contains("Only click Share Fonts On LAN"));
+        assert!(guidance.contains("Receiving fonts"));
+        assert!(!guidance.contains("port forwarding"));
+    }
+
+    #[test]
     fn gui_first_run_steps_react_to_pairing_state() {
         let _guard = ENV_LOCK.lock().unwrap();
         let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
@@ -6537,11 +6621,20 @@ mod tests {
         assert!(platform_manual_peer_fallback_guidance().contains("manually"));
         assert!(app.setup_phase().contains("Pairing mode"));
         assert!(app.role_card_text().contains("Share Fonts On LAN"));
+        assert_eq!(
+            app.peer_action_hint(),
+            "Find a LAN peer or paste the sharing computer's URL first."
+        );
+        assert!(!app.peer_pairing_ready());
+        assert!(!app.peer_sync_ready());
 
         app.peer_name = "Shop PC".to_string();
         app.peer_url = "http://192.168.1.25:7370".to_string();
         assert!(app.setup_phase().contains("enter the code"));
         assert!(app.role_card_text().contains("Pair Peer"));
+        assert!(app.peer_action_hint().contains("Enter the pairing code"));
+        assert!(!app.peer_pairing_ready());
+        assert!(!app.peer_sync_ready());
         let loaded_peer_steps = app.first_run_steps();
         assert!(
             loaded_peer_steps
@@ -6549,9 +6642,17 @@ mod tests {
                 .any(|step| step.contains("Enter its pairing code"))
         );
 
+        app.pairing_code = "12345678".to_string();
+        assert!(app.peer_pairing_ready());
+        assert!(!app.peer_sync_ready());
+        assert!(app.peer_action_hint().contains("Pair this peer"));
+        app.pairing_code.clear();
+
         app.peer_key = "saved-token".to_string();
         assert!(app.setup_phase().contains("Preview mode"));
         assert!(app.role_card_text().contains("Get Missing Fonts"));
+        assert!(app.peer_sync_ready());
+        assert!(app.peer_action_hint().contains("Preview first"));
         let keyed_steps = app.first_run_steps();
         assert!(
             keyed_steps

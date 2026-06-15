@@ -122,6 +122,10 @@ The app MVP should reuse the current agent commands:
   or sync.
 - [x] Native GUI shows a role card with what this computer and the other
   computer should do next.
+- [x] Native GUI gates peer actions so pairing, preview, and install buttons
+  appear in the intended LAN setup order.
+- [x] Native GUI distinguishes receiving fonts from hosting, so Windows
+  client-only sync does not look like it needs inbound firewall setup.
 - [x] A copyable support report with app version, agent version, platform,
   config paths, font paths, last command, and last result.
 - [x] Native GUI copy buttons for the current result and latest redacted
