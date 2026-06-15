@@ -58,13 +58,13 @@ SyncMyFonts Windows MVP
    Font. SyncMyFonts installs an OFL test font into your normal user font
    folder so the other computer has something legitimate to pull.
 
-6. On the computer with fonts, click Share Fonts On LAN. Leave Shared Key blank
-   for the easiest setup and copy the pairing code.
+6. On the computer with fonts, click Share Fonts On This Network. Leave Shared
+   Key blank for the easiest setup and click Copy Pairing Instructions.
 
 7. On the other computer, click Find LAN Peers, select the sharing computer,
-   enter the pairing code, and click Pair Peer. If discovery does not work, copy
-   the sharing computer's LAN URL and paste it into the URL field manually. Then
-   use Preview From Peer before Get Missing Fonts.
+   enter the pairing code, and click Pair Peer. If discovery does not work,
+   paste the sharing computer's LAN URL from the copied instructions into the
+   URL field manually. Then use Preview From Peer before Get Missing Fonts.
 
 8. Reopen your design apps if an installed font does not appear immediately.
 

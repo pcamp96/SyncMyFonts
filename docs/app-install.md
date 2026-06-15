@@ -27,8 +27,9 @@ managed fonts if they stop appearing correctly.
 On macOS, managed verification also checks that each managed font can be parsed
 through CoreText, which is a stronger signal than only confirming the file path
 and hash.
-When sharing is on, use `Copy URL` and `Copy Code` to move the LAN address and
-pairing code to the other computer without retyping.
+When sharing is on, use `Copy Pairing Instructions` to move the LAN URL,
+pairing code, and next action to the other computer without retyping. `Copy URL`
+and `Copy Code` are still available when you only need one value.
 Turn on `Auto Sync Saved Peers` if this computer should keep checking saved LAN
 peers on an interval while the app stays open. The app saves that preference in
 the per-user config so it survives relaunches.
