@@ -1572,10 +1572,10 @@ fn manual_validation_steps() -> Vec<String> {
     vec![
         "Launch the native app on both macOS and Windows.".to_string(),
         "Run Validation Report on both computers before syncing.".to_string(),
-        "On the computer that has a non-system test font, click Share Fonts On LAN with Shared Key blank.".to_string(),
+        "On the computer that has a non-system test font, click Share Fonts On This Network with Shared Key blank.".to_string(),
         "On the other computer, find or enter the peer URL, enter the pairing code within its shown validity window, and click Pair Peer.".to_string(),
         "Run Preview From Peer and confirm the test font is missing while system fonts are not offered.".to_string(),
-        "Run Get Missing Fonts and confirm the font installs into the current-user or SyncMyFonts-managed folder.".to_string(),
+        "Run Get Missing Fonts From Peer and confirm the font installs into the current-user or SyncMyFonts-managed folder.".to_string(),
         "Run the same sync again and confirm the already installed font is skipped.".to_string(),
         "Repeat the flow in the other direction with a different non-system test font.".to_string(),
         "Run Validation Report again on both computers and keep the before/after JSON as evidence.".to_string(),
@@ -1590,13 +1590,13 @@ fn sync_validation_matrix() -> Vec<SyncValidationDirection> {
             target_computer: "Windows computer missing that test font",
             source_evidence: vec![
                 "Before-sync Validation Report from macOS",
-                "Screenshot or copied result after Share Fonts On LAN shows a LAN URL and pairing code",
+                "Screenshot or copied result after Share Fonts On This Network shows a LAN URL and pairing code",
                 "After-sync Validation Report from macOS",
             ],
             target_evidence: vec![
                 "Before-sync Validation Report from Windows",
                 "Copied Preview From Peer result showing the test font as missing/installable",
-                "Copied Get Missing Fonts result showing the test font installed",
+                "Copied Get Missing Fonts From Peer result showing the test font installed",
                 "After-sync Validation Report from Windows with clean managed-font verification",
             ],
             pass_criteria: vec![
@@ -1611,13 +1611,13 @@ fn sync_validation_matrix() -> Vec<SyncValidationDirection> {
             target_computer: "macOS computer missing that test font",
             source_evidence: vec![
                 "Before-sync Validation Report from Windows",
-                "Screenshot or copied result after Share Fonts On LAN shows a LAN URL and pairing code",
+                "Screenshot or copied result after Share Fonts On This Network shows a LAN URL and pairing code",
                 "After-sync Validation Report from Windows",
             ],
             target_evidence: vec![
                 "Before-sync Validation Report from macOS",
                 "Copied Preview From Peer result showing the test font as missing/installable",
-                "Copied Get Missing Fonts result showing the test font installed",
+                "Copied Get Missing Fonts From Peer result showing the test font installed",
                 "After-sync Validation Report from macOS with clean managed-font verification",
             ],
             pass_criteria: vec![
@@ -2040,7 +2040,7 @@ async fn app_peer_test(
     match result {
         Ok(report) => {
             record_action_best_effort(
-                "Browser Test Peer",
+                "Browser Test Connection",
                 "success",
                 0,
                 &format!("Connected. Peer reported {} fonts.", report.peer_fonts),
@@ -2053,7 +2053,7 @@ async fn app_peer_test(
             }))
         }
         Err(error) => {
-            record_action_best_effort("Browser Test Peer", "failed", 1, &error.to_string());
+            record_action_best_effort("Browser Test Connection", "failed", 1, &error.to_string());
             Err(LanApiError::internal(error))
         }
     }
@@ -2068,7 +2068,7 @@ async fn app_peer_sync(
     let action = if dry_run {
         "Browser Preview From Peer"
     } else {
-        "Browser Get Missing Fonts"
+        "Browser Get Missing Fonts From Peer"
     };
     let result = tokio::task::spawn_blocking(move || lan_sync(&url, lan_key.as_deref(), dry_run))
         .await
@@ -2196,7 +2196,7 @@ async fn app_share_start(
         Ok(child) => child,
         Err(error) => {
             record_action_best_effort(
-                "Browser Share Fonts On LAN",
+                "Browser Share Fonts On This Network",
                 "failed",
                 1,
                 &error.to_string(),
@@ -2208,7 +2208,7 @@ async fn app_share_start(
         Ok(child) => child,
         Err(error) => {
             record_action_best_effort(
-                "Browser Share Fonts On LAN",
+                "Browser Share Fonts On This Network",
                 "failed",
                 1,
                 &error.to_string(),
@@ -2228,7 +2228,7 @@ async fn app_share_start(
         pairing_expires_seconds,
     };
     record_action_best_effort(
-        "Browser Share Fonts On LAN",
+        "Browser Share Fonts On This Network",
         "success",
         0,
         &response.message,
@@ -2594,7 +2594,7 @@ impl SyncMyFontsGui {
                     self.peer_url = peer.url.clone();
                     self.peer_key = peer.lan_key.clone().unwrap_or_default();
                     self.next_step = format!(
-                        "Loaded saved peer {}. Use Test Peer, Preview From Peer, or Sync Saved Peers.",
+                        "Loaded saved peer {}. Use Test Connection, Preview From Peer, or Sync Saved Peers.",
                         peer.name
                     );
                 }
@@ -3065,9 +3065,10 @@ impl SyncMyFontsGui {
             Ok(listen) => listen,
             Err(error) => {
                 self.output = format!("invalid listen address: {error}");
-                self.last_result = "Share Fonts On LAN failed before starting.".to_string();
+                self.last_result =
+                    "Share Fonts On This Network failed before starting.".to_string();
                 self.warning_count = 1;
-                let _ = record_action("Share Fonts On LAN", "failed", 1, &self.output);
+                let _ = record_action("Share Fonts On This Network", "failed", 1, &self.output);
                 return;
             }
         };
@@ -3075,9 +3076,10 @@ impl SyncMyFontsGui {
             Ok(exe) => exe,
             Err(error) => {
                 self.output = format!("locating current executable failed: {error}");
-                self.last_result = "Share Fonts On LAN failed before starting.".to_string();
+                self.last_result =
+                    "Share Fonts On This Network failed before starting.".to_string();
                 self.warning_count = 1;
-                let _ = record_action("Share Fonts On LAN", "failed", 1, &self.output);
+                let _ = record_action("Share Fonts On This Network", "failed", 1, &self.output);
                 return;
             }
         };
@@ -3129,11 +3131,11 @@ impl SyncMyFontsGui {
                 self.output =
                     serde_json::to_string_pretty(&response).unwrap_or_else(|_| "ok".to_string());
                 self.last_result = format!(
-                    "Share Fonts On LAN completed at {}",
+                    "Share Fonts On This Network completed at {}",
                     Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
                 );
                 self.warning_count = 0;
-                let _ = record_action("Share Fonts On LAN", "success", 0, &self.next_step);
+                let _ = record_action("Share Fonts On This Network", "success", 0, &self.next_step);
             }
             Err(error) => {
                 self.last_pairing_code = None;
@@ -3144,9 +3146,9 @@ impl SyncMyFontsGui {
                     "Sharing failed to start. Check whether another SyncMyFonts share is already using that port. {}",
                     platform_lan_sharing_guidance()
                 );
-                self.last_result = "Share Fonts On LAN failed.".to_string();
+                self.last_result = "Share Fonts On This Network failed.".to_string();
                 self.warning_count = 1;
-                let _ = record_action("Share Fonts On LAN", "failed", 1, &self.next_step);
+                let _ = record_action("Share Fonts On This Network", "failed", 1, &self.next_step);
             }
         }
     }
@@ -3173,7 +3175,7 @@ impl SyncMyFontsGui {
             ));
         } else {
             steps.push(
-                "2. On the computer that already has the font, leave Shared Key blank and click Share Fonts On LAN."
+                "2. On the computer that already has the font, leave Shared Key blank and click Share Fonts On This Network."
                     .to_string(),
             );
         }
@@ -3201,7 +3203,7 @@ impl SyncMyFontsGui {
 
         if self.saved_peer_names.is_empty() {
             steps.push(
-                "4. After pairing, click Preview From Peer first, then Get Missing Fonts when the preview looks right."
+                "4. After pairing, click Preview From Peer first, then Get Missing Fonts From Peer when the preview looks right."
                     .to_string(),
             );
         } else {
@@ -3261,22 +3263,22 @@ impl SyncMyFontsGui {
                 .map(|code| format!("pairing code {code}"))
                 .unwrap_or_else(|| "the shared key you entered here".to_string());
             return format!(
-                "This computer: keep sharing on and copy {urls}.\nOther computer: paste or discover that URL, enter {secret_instruction}, click Pair Peer, then Preview From Peer before Get Missing Fonts."
+                "This computer: keep sharing on and copy {urls}.\nOther computer: paste or discover that URL, enter {secret_instruction}, click Pair Peer, then Preview From Peer before Get Missing Fonts From Peer."
             );
         }
 
         if self.peer_url.trim().is_empty() {
-            return "This computer: find or enter the sharing computer's LAN URL.\nOther computer: click Share Fonts On LAN with Shared Key blank, then copy its URL and pairing code."
+            return "This computer: find or enter the sharing computer's LAN URL.\nOther computer: click Share Fonts On This Network with Shared Key blank, then copy its URL and pairing code."
                 .to_string();
         }
 
         if self.peer_key.trim().is_empty() && self.pairing_code.trim().is_empty() {
-            return "This computer: enter the pairing code shown on the sharing computer, then click Pair Peer.\nOther computer: keep sharing on until this computer finishes Preview From Peer and Get Missing Fonts."
+            return "This computer: enter the pairing code shown on the sharing computer, then click Pair Peer.\nOther computer: keep sharing on until this computer finishes Preview From Peer and Get Missing Fonts From Peer."
                 .to_string();
         }
 
         if self.saved_peer_names.is_empty() {
-            return "This computer: click Preview From Peer, review what will install, then click Get Missing Fonts.\nOther computer: keep sharing on until this sync finishes."
+            return "This computer: click Preview From Peer, review what will install, then click Get Missing Fonts From Peer.\nOther computer: keep sharing on until this sync finishes."
                 .to_string();
         }
 
@@ -3308,7 +3310,7 @@ impl SyncMyFontsGui {
         } else if self.peer_pairing_ready() && !self.peer_sync_ready() {
             "Pair this peer to save its LAN token, then preview before installing."
         } else {
-            "Peer is ready. Preview first; Get Missing Fonts installs into this user's font folder."
+            "Peer is ready. Preview first; Get Missing Fonts From Peer installs into this user's font folder."
         }
     }
 
@@ -3577,13 +3579,13 @@ impl eframe::App for SyncMyFontsGui {
                     }
                 });
                 ui.add_enabled_ui(self.peer_sync_ready(), |ui| {
-                    if ui.button("Test Peer").clicked() {
+                    if ui.button("Test Connection").clicked() {
                         self.test_peer();
                     }
                     if ui.button("Preview From Peer").clicked() {
                         self.sync_peer(true);
                     }
-                    if ui.button("Get Missing Fonts").clicked() {
+                    if ui.button("Get Missing Fonts From Peer").clicked() {
                         self.sync_peer(false);
                     }
                 });
@@ -3616,7 +3618,7 @@ impl eframe::App for SyncMyFontsGui {
         ui.add_enabled_ui(!task_running, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.add_enabled_ui(self.can_start_sharing(), |ui| {
-                    if ui.button("Share Fonts On LAN").clicked() {
+                    if ui.button("Share Fonts On This Network").clicked() {
                         self.start_share();
                     }
                 });
@@ -4043,15 +4045,15 @@ fn platform_lan_sharing_guidance() -> &'static str {
 fn platform_pre_share_guidance() -> &'static str {
     #[cfg(target_os = "windows")]
     {
-        "Only click Share Fonts On LAN when this Windows PC has fonts another computer needs. Receiving fonts from another computer does not require an inbound firewall prompt."
+        "Only click Share Fonts On This Network when this Windows PC has fonts another computer needs. Receiving fonts from another computer does not require an inbound firewall prompt."
     }
     #[cfg(target_os = "macos")]
     {
-        "Only click Share Fonts On LAN when this Mac has fonts another computer needs. Receiving fonts from another computer can use Find LAN Peers or a pasted LAN URL."
+        "Only click Share Fonts On This Network when this Mac has fonts another computer needs. Receiving fonts from another computer can use Find LAN Peers or a pasted LAN URL."
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
-        "Only click Share Fonts On LAN when this computer has fonts another computer needs. Receiving fonts can use Find LAN Peers or a pasted LAN URL."
+        "Only click Share Fonts On This Network when this computer has fonts another computer needs. Receiving fonts can use Find LAN Peers or a pasted LAN URL."
     }
 }
 
@@ -6045,9 +6047,9 @@ const APP_HTML: &str = r#"<!doctype html>
       <p class="row">
         <button onclick="discoverPeers()">Find LAN Peers</button>
         <button class="primary" onclick="pairPeer()">Pair Peer</button>
-        <button onclick="testPeer()">Test Peer</button>
+        <button onclick="testPeer()">Test Connection</button>
         <button onclick="syncPeer(true)">Preview From Peer</button>
-        <button onclick="syncPeer(false)">Get Missing Fonts</button>
+        <button onclick="syncPeer(false)">Get Missing Fonts From Peer</button>
         <button onclick="savePeer()">Save Peer</button>
         <button onclick="forgetPeer()">Forget Peer</button>
         <button onclick="loadPeers()">List Peers</button>
@@ -6062,7 +6064,7 @@ const APP_HTML: &str = r#"<!doctype html>
         <label>Shared Key <input id="shareKey" type="password" placeholder="optional; blank creates pairing code"></label>
       </div>
       <p class="row">
-        <button class="primary" onclick="startShare()">Share Fonts On LAN</button>
+        <button class="primary" onclick="startShare()">Share Fonts On This Network</button>
         <button class="danger" onclick="stopShare()">Stop Sharing</button>
       </p>
       <div id="shareUrls" class="statusline muted">Sharing is off.</div>
@@ -6251,7 +6253,7 @@ const APP_HTML: &str = r#"<!doctype html>
           body: JSON.stringify(peerPayload(true))
         });
         showResult(result);
-        setNextStep(`Connected. This peer reports ${result.peer_fonts} fonts. Use Preview From Peer to see what would happen, or Get Missing Fonts to install missing fonts.`);
+        setNextStep(`Connected. This peer reports ${result.peer_fonts} fonts. Use Preview From Peer to see what would happen, or Get Missing Fonts From Peer to install missing fonts.`);
       } catch (error) { show(error.message); }
     }
     async function pairPeer() {
@@ -6269,7 +6271,7 @@ const APP_HTML: &str = r#"<!doctype html>
         document.getElementById('peerUrl').value = peer.url;
         document.getElementById('peerKey').value = peer.lan_key ?? '';
         showResult(redactPeer(peer));
-        setNextStep(`${peer.name} is paired and saved. Click Test Peer or Preview From Peer next.`);
+        setNextStep(`${peer.name} is paired and saved. Click Test Connection or Preview From Peer next.`);
       } catch (error) { show(error.message); }
     }
     async function syncPeer(dryRun) {
@@ -6283,7 +6285,7 @@ const APP_HTML: &str = r#"<!doctype html>
         if (dryRun) {
           const wouldInstall = result.skipped?.filter(line => line.startsWith('would install ')).length ?? 0;
           setNextStep(wouldInstall
-            ? `${wouldInstall} fonts are missing locally. Click Get Missing Fonts to install them.`
+            ? `${wouldInstall} fonts are missing locally. Click Get Missing Fonts From Peer to install them.`
             : 'No missing installable fonts were found from this peer.');
         } else if (result.installed?.length) {
           setNextStep('Installed fonts are ready. Reopen design apps if they do not appear yet.');
@@ -6660,7 +6662,7 @@ mod tests {
         assert!(
             report
                 .pre_share_guidance
-                .contains("Only click Share Fonts On LAN")
+                .contains("Only click Share Fonts On This Network")
         );
         assert!(
             report
@@ -6725,7 +6727,7 @@ mod tests {
     fn pre_share_guidance_distinguishes_receiving_from_hosting() {
         let guidance = platform_pre_share_guidance();
 
-        assert!(guidance.contains("Only click Share Fonts On LAN"));
+        assert!(guidance.contains("Only click Share Fonts On This Network"));
         assert!(guidance.contains("Receiving fonts"));
         assert!(!guidance.contains("port forwarding"));
     }
@@ -6759,7 +6761,7 @@ mod tests {
         );
         assert!(platform_manual_peer_fallback_guidance().contains("manually"));
         assert!(app.setup_phase().contains("Pairing mode"));
-        assert!(app.role_card_text().contains("Share Fonts On LAN"));
+        assert!(app.role_card_text().contains("Share Fonts On This Network"));
         assert_eq!(
             app.peer_action_hint(),
             "Find a LAN peer or paste the sharing computer's URL first."
@@ -6789,7 +6791,7 @@ mod tests {
 
         app.peer_key = "saved-token".to_string();
         assert!(app.setup_phase().contains("Preview mode"));
-        assert!(app.role_card_text().contains("Get Missing Fonts"));
+        assert!(app.role_card_text().contains("Get Missing Fonts From Peer"));
         assert!(app.peer_sync_ready());
         assert!(app.peer_action_hint().contains("Preview first"));
         let keyed_steps = app.first_run_steps();

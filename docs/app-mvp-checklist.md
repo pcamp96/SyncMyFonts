@@ -55,7 +55,7 @@ The app MVP should reuse the current agent commands:
 ### CLI Surface
 
 - [x] `Scan Local Fonts` wraps `syncmyfonts-agent scan`.
-- [x] `Test Peer` validates a peer by running a dry-run LAN sync.
+- [x] `Test Connection` validates a peer by running a dry-run LAN sync.
 - [x] `Preview From Peer` wraps
   `syncmyfonts-agent lan-sync --peer http://<peer-lan-ip>:7370 --dry-run`.
 - [x] `Get Missing Fonts From Peer` wraps

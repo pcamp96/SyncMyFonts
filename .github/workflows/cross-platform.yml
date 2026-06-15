@@ -152,7 +152,7 @@ jobs:
           assert gui["platform"] == "macos"
           assert isinstance(gui["first_run_steps"], list)
           assert any("Install Validation Font" in step for step in gui["first_run_steps"])
-          assert any("Share Fonts On LAN" in step for step in gui["first_run_steps"])
+          assert any("Share Fonts On This Network" in step for step in gui["first_run_steps"])
           assert any("Preview From Peer" in step for step in gui["first_run_steps"])
           assert gui["saved_peer_count"] == 0
           assert "Pairing mode" in gui["setup_phase"]
@@ -304,7 +304,7 @@ jobs:
           if ($null -eq $guiSelfTestJson.first_run_steps) { throw "GUI self-test first-run steps were missing" }
           $firstRunSteps = @($guiSelfTestJson.first_run_steps)
           if (-not ($firstRunSteps | Where-Object { $_.Contains("Install Validation Font") })) { throw "GUI first-run steps omitted validation font guidance" }
-          if (-not ($firstRunSteps | Where-Object { $_.Contains("Share Fonts On LAN") })) { throw "GUI first-run steps omitted LAN sharing guidance" }
+          if (-not ($firstRunSteps | Where-Object { $_.Contains("Share Fonts On This Network") })) { throw "GUI first-run steps omitted LAN sharing guidance" }
           if (-not ($firstRunSteps | Where-Object { $_.Contains("Preview From Peer") })) { throw "GUI first-run steps omitted preview guidance" }
           if ($guiSelfTestJson.saved_peer_count -ne 0) { throw "GUI self-test unexpectedly loaded saved peers" }
           if (-not $guiSelfTestJson.setup_phase.Contains("Pairing mode")) { throw "GUI self-test setup phase did not explain pairing mode" }
