@@ -126,6 +126,8 @@ The app MVP should reuse the current agent commands:
   appear in the intended LAN setup order.
 - [x] Native GUI distinguishes receiving fonts from hosting, so Windows
   client-only sync does not look like it needs inbound firewall setup.
+- [x] Native GUI enables Share and Stop Sharing controls according to the
+  current sharing state.
 - [x] A copyable support report with app version, agent version, platform,
   config paths, font paths, last command, and last result.
 - [x] Native GUI copy buttons for the current result and latest redacted

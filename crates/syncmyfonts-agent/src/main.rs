@@ -3285,6 +3285,14 @@ impl SyncMyFontsGui {
         }
     }
 
+    fn can_start_sharing(&self) -> bool {
+        self.share.is_none()
+    }
+
+    fn can_stop_sharing(&self) -> bool {
+        self.share.is_some()
+    }
+
     fn stop_share(&mut self) {
         let Some(mut share) = self.share.take() else {
             self.next_step = "Sharing is already off.".to_string();
@@ -3578,12 +3586,16 @@ impl eframe::App for SyncMyFontsGui {
         });
         ui.add_enabled_ui(!task_running, |ui| {
             ui.horizontal_wrapped(|ui| {
-                if ui.button("Share Fonts On LAN").clicked() {
-                    self.start_share();
-                }
-                if ui.button("Stop Sharing").clicked() {
-                    self.stop_share();
-                }
+                ui.add_enabled_ui(self.can_start_sharing(), |ui| {
+                    if ui.button("Share Fonts On LAN").clicked() {
+                        self.start_share();
+                    }
+                });
+                ui.add_enabled_ui(self.can_stop_sharing(), |ui| {
+                    if ui.button("Stop Sharing").clicked() {
+                        self.stop_share();
+                    }
+                });
             });
         });
         if self.share_urls.is_empty() {
@@ -6680,6 +6692,21 @@ mod tests {
         assert!(role_card.contains("http://127.0.0.1:7370"));
         assert!(role_card.contains("pairing code 12345678"));
         assert!(role_card.contains("Preview From Peer"));
+    }
+
+    #[test]
+    fn gui_share_controls_follow_running_share_state() {
+        let mut app = SyncMyFontsGui::new();
+        assert!(app.can_start_sharing());
+        assert!(!app.can_stop_sharing());
+
+        app.share = Some(RunningShare {
+            child: spawn_short_lived_child_for_tests(),
+            listen: "127.0.0.1:7370".parse().unwrap(),
+        });
+
+        assert!(!app.can_start_sharing());
+        assert!(app.can_stop_sharing());
     }
 
     #[test]
