@@ -2966,6 +2966,12 @@ impl SyncMyFontsGui {
     }
 
     fn save_auto_sync_preferences(&mut self) {
+        if self.auto_sync_enabled && !self.can_enable_saved_peer_automation() {
+            self.auto_sync_enabled = false;
+            self.next_step =
+                "Pair or save a LAN peer before turning on auto sync for saved peers.".to_string();
+            return;
+        }
         let preferences = AppPreferences {
             auto_sync_saved_peers: self.auto_sync_enabled,
             auto_sync_interval_minutes: self.auto_sync_interval_minutes.max(1),
@@ -3025,6 +3031,10 @@ impl SyncMyFontsGui {
     }
 
     fn install_startup_sync(&mut self) {
+        if !self.can_enable_saved_peer_automation() {
+            self.next_step = "Pair or save a LAN peer before enabling sign-in sync.".to_string();
+            return;
+        }
         self.start_task("Enabling sign-in sync", || match install_startup_sync() {
             Ok(report) => {
                 let next_step = if report.saved_peer_count == 0 {
@@ -3302,6 +3312,22 @@ impl SyncMyFontsGui {
         !self.saved_peer_names.is_empty()
     }
 
+    fn can_enable_saved_peer_automation(&self) -> bool {
+        !self.saved_peer_names.is_empty()
+    }
+
+    fn can_change_auto_sync_preference(&self) -> bool {
+        self.auto_sync_enabled || self.can_enable_saved_peer_automation()
+    }
+
+    fn saved_peer_automation_hint(&self) -> Option<&'static str> {
+        if self.saved_peer_names.is_empty() {
+            Some("Pair or save a LAN peer before enabling saved-peer automation.")
+        } else {
+            None
+        }
+    }
+
     fn peer_action_hint(&self) -> &'static str {
         if !self.peer_url_ready() {
             "Find a LAN peer or paste the sharing computer's URL first."
@@ -3503,17 +3529,22 @@ impl eframe::App for SyncMyFontsGui {
                         self.sync_saved_peers(true);
                     }
                 });
-                if ui.button("Enable Sign-In Sync").clicked() {
-                    self.install_startup_sync();
-                }
+                ui.add_enabled_ui(self.can_enable_saved_peer_automation(), |ui| {
+                    if ui.button("Enable Sign-In Sync").clicked() {
+                        self.install_startup_sync();
+                    }
+                });
                 if ui.button("Install App Shortcuts").clicked() {
                     self.install_app_shortcuts();
                 }
             });
             ui.horizontal(|ui| {
-                let changed = ui
-                    .checkbox(&mut self.auto_sync_enabled, "Auto Sync Saved Peers")
-                    .changed();
+                let mut changed = false;
+                ui.add_enabled_ui(self.can_change_auto_sync_preference(), |ui| {
+                    changed = ui
+                        .checkbox(&mut self.auto_sync_enabled, "Auto Sync Saved Peers")
+                        .changed();
+                });
                 ui.label("Every");
                 let interval_changed = ui
                     .add(
@@ -3527,6 +3558,9 @@ impl eframe::App for SyncMyFontsGui {
                     self.save_auto_sync_preferences();
                 }
             });
+            if let Some(hint) = self.saved_peer_automation_hint() {
+                ui.label(hint);
+            }
         });
 
         ui.separator();
@@ -6623,6 +6657,28 @@ mod tests {
 
         app.saved_peer_names.push("Shop PC".to_string());
         assert!(app.can_load_saved_peer());
+    }
+
+    #[test]
+    fn gui_saved_peer_automation_requires_saved_peers_but_can_turn_off() {
+        let mut app = SyncMyFontsGui::new();
+        app.saved_peer_names.clear();
+        app.auto_sync_enabled = false;
+
+        assert!(!app.can_enable_saved_peer_automation());
+        assert!(!app.can_change_auto_sync_preference());
+        assert!(app.saved_peer_automation_hint().is_some());
+
+        app.auto_sync_enabled = true;
+        assert!(app.can_change_auto_sync_preference());
+        app.save_auto_sync_preferences();
+        assert!(!app.auto_sync_enabled);
+        assert!(app.next_step.contains("Pair or save a LAN peer"));
+
+        app.saved_peer_names.push("Shop PC".to_string());
+        assert!(app.can_enable_saved_peer_automation());
+        assert!(app.can_change_auto_sync_preference());
+        assert!(app.saved_peer_automation_hint().is_none());
     }
 
     #[test]
