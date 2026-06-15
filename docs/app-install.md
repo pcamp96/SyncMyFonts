@@ -42,6 +42,10 @@ After running `Diagnostics`, use `Copy Support Report` to copy the redacted
 support text without selecting JSON by hand.
 Use `Readiness Check` before live two-machine testing to confirm local app
 paths, saved peers, and sign-in sync helper status.
+If saved LAN peers have tokens in the portable per-user config, Readiness Check
+and Diagnostics call that out. The token values are still redacted from reports;
+moving them into Keychain or Windows Credential Manager remains a public-release
+hardening task.
 Use `Validation Report` before and after a real Mac-to-Windows test to save
 diagnostics, readiness, managed-font verification, and the manual pass criteria
 as one redacted JSON bundle in the log folder.

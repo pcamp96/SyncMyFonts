@@ -1483,6 +1483,7 @@ fn diagnostics() -> Result<DiagnosticsReport> {
         .iter()
         .map(redacted_peer_config)
         .collect::<Vec<_>>();
+    let warnings = diagnostics_warnings(&config, scan.warnings, manifest_result);
     let history = load_app_history().unwrap_or_default();
     let report = DiagnosticsReport {
         version: env!("CARGO_PKG_VERSION"),
@@ -1501,7 +1502,7 @@ fn diagnostics() -> Result<DiagnosticsReport> {
         recent_actions: history.recent,
         user_font_count: scan.fonts.len(),
         managed_manifest_count,
-        warnings: diagnostics_warnings(scan.warnings, manifest_result),
+        warnings,
         support_report_text: String::new(),
     };
     Ok(DiagnosticsReport {
@@ -1567,6 +1568,7 @@ fn doctor() -> Result<DoctorReport> {
             format!("{} saved peer(s) are configured.", config.peers.len()),
         )
     });
+    checks.push(secret_storage_check(&config));
 
     checks.push(match startup_sync_helper_path() {
         Ok(path) if path.exists() => doctor_check(
@@ -1603,6 +1605,37 @@ fn doctor() -> Result<DoctorReport> {
         checks,
         next_step,
     })
+}
+
+fn secret_storage_check(config: &AppConfig) -> DoctorCheck {
+    let saved_key_count = saved_lan_key_count(config);
+    if saved_key_count == 0 {
+        doctor_check(
+            "secret-storage",
+            true,
+            "No LAN tokens are saved in the portable config yet.",
+        )
+    } else {
+        doctor_check(
+            "secret-storage",
+            true,
+            format!(
+                "{saved_key_count} saved LAN token(s) are stored in the per-user SyncMyFonts config and redacted from diagnostics. Move them to Keychain or Windows Credential Manager before a public signed release."
+            ),
+        )
+    }
+}
+
+fn saved_lan_key_count(config: &AppConfig) -> usize {
+    config
+        .peers
+        .iter()
+        .filter(|peer| {
+            peer.lan_key
+                .as_deref()
+                .is_some_and(|key| !key.trim().is_empty())
+        })
+        .count()
 }
 
 fn validation_report() -> Result<ValidationReport> {
@@ -5073,6 +5106,16 @@ fn support_report_text(report: &DiagnosticsReport) -> String {
                 peer.name, peer.url, peer.has_lan_key
             ));
         }
+        let saved_key_count = report
+            .saved_peers
+            .iter()
+            .filter(|peer| peer.has_lan_key)
+            .count();
+        if saved_key_count > 0 {
+            lines.push(format!(
+                "Secret storage: {saved_key_count} saved LAN token(s) are redacted here but still stored in the per-user config for this MVP."
+            ));
+        }
     }
     if !report.warnings.is_empty() {
         lines.push("Warnings:".to_string());
@@ -5919,11 +5962,18 @@ fn verify_platform_registration(_record: &ManagedFontRecord) -> Result<()> {
 }
 
 fn diagnostics_warnings(
+    config: &AppConfig,
     mut warnings: Vec<String>,
     manifest_result: Result<ManagedManifest>,
 ) -> Vec<String> {
     if let Err(error) = manifest_result {
         warnings.push(format!("managed manifest unavailable: {error}"));
+    }
+    let saved_key_count = saved_lan_key_count(config);
+    if saved_key_count > 0 {
+        warnings.push(format!(
+            "{saved_key_count} saved LAN token(s) are still stored in the per-user config; diagnostics redact them, but Keychain/Credential Manager storage is still a release-hardening item."
+        ));
     }
     warnings
 }
@@ -8542,6 +8592,12 @@ mod tests {
         assert!(report.history_path.ends_with("action-history.json"));
         assert!(
             report
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("saved LAN token"))
+        );
+        assert!(
+            report
                 .support_report_text
                 .contains("Last action: Test Sync")
         );
@@ -8550,10 +8606,50 @@ mod tests {
                 .support_report_text
                 .contains("Last action warnings: 2")
         );
+        assert!(
+            report
+                .support_report_text
+                .contains("Secret storage: 1 saved LAN token")
+        );
         assert!(!report_json.contains("12345678"));
         assert!(!report.support_report_text.contains("12345678"));
         assert!(!report_json.contains("super-secret-lan-key"));
         assert!(!report.support_report_text.contains("super-secret-lan-key"));
+    }
+
+    #[test]
+    fn doctor_reports_portable_secret_storage_without_blocking_readiness() {
+        let config = AppConfig {
+            schema: 1,
+            device_id: Some(Uuid::new_v4()),
+            friendly_device_name: None,
+            preferences: AppPreferences::default(),
+            peers: vec![
+                LanPeerConfig {
+                    name: "Shop PC".to_string(),
+                    url: "http://127.0.0.1:7370".to_string(),
+                    lan_key: Some("super-secret-lan-key".to_string()),
+                },
+                LanPeerConfig {
+                    name: "Workshop Laptop".to_string(),
+                    url: "http://127.0.0.1:7371".to_string(),
+                    lan_key: None,
+                },
+            ],
+        };
+
+        let check = secret_storage_check(&config);
+
+        assert_eq!(check.name, "secret-storage");
+        assert!(check.ok);
+        assert!(check.message.contains("1 saved LAN token"));
+        assert!(check.message.contains("per-user SyncMyFonts config"));
+        assert!(
+            check
+                .message
+                .contains("Keychain or Windows Credential Manager")
+        );
+        assert!(!check.message.contains("super-secret-lan-key"));
     }
 
     #[test]
