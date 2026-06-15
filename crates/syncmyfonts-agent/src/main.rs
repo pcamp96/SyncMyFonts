@@ -2324,6 +2324,7 @@ struct SyncMyFontsGui {
     next_step: String,
     output: String,
     last_support_report: Option<String>,
+    last_result_review: Option<String>,
     last_result: String,
     warning_count: usize,
     saved_peer_summary: String,
@@ -2352,6 +2353,7 @@ struct GuiTaskResult {
     output: String,
     next_step: String,
     result_summary: Option<String>,
+    result_review: Option<String>,
     peer: Option<LanPeerConfig>,
     discovered_peer: Option<LanDiscoveredPeer>,
     clear_peer_key: bool,
@@ -2371,6 +2373,7 @@ impl SyncMyFontsGui {
                 .to_string(),
             output: "Ready.".to_string(),
             last_support_report: None,
+            last_result_review: None,
             last_result: "No actions yet.".to_string(),
             warning_count: 0,
             saved_peer_summary: "Saved peers: loading...".to_string(),
@@ -2446,6 +2449,7 @@ impl SyncMyFontsGui {
                 if let Some(support_report) = result.support_report {
                     self.last_support_report = Some(support_report);
                 }
+                self.last_result_review = result.result_review;
                 self.next_step = result.next_step;
                 self.warning_count = result.warning_count;
                 let completed_at = format!(
@@ -2815,7 +2819,17 @@ impl SyncMyFontsGui {
                         platform_manual_peer_fallback_guidance()
                     )
                 };
-                gui_ok_with_updates(&peers, next_step, None, None, discovered_peer, false, false, 0)
+                gui_ok_with_updates(
+                    &peers,
+                    next_step,
+                    None,
+                    None,
+                    None,
+                    discovered_peer,
+                    false,
+                    false,
+                    0,
+                )
             }
             Err(error) => gui_error(error),
         });
@@ -2836,6 +2850,7 @@ impl SyncMyFontsGui {
                     gui_ok_with_updates(
                         &output,
                         next_step,
+                        None,
                         None,
                         Some(peer.clone()),
                         None,
@@ -2865,6 +2880,7 @@ impl SyncMyFontsGui {
                         &output,
                         next_step,
                         None,
+                        None,
                         Some(peer.clone()),
                         None,
                         false,
@@ -2890,6 +2906,7 @@ impl SyncMyFontsGui {
                 gui_ok_with_updates(
                     &result,
                     next_step,
+                    None,
                     None,
                     None,
                     None,
@@ -2932,7 +2949,13 @@ impl SyncMyFontsGui {
                 Ok(report) => {
                     let next_step = gui_single_peer_sync_next_step(&report, dry_run);
                     let result_summary = Some(gui_single_peer_sync_result_summary(&report));
-                    gui_ok_with_result_summary(&report, next_step, result_summary)
+                    let result_review = Some(gui_single_peer_sync_review(&report));
+                    gui_ok_with_result_summary_and_review(
+                        &report,
+                        next_step,
+                        result_summary,
+                        result_review,
+                    )
                 }
                 Err(error) => gui_error(error),
             }
@@ -2954,10 +2977,12 @@ impl SyncMyFontsGui {
                     .count();
                 let next_step = gui_saved_peer_sync_next_step(&report, dry_run);
                 let result_summary = Some(gui_saved_peer_sync_result_summary(&report));
-                gui_ok_with_result_summary_and_warning_count(
+                let result_review = Some(gui_saved_peer_sync_review(&report));
+                gui_ok_with_result_summary_review_and_warning_count(
                     &report,
                     next_step,
                     result_summary,
+                    result_review,
                     warnings,
                 )
             }
@@ -3707,6 +3732,17 @@ impl eframe::App for SyncMyFontsGui {
                 ui.ctx().copy_text(self.output.clone());
                 self.next_step = "Result copied.".to_string();
             }
+            let has_result_review = self.last_result_review.is_some();
+            ui.add_enabled_ui(has_result_review, |ui| {
+                if ui.button("Copy Review").clicked() {
+                    if let Some(review) = &self.last_result_review {
+                        ui.ctx().copy_text(review.clone());
+                        self.next_step =
+                            "Readable install review copied. Use it to check skipped fonts."
+                                .to_string();
+                    }
+                }
+            });
             let has_support_report = self.last_support_report.is_some();
             ui.add_enabled_ui(has_support_report, |ui| {
                 if ui.button("Copy Support Report").clicked() {
@@ -3730,7 +3766,7 @@ impl eframe::App for SyncMyFontsGui {
 }
 
 fn gui_ok<T: Serialize>(value: &T, next_step: String) -> GuiTaskResult {
-    gui_ok_with_updates(value, next_step, None, None, None, false, false, 0)
+    gui_ok_with_updates(value, next_step, None, None, None, None, false, false, 0)
 }
 
 fn gui_ok_with_warning_count<T: Serialize>(
@@ -3741,12 +3777,19 @@ fn gui_ok_with_warning_count<T: Serialize>(
     gui_ok_with_result_summary_and_warning_count(value, next_step, None, warning_count)
 }
 
-fn gui_ok_with_result_summary<T: Serialize>(
+fn gui_ok_with_result_summary_and_review<T: Serialize>(
     value: &T,
     next_step: String,
     result_summary: Option<String>,
+    result_review: Option<String>,
 ) -> GuiTaskResult {
-    gui_ok_with_result_summary_and_warning_count(value, next_step, result_summary, 0)
+    gui_ok_with_result_summary_review_and_warning_count(
+        value,
+        next_step,
+        result_summary,
+        result_review,
+        0,
+    )
 }
 
 fn gui_ok_with_result_summary_and_warning_count<T: Serialize>(
@@ -3755,10 +3798,27 @@ fn gui_ok_with_result_summary_and_warning_count<T: Serialize>(
     result_summary: Option<String>,
     warning_count: usize,
 ) -> GuiTaskResult {
+    gui_ok_with_result_summary_review_and_warning_count(
+        value,
+        next_step,
+        result_summary,
+        None,
+        warning_count,
+    )
+}
+
+fn gui_ok_with_result_summary_review_and_warning_count<T: Serialize>(
+    value: &T,
+    next_step: String,
+    result_summary: Option<String>,
+    result_review: Option<String>,
+    warning_count: usize,
+) -> GuiTaskResult {
     gui_ok_with_updates(
         value,
         next_step,
         result_summary,
+        result_review,
         None,
         None,
         false,
@@ -3771,6 +3831,7 @@ fn gui_ok_with_updates<T: Serialize>(
     value: &T,
     next_step: String,
     result_summary: Option<String>,
+    result_review: Option<String>,
     peer: Option<LanPeerConfig>,
     discovered_peer: Option<LanDiscoveredPeer>,
     clear_peer_key: bool,
@@ -3781,6 +3842,7 @@ fn gui_ok_with_updates<T: Serialize>(
         output: serde_json::to_string_pretty(value).unwrap_or_else(|_| "ok".to_string()),
         next_step,
         result_summary,
+        result_review,
         peer,
         discovered_peer,
         clear_peer_key,
@@ -3797,6 +3859,7 @@ fn gui_diagnostics_result(report: &DiagnosticsReport, warning_count: usize) -> G
         result_summary: Some(format!(
             "Diagnostics finished with {warning_count} warning(s)."
         )),
+        result_review: None,
         peer: None,
         discovered_peer: None,
         clear_peer_key: false,
@@ -3813,6 +3876,7 @@ fn gui_error(error: anyhow::Error) -> GuiTaskResult {
         output,
         next_step,
         result_summary: None,
+        result_review: None,
         peer: None,
         discovered_peer: None,
         clear_peer_key: false,
@@ -3920,6 +3984,22 @@ fn gui_single_peer_sync_result_summary(report: &LanSyncReport) -> String {
     )
 }
 
+fn gui_single_peer_sync_review(report: &LanSyncReport) -> String {
+    let mut lines = Vec::new();
+    if report.dry_run {
+        lines.push("Preview From Peer review".to_string());
+    } else {
+        lines.push("Get Missing Fonts From Peer review".to_string());
+    }
+    lines.push(format!(
+        "Peer fonts checked: {}; local fonts known: {}",
+        report.peer_fonts, report.known_local
+    ));
+    append_installed_review_lines(&mut lines, &report.installed);
+    append_skipped_review_lines(&mut lines, &report.skipped);
+    lines.join("\n")
+}
+
 fn gui_saved_peer_sync_next_step(report: &LanSyncAllReport, dry_run: bool) -> String {
     let installed = report
         .peers
@@ -4002,6 +4082,31 @@ fn gui_saved_peer_sync_result_summary(report: &LanSyncAllReport) -> String {
     )
 }
 
+fn gui_saved_peer_sync_review(report: &LanSyncAllReport) -> String {
+    let mut lines = Vec::new();
+    if report.dry_run {
+        lines.push("Saved peer preview review".to_string());
+    } else {
+        lines.push("Saved peer sync review".to_string());
+    }
+
+    if report.peers.is_empty() {
+        lines.push("No saved peers were checked.".to_string());
+        return lines.join("\n");
+    }
+
+    for peer in &report.peers {
+        lines.push(format!("Peer: {}", peer.name));
+        if let Some(error) = &peer.error {
+            lines.push(format!("- Failed: {error}"));
+            continue;
+        }
+        append_installed_review_lines(&mut lines, &peer.installed);
+        append_skipped_review_lines(&mut lines, &peer.skipped);
+    }
+    lines.join("\n")
+}
+
 fn gui_no_install_summary(summary: &SkipSummary, fallback: &str) -> String {
     if summary.system_conflicts > 0 {
         return format!(
@@ -4022,6 +4127,43 @@ fn gui_no_install_summary(summary: &SkipSummary, fallback: &str) -> String {
         );
     }
     fallback.to_string()
+}
+
+fn append_installed_review_lines(lines: &mut Vec<String>, installed: &[PathBuf]) {
+    if installed.is_empty() {
+        lines.push("- Installed: none".to_string());
+    } else {
+        for path in installed {
+            lines.push(format!("- Installed: {}", path.display()));
+        }
+    }
+}
+
+fn append_skipped_review_lines(lines: &mut Vec<String>, skipped: &[String]) {
+    if skipped.is_empty() {
+        lines.push("- Skipped: none".to_string());
+        return;
+    }
+
+    for item in skipped {
+        lines.push(format!("- {}", readable_skip_line(item)));
+    }
+}
+
+fn readable_skip_line(item: &str) -> String {
+    if let Some(name) = item.strip_prefix("would install ") {
+        return format!("Would install: {name}");
+    }
+    if item.contains("already present") {
+        return format!("Already here: {item}");
+    }
+    if item.contains("unsupported format") || item.contains("unsupported-format") {
+        return format!("Unsupported format: {item}");
+    }
+    if item.contains("system-font-conflict") {
+        return format!("System font conflict, not installed: {item}");
+    }
+    format!("Skipped: {item}")
 }
 
 fn append_skip_context(next_step: &mut String, summary: &SkipSummary) {
@@ -7550,6 +7692,64 @@ mod tests {
         assert!(summary.contains("1 skipped"));
         assert!(summary.contains("1 failed peer"));
         assert!(summary.contains("2 peer(s) checked"));
+    }
+
+    #[test]
+    fn gui_single_peer_review_explains_skipped_font_reasons() {
+        let report = LanSyncReport {
+            known_local: 2,
+            peer_fonts: 4,
+            installed: vec![PathBuf::from("/tmp/Installed.ttf")],
+            skipped: vec![
+                "would install PreviewOnly.ttf".to_string(),
+                "Already.ttf already present".to_string(),
+                "WebFont.woff2 unsupported format".to_string(),
+                "System.ttf system-font-conflict: conflicts with system font".to_string(),
+            ],
+            dry_run: false,
+        };
+
+        let review = gui_single_peer_sync_review(&report);
+
+        assert!(review.contains("Get Missing Fonts From Peer review"));
+        assert!(review.contains("Installed: /tmp/Installed.ttf"));
+        assert!(review.contains("Would install: PreviewOnly.ttf"));
+        assert!(review.contains("Already here"));
+        assert!(review.contains("Unsupported format"));
+        assert!(review.contains("System font conflict, not installed"));
+    }
+
+    #[test]
+    fn gui_saved_peer_review_lists_peer_failures() {
+        let report = LanSyncAllReport {
+            dry_run: true,
+            peers: vec![
+                LanPeerSyncReport {
+                    name: "Shop PC".to_string(),
+                    url: "http://127.0.0.1:7370".to_string(),
+                    ok: true,
+                    installed: Vec::new(),
+                    skipped: vec!["would install Script.ttf".to_string()],
+                    error: None,
+                },
+                LanPeerSyncReport {
+                    name: "Offline MacBook".to_string(),
+                    url: "http://127.0.0.1:7371".to_string(),
+                    ok: false,
+                    installed: Vec::new(),
+                    skipped: Vec::new(),
+                    error: Some("connection refused".to_string()),
+                },
+            ],
+        };
+
+        let review = gui_saved_peer_sync_review(&report);
+
+        assert!(review.contains("Saved peer preview review"));
+        assert!(review.contains("Peer: Shop PC"));
+        assert!(review.contains("Would install: Script.ttf"));
+        assert!(review.contains("Peer: Offline MacBook"));
+        assert!(review.contains("Failed: connection refused"));
     }
 
     #[test]

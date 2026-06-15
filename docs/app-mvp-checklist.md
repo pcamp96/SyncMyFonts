@@ -136,6 +136,9 @@ The app MVP should reuse the current agent commands:
 - [x] Native GUI shows a concise sync receipt with installed, already-present,
   skipped, failed-peer, and checked-peer counts while keeping detailed JSON
   copyable for support.
+- [x] Native GUI can copy a readable install review that explains installed
+  fonts, already-present fonts, unsupported formats, system-font conflicts, and
+  failed peers without requiring users to read JSON.
 - [x] A copyable support report with app version, agent version, platform,
   config paths, font paths, last command, and last result.
 - [x] Native GUI copy buttons for the current result and latest redacted
@@ -315,7 +318,7 @@ Already present in the repo:
 - [ ] Stable machine-readable reports for every command and error.
 - [x] Dedicated diagnostics command or support-report artifact.
 - [x] Local ownership manifest for managed fonts.
-- [ ] Explicit conflict review UI.
+- [x] Explicit conflict and skipped-font review UI.
 - [x] Lightweight UDP LAN peer discovery.
 - [ ] Bonjour/mDNS discovery.
 - [x] First pairing-code flow for exchanging a short code for a saved LAN token.
