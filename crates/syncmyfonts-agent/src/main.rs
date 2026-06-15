@@ -2639,6 +2639,7 @@ struct SyncMyFontsGui {
     warning_count: usize,
     saved_peer_summary: String,
     saved_peer_names: Vec<String>,
+    saved_peer_key_count: usize,
     selected_peer_name: String,
     device_name_input: String,
     current_action: Option<String>,
@@ -2688,6 +2689,7 @@ impl SyncMyFontsGui {
             warning_count: 0,
             saved_peer_summary: "Saved peers: loading...".to_string(),
             saved_peer_names: Vec::new(),
+            saved_peer_key_count: 0,
             selected_peer_name: String::new(),
             device_name_input: device_name(),
             current_action: None,
@@ -2861,11 +2863,13 @@ impl SyncMyFontsGui {
         match load_app_config() {
             Ok(config) if config.peers.is_empty() => {
                 self.saved_peer_names.clear();
+                self.saved_peer_key_count = 0;
                 self.selected_peer_name.clear();
                 self.saved_peer_summary = "Saved peers: none yet.".to_string();
             }
             Ok(config) => {
                 self.saved_peer_names = config.peers.iter().map(|peer| peer.name.clone()).collect();
+                self.saved_peer_key_count = saved_lan_key_count(&config);
                 if !self.saved_peer_names.contains(&self.selected_peer_name) {
                     self.selected_peer_name =
                         self.saved_peer_names.first().cloned().unwrap_or_default();
@@ -2883,6 +2887,7 @@ impl SyncMyFontsGui {
             }
             Err(error) => {
                 self.saved_peer_names.clear();
+                self.saved_peer_key_count = 0;
                 self.selected_peer_name.clear();
                 self.saved_peer_summary = format!("Saved peers unavailable: {error}");
             }
@@ -3687,7 +3692,16 @@ impl SyncMyFontsGui {
             "Automation: off; enable after a successful preview.".to_string()
         };
 
-        vec![sharing, pairing, saved_peers, automation]
+        let secrets = if self.saved_peer_key_count == 0 {
+            "Secrets: no saved LAN tokens yet.".to_string()
+        } else {
+            format!(
+                "Secrets: {} saved LAN token(s) are redacted in reports but still stored in the per-user config.",
+                self.saved_peer_key_count
+            )
+        };
+
+        vec![sharing, pairing, saved_peers, automation, secrets]
     }
 
     fn lan_readiness_text(&self) -> String {
@@ -7549,6 +7563,11 @@ mod tests {
                 .iter()
                 .any(|line| line.contains("Saved peers: none yet"))
         );
+        assert!(
+            first_run
+                .iter()
+                .any(|line| line.contains("Secrets: no saved LAN tokens yet"))
+        );
 
         app.peer_url = "http://192.168.1.25:7370".to_string();
         app.pairing_code = "12345678".to_string();
@@ -7562,6 +7581,7 @@ mod tests {
         app.pairing_code.clear();
         app.peer_key = "saved-token".to_string();
         app.saved_peer_names = vec!["Shop PC".to_string()];
+        app.saved_peer_key_count = 1;
         let ready_to_sync = app.lan_readiness_lines();
         assert!(
             ready_to_sync
@@ -7572,6 +7592,11 @@ mod tests {
             ready_to_sync
                 .iter()
                 .any(|line| line.contains("1 ready (Shop PC)"))
+        );
+        assert!(
+            ready_to_sync
+                .iter()
+                .any(|line| line.contains("1 saved LAN token"))
         );
 
         app.share = Some(RunningShare {
@@ -7599,6 +7624,7 @@ mod tests {
         app.peer_url = "http://192.168.1.25:7370".to_string();
         app.peer_key = "saved-token".to_string();
         app.saved_peer_names = vec!["Shop PC".to_string(), "Office Mac".to_string()];
+        app.saved_peer_key_count = 2;
         app.auto_sync_enabled = true;
         app.auto_sync_interval_minutes = 30;
 
@@ -7608,7 +7634,8 @@ mod tests {
         assert!(readiness.contains("Pairing: saved token is ready; preview can run."));
         assert!(readiness.contains("Saved peers: 2 ready (Shop PC, Office Mac)"));
         assert!(readiness.contains("Automation: auto-sync while app is open every 30 minute(s)."));
-        assert_eq!(readiness.lines().count(), 4);
+        assert!(readiness.contains("Secrets: 2 saved LAN token(s) are redacted"));
+        assert_eq!(readiness.lines().count(), 5);
     }
 
     #[test]

@@ -124,6 +124,8 @@ The app MVP should reuse the current agent commands:
   or sync.
 - [x] Native GUI shows and can copy a LAN readiness summary with sharing,
   pairing, saved-peer, and automation state.
+- [x] Native GUI shows and can copy whether saved LAN tokens exist without
+  exposing the token values.
 - [x] Native GUI shows a role card with what this computer and the other
   computer should do next.
 - [x] Native GUI gates peer actions so pairing, preview, and install buttons
