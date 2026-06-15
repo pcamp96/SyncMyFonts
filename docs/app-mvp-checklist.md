@@ -132,6 +132,8 @@ The app MVP should reuse the current agent commands:
   computer should do next.
 - [x] Native GUI gates peer actions so pairing, preview, and install buttons
   appear in the intended LAN setup order.
+- [x] Native GUI keeps `Get Missing Fonts From Peer` disabled until the current
+  peer URL has completed a successful preview in this app session.
 - [x] Native GUI distinguishes receiving fonts from hosting, so Windows
   client-only sync does not look like it needs inbound firewall setup.
 - [x] Native GUI enables Share and Stop Sharing controls according to the

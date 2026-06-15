@@ -2660,6 +2660,7 @@ struct SyncMyFontsGui {
     auto_sync_enabled: bool,
     auto_sync_interval_minutes: u64,
     last_auto_sync_at: Option<Instant>,
+    last_previewed_peer_url: Option<String>,
 }
 
 struct GuiTaskResult {
@@ -2674,6 +2675,7 @@ struct GuiTaskResult {
     refresh_saved_peers: bool,
     support_report: Option<String>,
     warning_count: usize,
+    previewed_peer_url: Option<String>,
 }
 
 impl SyncMyFontsGui {
@@ -2711,6 +2713,7 @@ impl SyncMyFontsGui {
             auto_sync_enabled: preferences.auto_sync_saved_peers,
             auto_sync_interval_minutes: preferences.auto_sync_interval_minutes,
             last_auto_sync_at: None,
+            last_previewed_peer_url: None,
         };
         app.refresh_status();
         app.load_saved_peers_into_form();
@@ -2767,6 +2770,10 @@ impl SyncMyFontsGui {
                     self.peer_key.clear();
                     self.pairing_code.clear();
                     self.selected_peer_name.clear();
+                    self.last_previewed_peer_url = None;
+                }
+                if let Some(previewed_peer_url) = result.previewed_peer_url {
+                    self.last_previewed_peer_url = Some(previewed_peer_url);
                 }
                 self.output = result.output;
                 if let Some(support_report) = result.support_report {
@@ -3314,12 +3321,16 @@ impl SyncMyFontsGui {
                     let next_step = gui_single_peer_sync_next_step(&report, dry_run);
                     let result_summary = Some(gui_single_peer_sync_result_summary(&report));
                     let result_review = Some(gui_single_peer_sync_review(&report));
-                    gui_ok_with_result_summary_and_review(
+                    let mut result = gui_ok_with_result_summary_and_review(
                         &report,
                         next_step,
                         result_summary,
                         result_review,
-                    )
+                    );
+                    if dry_run {
+                        result.previewed_peer_url = Some(peer_url.clone());
+                    }
+                    result
                 }
                 Err(error) => gui_error(error),
             }
@@ -3843,6 +3854,14 @@ impl SyncMyFontsGui {
         self.peer_url_ready() && !self.peer_key.trim().is_empty()
     }
 
+    fn peer_install_ready(&self) -> bool {
+        self.peer_sync_ready()
+            && self
+                .last_previewed_peer_url
+                .as_deref()
+                .is_some_and(|url| url == self.peer_url.trim())
+    }
+
     fn can_load_saved_peer(&self) -> bool {
         !self.saved_peer_names.is_empty()
     }
@@ -3893,8 +3912,10 @@ impl SyncMyFontsGui {
             "Enter the pairing code from the sharing computer, then pair before previewing."
         } else if self.peer_pairing_ready() && !self.peer_sync_ready() {
             "Pair this peer to save its LAN token, then preview before installing."
+        } else if self.peer_sync_ready() && !self.peer_install_ready() {
+            "Preview this peer first; Get Missing Fonts From Peer unlocks after preview succeeds."
         } else {
-            "Peer is ready. Preview first; Get Missing Fonts From Peer installs into this user's font folder."
+            "Peer preview is current. Get Missing Fonts From Peer installs into this user's font folder."
         }
     }
 
@@ -4210,6 +4231,8 @@ impl eframe::App for SyncMyFontsGui {
                     if ui.button("Preview From Peer").clicked() {
                         self.sync_peer(true);
                     }
+                });
+                ui.add_enabled_ui(self.peer_install_ready(), |ui| {
                     if ui.button("Get Missing Fonts From Peer").clicked() {
                         self.sync_peer(false);
                     }
@@ -4435,6 +4458,7 @@ fn gui_ok_with_updates<T: Serialize>(
         refresh_saved_peers,
         support_report: None,
         warning_count,
+        previewed_peer_url: None,
     }
 }
 
@@ -4453,6 +4477,7 @@ fn gui_diagnostics_result(report: &DiagnosticsReport, warning_count: usize) -> G
         refresh_saved_peers: false,
         support_report: Some(report.support_report_text.clone()),
         warning_count,
+        previewed_peer_url: None,
     }
 }
 
@@ -4502,6 +4527,7 @@ fn gui_error(error: anyhow::Error) -> GuiTaskResult {
         support_report: None,
         warning_count: 1,
         clear_peer_form: false,
+        previewed_peer_url: None,
     }
 }
 
@@ -7687,7 +7713,8 @@ mod tests {
         assert!(app.setup_phase().contains("Preview mode"));
         assert!(app.role_card_text().contains("Get Missing Fonts From Peer"));
         assert!(app.peer_sync_ready());
-        assert!(app.peer_action_hint().contains("Preview first"));
+        assert!(!app.peer_install_ready());
+        assert!(app.peer_action_hint().contains("Preview this peer first"));
         let keyed_steps = app.first_run_steps();
         assert!(
             keyed_steps
@@ -7695,9 +7722,32 @@ mod tests {
                 .any(|step| step.contains("Peer details are filled in"))
         );
 
+        app.last_previewed_peer_url = Some("http://192.168.1.25:7370".to_string());
+        assert!(app.peer_install_ready());
+        assert!(app.peer_action_hint().contains("Peer preview is current"));
+
+        app.peer_url = "http://192.168.1.26:7370".to_string();
+        assert!(!app.peer_install_ready());
+
         app.saved_peer_names = vec!["Shop PC".to_string()];
         assert!(app.setup_phase().contains("Sync mode"));
         assert!(app.role_card_text().contains("opposite direction"));
+    }
+
+    #[test]
+    fn gui_peer_install_requires_current_preview() {
+        let mut app = SyncMyFontsGui::new();
+        app.peer_url = "http://192.168.1.25:7370".to_string();
+        app.peer_key = "saved-token".to_string();
+
+        assert!(app.peer_sync_ready());
+        assert!(!app.peer_install_ready());
+
+        app.last_previewed_peer_url = Some("http://192.168.1.25:7370".to_string());
+        assert!(app.peer_install_ready());
+
+        app.peer_url = "http://192.168.1.26:7370".to_string();
+        assert!(!app.peer_install_ready());
     }
 
     #[test]
