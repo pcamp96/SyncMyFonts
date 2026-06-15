@@ -2714,6 +2714,7 @@ impl SyncMyFontsGui {
         };
         app.refresh_status();
         app.load_saved_peers_into_form();
+        app.load_last_action_summary();
         app
     }
 
@@ -2906,6 +2907,33 @@ impl SyncMyFontsGui {
 
     fn load_saved_peers_into_form(&mut self) {
         self.load_selected_saved_peer_into_form();
+    }
+
+    fn load_last_action_summary(&mut self) {
+        match load_app_history() {
+            Ok(history) => {
+                if let Some(action) = history.last_action {
+                    self.last_result = gui_last_action_summary(&action);
+                    self.warning_count = action.warning_count;
+                    self.output = action.result.clone();
+                    self.next_step = if action.status == "success" {
+                        "Last action loaded. Continue with Preview From Peer or Sync Saved Peers when both computers are on the same LAN."
+                            .to_string()
+                    } else {
+                        "Last action needs attention. Review the result, then run Diagnostics or try again."
+                            .to_string()
+                    };
+                }
+            }
+            Err(error) => {
+                self.last_result = "Last action unavailable.".to_string();
+                self.warning_count = 1;
+                self.output = format!("Could not load action history: {error}");
+                self.next_step =
+                    "Action history could not be loaded. Run Diagnostics if this keeps happening."
+                        .to_string();
+            }
+        }
     }
 
     fn load_selected_saved_peer_into_form(&mut self) {
@@ -4424,6 +4452,13 @@ fn gui_readiness_review(report: &DoctorReport) -> String {
         lines.push(format!("- {status}: {} - {}", check.name, check.message));
     }
     lines.join("\n")
+}
+
+fn gui_last_action_summary(action: &ActionRecord) -> String {
+    format!(
+        "Last action: {} {} at {} · warnings: {}",
+        action.action, action.status, action.finished_at, action.warning_count
+    )
 }
 
 fn gui_error(error: anyhow::Error) -> GuiTaskResult {
@@ -8768,6 +8803,43 @@ mod tests {
         assert!(!report.support_report_text.contains("12345678"));
         assert!(!report_json.contains("super-secret-lan-key"));
         assert!(!report.support_report_text.contains("super-secret-lan-key"));
+    }
+
+    #[test]
+    fn gui_loads_last_action_summary_on_startup() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let config_dir = root.join("config");
+        let log_dir = root.join("logs");
+        let font_dir = root.join("fonts");
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+            std::env::set_var("SYNCMYFONTS_LOG_DIR", &log_dir);
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", &font_dir);
+        }
+        record_action(
+            "Preview From Peer",
+            "success",
+            1,
+            "Preview found 2 missing installable fonts.",
+        )
+        .unwrap();
+
+        let app = SyncMyFontsGui::new();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_LOG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+        }
+
+        assert!(
+            app.last_result
+                .contains("Last action: Preview From Peer success")
+        );
+        assert!(app.last_result.contains("warnings: 1"));
+        assert_eq!(app.warning_count, 1);
+        assert_eq!(app.output, "Preview found 2 missing installable fonts.");
+        assert!(app.next_step.contains("Last action loaded"));
     }
 
     #[test]

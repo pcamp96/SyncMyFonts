@@ -155,6 +155,8 @@ The app MVP should reuse the current agent commands:
   docs or a browser.
 - [x] Native GUI can copy a LAN setup packet that bundles role, readiness,
   first-sync steps, and validation proof guidance.
+- [x] Native GUI reloads the last saved action result, warning count, and
+  next-step guidance after relaunch.
 
 ### macOS
 
