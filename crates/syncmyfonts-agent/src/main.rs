@@ -2800,7 +2800,15 @@ impl SyncMyFontsGui {
         self.start_task("Checking readiness", || match doctor() {
             Ok(report) => {
                 let warnings = report.checks.iter().filter(|check| !check.ok).count();
-                gui_ok_with_warning_count(&report, report.next_step.clone(), warnings)
+                let result_summary = Some(gui_readiness_result_summary(&report));
+                let result_review = Some(gui_readiness_review(&report));
+                gui_ok_with_result_summary_review_and_warning_count(
+                    &report,
+                    report.next_step.clone(),
+                    result_summary,
+                    result_review,
+                    warnings,
+                )
             }
             Err(error) => gui_error(error),
         });
@@ -4043,6 +4051,30 @@ fn gui_diagnostics_result(report: &DiagnosticsReport, warning_count: usize) -> G
         support_report: Some(report.support_report_text.clone()),
         warning_count,
     }
+}
+
+fn gui_readiness_result_summary(report: &DoctorReport) -> String {
+    let failed = report.checks.iter().filter(|check| !check.ok).count();
+    let passed = report.checks.len().saturating_sub(failed);
+    if failed == 0 {
+        format!("Readiness: {passed} check(s) passed; LAN sync is ready.")
+    } else {
+        format!("Readiness: {passed} check(s) passed; {failed} check(s) need attention.")
+    }
+}
+
+fn gui_readiness_review(report: &DoctorReport) -> String {
+    let mut lines = Vec::new();
+    lines.push("SyncMyFonts readiness review".to_string());
+    lines.push(gui_readiness_result_summary(report));
+    lines.push(format!("Next step: {}", report.next_step));
+    lines.push(String::new());
+    lines.push("Checks:".to_string());
+    for check in &report.checks {
+        let status = if check.ok { "OK" } else { "Needs attention" };
+        lines.push(format!("- {status}: {} - {}", check.name, check.message));
+    }
+    lines.join("\n")
 }
 
 fn gui_error(error: anyhow::Error) -> GuiTaskResult {
@@ -8250,6 +8282,34 @@ mod tests {
         assert!(!support_report.contains("super-secret-lan-key"));
         assert!(gui.output.contains("\"support_report_text\""));
         assert!(!gui.output.contains("super-secret-lan-key"));
+    }
+
+    #[test]
+    fn gui_readiness_review_summarizes_passed_and_failed_checks() {
+        let report = DoctorReport {
+            ok: false,
+            checks: vec![
+                doctor_check("agent-binary", true, "Agent helper is available."),
+                doctor_check(
+                    "saved-peers",
+                    false,
+                    "No saved peers yet. Pair or save another computer.",
+                ),
+            ],
+            next_step: "Pair or save a LAN peer, then run Readiness Check again.".to_string(),
+        };
+
+        let summary = gui_readiness_result_summary(&report);
+        let review = gui_readiness_review(&report);
+
+        assert_eq!(
+            summary,
+            "Readiness: 1 check(s) passed; 1 check(s) need attention."
+        );
+        assert!(review.contains("SyncMyFonts readiness review"));
+        assert!(review.contains("Next step: Pair or save a LAN peer"));
+        assert!(review.contains("- OK: agent-binary"));
+        assert!(review.contains("- Needs attention: saved-peers"));
     }
 
     #[test]
