@@ -153,6 +153,8 @@ The app MVP should reuse the current agent commands:
   support report.
 - [x] Native GUI can copy the clean-machine validation plan without opening
   docs or a browser.
+- [x] Native GUI can copy a LAN setup packet that bundles role, readiness,
+  first-sync steps, and validation proof guidance.
 
 ### macOS
 

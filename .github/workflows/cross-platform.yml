@@ -182,6 +182,9 @@ jobs:
           assert matrix_names == {"macOS to Windows", "Windows to macOS"}
           assert "SyncMyFonts LAN MVP validation" in gui["validation_checklist_text"]
           assert "system fonts were not offered" in gui["validation_checklist_text"]
+          assert "SyncMyFonts LAN setup packet" in gui["setup_packet_text"]
+          assert "Role card:" in gui["setup_packet_text"]
+          assert "Proof checklist:" in gui["setup_packet_text"]
           assert gui["message"].startswith("Native GUI state initialized")
           PY
           grep -q '"log_dir"' "$smoke_root/diagnostics.json"
@@ -353,6 +356,9 @@ jobs:
           if (-not ($matrixNames -contains "Windows to macOS")) { throw "GUI self-test Windows-to-macOS matrix row missing" }
           if (-not $guiSelfTestJson.validation_checklist_text.Contains("SyncMyFonts LAN MVP validation")) { throw "GUI self-test validation checklist missing" }
           if (-not $guiSelfTestJson.validation_checklist_text.Contains("system fonts were not offered")) { throw "GUI self-test system-font validation note missing" }
+          if (-not $guiSelfTestJson.setup_packet_text.Contains("SyncMyFonts LAN setup packet")) { throw "GUI setup packet missing" }
+          if (-not $guiSelfTestJson.setup_packet_text.Contains("Role card:")) { throw "GUI setup packet omitted role card" }
+          if (-not $guiSelfTestJson.setup_packet_text.Contains("Proof checklist:")) { throw "GUI setup packet omitted proof checklist" }
           if (-not $diagnostics.Contains('"support_report_text"')) { throw "Diagnostics support report missing" }
           if (-not $diagnostics.Contains('"log_dir"')) { throw "Diagnostics log dir missing" }
           if (-not $doctor.Contains('"checks"')) { throw "Doctor checks missing" }

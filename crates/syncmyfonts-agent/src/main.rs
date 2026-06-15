@@ -973,6 +973,7 @@ struct GuiSelfTestReport {
     manual_peer_fallback_guidance: &'static str,
     sync_validation_matrix: Vec<SyncValidationDirection>,
     validation_checklist_text: String,
+    setup_packet_text: String,
     saved_peer_count: usize,
     selected_peer_name: String,
     listen: String,
@@ -2550,6 +2551,7 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         manual_peer_fallback_guidance: platform_manual_peer_fallback_guidance(),
         sync_validation_matrix: sync_validation_matrix(),
         validation_checklist_text: validation_checklist_text(),
+        setup_packet_text: app.setup_packet_text(),
         saved_peer_count: app.saved_peer_names.len(),
         selected_peer_name: app.selected_peer_name.clone(),
         listen: app.listen.clone(),
@@ -3719,6 +3721,27 @@ impl SyncMyFontsGui {
         self.lan_readiness_lines().join("\n")
     }
 
+    fn setup_packet_text(&self) -> String {
+        let mut lines = vec![
+            "SyncMyFonts LAN setup packet".to_string(),
+            format!("Device: {}", self.device_name_input.trim()),
+            format!("Phase: {}", self.setup_phase()),
+            String::new(),
+            "Role card:".to_string(),
+            self.role_card_text(),
+            String::new(),
+            "Readiness:".to_string(),
+        ];
+        lines.extend(self.lan_readiness_lines());
+        lines.push(String::new());
+        lines.push("First sync steps:".to_string());
+        lines.extend(self.first_run_steps());
+        lines.push(String::new());
+        lines.push("Proof checklist:".to_string());
+        lines.push(validation_checklist_text());
+        lines.join("\n")
+    }
+
     fn share_invitation_text(&self) -> Option<String> {
         let urls = if self.share_urls.is_empty() {
             return None;
@@ -3963,6 +3986,20 @@ impl eframe::App for SyncMyFontsGui {
                 );
                 self.warning_count = 0;
                 let _ = record_action("Copy Readiness", "success", 0, &self.next_step);
+            }
+            if ui.button("Copy Setup Packet").clicked() {
+                let packet = self.setup_packet_text();
+                ui.ctx().copy_text(packet.clone());
+                self.output = packet;
+                self.next_step =
+                    "Setup packet copied. Use it to coordinate this computer and the other LAN peer."
+                        .to_string();
+                self.last_result = format!(
+                    "Copy Setup Packet completed at {}",
+                    Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+                );
+                self.warning_count = 0;
+                let _ = record_action("Copy Setup Packet", "success", 0, &self.next_step);
             }
         });
         for step in self.first_run_steps() {
@@ -7499,6 +7536,12 @@ mod tests {
                 .validation_checklist_text
                 .contains("Windows to macOS")
         );
+        assert!(
+            report
+                .setup_packet_text
+                .contains("SyncMyFonts LAN setup packet")
+        );
+        assert!(report.setup_packet_text.contains("Proof checklist"));
         assert!(!json.contains("super-secret-lan-key"));
     }
 
@@ -7697,6 +7740,28 @@ mod tests {
         assert!(readiness.contains("Automation: auto-sync while app is open every 30 minute(s)."));
         assert!(readiness.contains("Secrets: 2 saved LAN token(s) are redacted"));
         assert_eq!(readiness.lines().count(), 5);
+    }
+
+    #[test]
+    fn gui_setup_packet_bundles_role_readiness_and_validation() {
+        let mut app = SyncMyFontsGui::new();
+        app.device_name_input = "Office Mac".to_string();
+        app.peer_url = "http://192.168.1.25:7370".to_string();
+        app.peer_key = "saved-token".to_string();
+        app.saved_peer_names = vec!["Shop PC".to_string()];
+        app.saved_peer_key_count = 1;
+
+        let packet = app.setup_packet_text();
+
+        assert!(packet.contains("SyncMyFonts LAN setup packet"));
+        assert!(packet.contains("Device: Office Mac"));
+        assert!(packet.contains("Role card:"));
+        assert!(packet.contains("Readiness:"));
+        assert!(packet.contains("Saved peers: 1 ready (Shop PC)"));
+        assert!(packet.contains("First sync steps:"));
+        assert!(packet.contains("Proof checklist:"));
+        assert!(packet.contains("SyncMyFonts LAN MVP validation"));
+        assert!(!packet.contains("saved-token"));
     }
 
     #[test]
