@@ -3770,6 +3770,33 @@ impl SyncMyFontsGui {
         lines.join("\n")
     }
 
+    fn record_copy_url_receipt(&mut self, url: &str) {
+        self.output = format!("Copied LAN URL: {url}");
+        self.next_step =
+            "LAN URL copied. Paste it on the other computer if discovery does not find this device."
+                .to_string();
+        self.last_result = format!(
+            "Copy LAN URL completed at {}",
+            Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+        );
+        self.warning_count = 0;
+        let _ = record_action("Copy LAN URL", "success", 0, &self.next_step);
+    }
+
+    fn record_copy_pairing_code_receipt(&mut self, validity_text: &str) {
+        self.output =
+            "Copied pairing code. The code is not saved in diagnostics or support reports."
+                .to_string();
+        self.next_step =
+            format!("Pairing code copied and {validity_text}. Enter it on the other computer.");
+        self.last_result = format!(
+            "Copy Pairing Code completed at {}",
+            Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+        );
+        self.warning_count = 0;
+        let _ = record_action("Copy Pairing Code", "success", 0, &self.next_step);
+    }
+
     fn share_invitation_text(&self) -> Option<String> {
         let urls = if self.share_urls.is_empty() {
             return None;
@@ -4238,7 +4265,8 @@ impl eframe::App for SyncMyFontsGui {
                 if ui.button("Copy URL").clicked() {
                     if let Some(url) = self.share_urls.first() {
                         ui.ctx().copy_text(url.clone());
-                        self.next_step = "LAN URL copied. Paste it on the other computer if discovery does not find this device.".to_string();
+                        let copied_url = url.clone();
+                        self.record_copy_url_receipt(&copied_url);
                     }
                 }
                 if let Some(code) = &self.last_pairing_code {
@@ -4254,10 +4282,8 @@ impl eframe::App for SyncMyFontsGui {
                     ));
                     if ui.button("Copy Code").clicked() {
                         ui.ctx().copy_text(code.clone());
-                        self.next_step = format!(
-                            "Pairing code copied and {}. Enter it on the other computer.",
-                            pairing_code_validity_text(remaining_seconds)
-                        );
+                        let validity_text = pairing_code_validity_text(remaining_seconds);
+                        self.record_copy_pairing_code_receipt(&validity_text);
                     }
                 }
                 if ui.button("Copy Pairing Instructions").clicked() {
@@ -7797,6 +7823,43 @@ mod tests {
         assert!(packet.contains("Proof checklist:"));
         assert!(packet.contains("SyncMyFonts LAN MVP validation"));
         assert!(!packet.contains("saved-token"));
+    }
+
+    #[test]
+    fn gui_share_copy_receipts_are_visible_and_persisted() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", root.join("config"));
+            std::env::set_var("SYNCMYFONTS_LOG_DIR", root.join("logs"));
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", root.join("fonts"));
+        }
+        let mut app = SyncMyFontsGui::new();
+
+        app.record_copy_url_receipt("http://192.168.1.10:7370");
+        let url_history = load_app_history().unwrap();
+        let url_action = url_history.last_action.unwrap();
+        assert_eq!(url_action.action, "Copy LAN URL");
+        assert_eq!(url_action.status, "success");
+        assert_eq!(url_action.warning_count, 0);
+        assert!(app.output.contains("http://192.168.1.10:7370"));
+        assert!(app.next_step.contains("Paste it on the other computer"));
+
+        app.record_copy_pairing_code_receipt("valid for about 10 minutes");
+        let code_history = load_app_history().unwrap();
+        let code_action = code_history.last_action.unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_LOG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+        }
+
+        assert_eq!(code_action.action, "Copy Pairing Code");
+        assert_eq!(code_action.status, "success");
+        assert_eq!(code_action.warning_count, 0);
+        assert!(app.output.contains("Copied pairing code"));
+        assert!(app.next_step.contains("valid for about 10 minutes"));
+        assert!(!code_action.result.contains("12345678"));
     }
 
     #[test]

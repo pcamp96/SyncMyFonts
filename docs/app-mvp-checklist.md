@@ -157,6 +157,8 @@ The app MVP should reuse the current agent commands:
   first-sync steps, and validation proof guidance.
 - [x] Native GUI reloads the last saved action result, warning count, and
   next-step guidance after relaunch.
+- [x] Native GUI copy actions for the LAN URL and pairing code leave visible,
+  remembered receipts for the two-computer handoff.
 
 ### macOS
 
