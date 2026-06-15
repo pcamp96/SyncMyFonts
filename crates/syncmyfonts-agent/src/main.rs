@@ -1292,9 +1292,10 @@ fn lan_sync(peer: &str, lan_key: Option<&str>, dry_run: bool) -> Result<LanSyncR
 
 fn add_lan_peer(name: String, url: String, lan_key: Option<String>) -> Result<LanPeerConfig> {
     let mut config = load_app_config()?;
+    let url = normalize_peer_url(&url);
     let peer = LanPeerConfig {
-        name,
-        url: normalize_peer_url(&url),
+        name: normalized_peer_name(&name, &url),
+        url,
         lan_key,
     };
     if let Some(existing) = config
@@ -1308,6 +1309,24 @@ fn add_lan_peer(name: String, url: String, lan_key: Option<String>) -> Result<La
     }
     save_app_config(&config)?;
     Ok(peer)
+}
+
+fn normalized_peer_name(name: &str, normalized_url: &str) -> String {
+    let trimmed = name.trim();
+    if !trimmed.is_empty() {
+        return trimmed.to_string();
+    }
+
+    let host = normalized_url
+        .strip_prefix("http://")
+        .or_else(|| normalized_url.strip_prefix("https://"))
+        .unwrap_or(normalized_url)
+        .split('/')
+        .next()
+        .map(str::trim)
+        .filter(|host| !host.is_empty())
+        .unwrap_or("LAN Peer");
+    format!("Peer {host}")
 }
 
 fn forget_lan_peer(name: &str) -> Result<ForgetPeerResponse> {
@@ -7349,6 +7368,18 @@ mod tests {
         assert_eq!(
             normalize_peer_url("  http://192.168.1.50:7370///  "),
             "http://192.168.1.50:7370"
+        );
+    }
+
+    #[test]
+    fn normalized_peer_name_uses_url_when_name_is_blank() {
+        assert_eq!(
+            normalized_peer_name("  ", "http://192.168.1.50:7370"),
+            "Peer 192.168.1.50:7370"
+        );
+        assert_eq!(
+            normalized_peer_name("  Shop PC  ", "http://192.168.1.50:7370"),
+            "Shop PC"
         );
     }
 
