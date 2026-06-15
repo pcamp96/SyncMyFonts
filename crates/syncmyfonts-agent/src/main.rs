@@ -1435,6 +1435,7 @@ fn doctor() -> Result<DoctorReport> {
         true,
         platform_lan_sharing_guidance(),
     ));
+    checks.push(windows_network_profile_check());
     checks.push(if config.peers.is_empty() {
         doctor_check(
             "saved-peers",
@@ -1725,6 +1726,105 @@ fn directory_ready_check(name: &str, path: &Path) -> DoctorCheck {
             format!("{} is not available: {error}", path.display()),
         ),
     }
+}
+
+fn windows_network_profile_check() -> DoctorCheck {
+    #[cfg(target_os = "windows")]
+    {
+        match windows_network_profile_categories() {
+            Ok(categories) => windows_network_profile_check_from_categories(&categories),
+            Err(error) => doctor_check(
+                "windows-network-profile",
+                false,
+                format!(
+                    "Could not inspect the Windows network profile: {error}. If this PC is sharing fonts, make sure the trusted LAN is Private and allow SyncMyFonts only on Private networks."
+                ),
+            ),
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        doctor_check(
+            "windows-network-profile",
+            true,
+            "Windows network-profile detection is not needed on this platform.",
+        )
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_network_profile_categories() -> Result<Vec<String>> {
+    let output = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "Get-NetConnectionProfile | Select-Object -ExpandProperty NetworkCategory",
+        ])
+        .output()
+        .context("running Get-NetConnectionProfile")?;
+    if !output.status.success() {
+        bail!(
+            "Get-NetConnectionProfile exited with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(parse_windows_network_profile_categories(
+        &String::from_utf8_lossy(&output.stdout),
+    ))
+}
+
+#[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
+fn parse_windows_network_profile_categories(output: &str) -> Vec<String> {
+    let mut categories = Vec::new();
+    for line in output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        if !categories
+            .iter()
+            .any(|existing: &String| existing.eq_ignore_ascii_case(line))
+        {
+            categories.push(line.to_string());
+        }
+    }
+    categories
+}
+
+#[cfg_attr(not(any(target_os = "windows", test)), allow(dead_code))]
+fn windows_network_profile_check_from_categories(categories: &[String]) -> DoctorCheck {
+    if categories.is_empty() {
+        return doctor_check(
+            "windows-network-profile",
+            true,
+            "No active Windows network profile was reported. If this PC is sharing fonts, use a trusted Private network.",
+        );
+    }
+
+    let category_list = categories.join(", ");
+    if categories
+        .iter()
+        .any(|category| category.eq_ignore_ascii_case("Public"))
+    {
+        return doctor_check(
+            "windows-network-profile",
+            false,
+            format!(
+                "Active Windows network profile(s): {category_list}. If this PC is sharing fonts, switch the trusted LAN to Private or allow SyncMyFonts only on Private networks."
+            ),
+        );
+    }
+
+    doctor_check(
+        "windows-network-profile",
+        true,
+        format!(
+            "Active Windows network profile(s): {category_list}. Hosted LAN sharing is intended for trusted Private or domain networks."
+        ),
+    )
 }
 
 async fn app_serve(listen: SocketAddr, open_browser_on_start: bool) -> Result<()> {
@@ -7613,6 +7713,33 @@ mod tests {
             .expect("doctor should include LAN sharing guidance");
         assert!(guidance.ok);
         assert!(guidance.message.contains("No port forwarding is needed"));
+    }
+
+    #[test]
+    fn windows_network_profile_check_warns_on_public_networks() {
+        let categories =
+            parse_windows_network_profile_categories("Public\r\nPrivate\r\npublic\r\n");
+        let check = windows_network_profile_check_from_categories(&categories);
+
+        assert_eq!(
+            categories,
+            vec!["Public".to_string(), "Private".to_string()]
+        );
+        assert_eq!(check.name, "windows-network-profile");
+        assert!(!check.ok);
+        assert!(check.message.contains("Public"));
+        assert!(check.message.contains("switch the trusted LAN to Private"));
+    }
+
+    #[test]
+    fn windows_network_profile_check_allows_private_or_domain_networks() {
+        let categories = parse_windows_network_profile_categories("Private\nDomainAuthenticated\n");
+        let check = windows_network_profile_check_from_categories(&categories);
+
+        assert!(check.ok);
+        assert!(check.message.contains("Private"));
+        assert!(check.message.contains("DomainAuthenticated"));
+        assert!(check.message.contains("trusted Private or domain networks"));
     }
 
     #[test]

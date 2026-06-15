@@ -178,6 +178,8 @@ The app MVP should reuse the current agent commands:
   a current-user Scheduled Task.
 - [x] Plain guidance for firewall prompts when Windows is intentionally hosting:
   allow Private networks only.
+- [x] Readiness check detects Windows network profile state and warns when a
+  hosted Windows peer appears to be on a Public network.
 
 ## Verification Gates
 
@@ -324,7 +326,7 @@ Already present in the repo:
 - [x] Lightweight UDP LAN peer discovery.
 - [ ] Bonjour/mDNS discovery.
 - [x] First pairing-code flow for exchanging a short code for a saved LAN token.
-- [ ] Firewall/network-profile detection for hosted Windows peer mode.
+- [x] Firewall/network-profile detection for hosted Windows peer mode.
 - [ ] macOS bundled-app Local Network permission testing.
 - [x] Windows `WM_FONTCHANGE` notification after registry writes.
 - [x] Automated LAN test fixture for saved-peer pull/install behavior.

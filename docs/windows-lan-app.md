@@ -88,8 +88,8 @@ The Windows peer app should not need an inbound firewall exception when it only
 acts as a client that connects to a Mac or local server. In that mode, Windows
 Defender Firewall should not show a scary inbound prompt.
 
-If a future Windows build hosts the LAN server or exposes peer discovery, it may
-trigger a Windows Security Alert. The app and docs should tell the user:
+When the Windows app hosts LAN sharing or answers peer discovery, it may trigger
+a Windows Security Alert. The app and docs should tell the user:
 
 ```text
 Allow SyncMyFonts on Private networks only. Do not allow Public networks.
@@ -109,6 +109,10 @@ Recommended app copy near hosted/discovery mode:
 Only enable LAN sharing on a trusted home or studio network. If Windows asks,
 choose Private networks.
 ```
+
+The Readiness Check also inspects Windows network profile categories. A Public
+profile should be reported as a hosted-mode warning because other computers on
+the LAN may not be able to reach the sharing PC.
 
 The app should also show a simple warning when Windows reports the active
 network profile as Public:
