@@ -156,7 +156,7 @@ jobs:
           assert any("Preview From Peer" in step for step in gui["first_run_steps"])
           assert isinstance(gui["lan_readiness"], list)
           assert any("Sharing: off" in line for line in gui["lan_readiness"])
-          assert any("No port forwarding" in line for line in gui["lan_readiness"])
+          assert any("no port forwarding" in line for line in gui["lan_readiness"])
           assert any("Saved peers: none yet" in line for line in gui["lan_readiness"])
           assert any("Automation: available after saving a peer" in line for line in gui["lan_readiness"])
           assert gui["saved_peer_count"] == 0
@@ -314,7 +314,7 @@ jobs:
           if ($null -eq $guiSelfTestJson.lan_readiness) { throw "GUI self-test LAN readiness lines were missing" }
           $lanReadiness = @($guiSelfTestJson.lan_readiness)
           if (-not ($lanReadiness | Where-Object { $_.Contains("Sharing: off") })) { throw "GUI LAN readiness omitted sharing-off state" }
-          if (-not ($lanReadiness | Where-Object { $_.Contains("No port forwarding") })) { throw "GUI LAN readiness omitted no-port-forwarding state" }
+          if (-not ($lanReadiness | Where-Object { $_.Contains("no port forwarding") })) { throw "GUI LAN readiness omitted no-port-forwarding state" }
           if (-not ($lanReadiness | Where-Object { $_.Contains("Saved peers: none yet") })) { throw "GUI LAN readiness omitted saved-peer state" }
           if (-not ($lanReadiness | Where-Object { $_.Contains("Automation: available after saving a peer") })) { throw "GUI LAN readiness omitted automation gating state" }
           if ($guiSelfTestJson.saved_peer_count -ne 0) { throw "GUI self-test unexpectedly loaded saved peers" }
