@@ -979,6 +979,11 @@ struct GuiSelfTestReport {
     listen: String,
     auto_sync_enabled: bool,
     auto_sync_interval_minutes: u64,
+    peer_url_ready: bool,
+    peer_pairing_ready: bool,
+    peer_sync_ready: bool,
+    peer_install_ready: bool,
+    peer_action_hint: &'static str,
     config_path: PathBuf,
     log_dir: PathBuf,
     user_font_dir: PathBuf,
@@ -2557,6 +2562,11 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         listen: app.listen.clone(),
         auto_sync_enabled: app.auto_sync_enabled,
         auto_sync_interval_minutes: app.auto_sync_interval_minutes,
+        peer_url_ready: app.peer_url_ready(),
+        peer_pairing_ready: app.peer_pairing_ready(),
+        peer_sync_ready: app.peer_sync_ready(),
+        peer_install_ready: app.peer_install_ready(),
+        peer_action_hint: app.peer_action_hint(),
         config_path: app_config_path()?,
         log_dir: app_log_dir()?,
         user_font_dir: user_font_dir()?,
@@ -7559,6 +7569,11 @@ mod tests {
         assert_eq!(report.saved_peer_count, 0);
         assert_eq!(report.selected_peer_name, "");
         assert_eq!(report.listen, AppPreferences::default().lan_listen_address);
+        assert!(!report.peer_url_ready);
+        assert!(!report.peer_pairing_ready);
+        assert!(!report.peer_sync_ready);
+        assert!(!report.peer_install_ready);
+        assert!(report.peer_action_hint.contains("Find a LAN peer or paste"));
         assert!(report.message.contains("Native GUI state initialized"));
         assert!(report.lan_sharing_guidance.contains("No port forwarding"));
         assert!(

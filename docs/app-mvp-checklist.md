@@ -216,6 +216,8 @@ The app MVP should reuse the current agent commands:
   present for macOS and Windows.
 - [x] GitHub Actions verifies packaged GUI first-run setup includes validation
   font, LAN sharing, manual URL fallback, and preview guidance.
+- [x] GitHub Actions verifies packaged GUI self-test starts with peer pairing,
+  preview, and install actions locked until a LAN peer is selected and previewed.
 - [x] GitHub Actions verifies the Windows release archive uses the resolved
   Cargo package version instead of the workspace-inheritance marker.
 - [x] GitHub Actions parses packaged `scan` output as JSON inventory on macOS

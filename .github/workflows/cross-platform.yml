@@ -171,6 +171,11 @@ jobs:
           assert any("Automation: available after saving a peer" in line for line in gui["lan_readiness"])
           assert any("Secrets: no saved LAN tokens yet" in line for line in gui["lan_readiness"])
           assert gui["saved_peer_count"] == 0
+          assert gui["peer_url_ready"] is False
+          assert gui["peer_pairing_ready"] is False
+          assert gui["peer_sync_ready"] is False
+          assert gui["peer_install_ready"] is False
+          assert "Find a LAN peer or paste" in gui["peer_action_hint"]
           assert "Pairing mode" in gui["setup_phase"]
           assert "This computer" in gui["role_card_text"]
           assert "Other computer" in gui["role_card_text"]
@@ -343,6 +348,11 @@ jobs:
           if (-not ($lanReadiness | Where-Object { $_.Contains("Automation: available after saving a peer") })) { throw "GUI LAN readiness omitted automation gating state" }
           if (-not ($lanReadiness | Where-Object { $_.Contains("Secrets: no saved LAN tokens yet") })) { throw "GUI LAN readiness omitted secret-storage state" }
           if ($guiSelfTestJson.saved_peer_count -ne 0) { throw "GUI self-test unexpectedly loaded saved peers" }
+          if ($guiSelfTestJson.peer_url_ready -ne $false) { throw "GUI peer URL should not be ready on first launch" }
+          if ($guiSelfTestJson.peer_pairing_ready -ne $false) { throw "GUI peer pairing should not be ready on first launch" }
+          if ($guiSelfTestJson.peer_sync_ready -ne $false) { throw "GUI peer preview should not be ready on first launch" }
+          if ($guiSelfTestJson.peer_install_ready -ne $false) { throw "GUI peer install should be locked before preview" }
+          if (-not $guiSelfTestJson.peer_action_hint.Contains("Find a LAN peer or paste")) { throw "GUI peer action hint did not explain first peer step" }
           if (-not $guiSelfTestJson.setup_phase.Contains("Pairing mode")) { throw "GUI self-test setup phase did not explain pairing mode" }
           if (-not $guiSelfTestJson.role_card_text.Contains("This computer")) { throw "GUI self-test role card omitted this-computer guidance" }
           if (-not $guiSelfTestJson.role_card_text.Contains("Other computer")) { throw "GUI self-test role card omitted other-computer guidance" }
