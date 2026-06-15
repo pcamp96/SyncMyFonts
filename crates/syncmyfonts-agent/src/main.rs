@@ -3296,6 +3296,10 @@ impl SyncMyFontsGui {
         self.peer_url_ready() && !self.peer_key.trim().is_empty()
     }
 
+    fn can_load_saved_peer(&self) -> bool {
+        !self.saved_peer_names.is_empty()
+    }
+
     fn peer_action_hint(&self) -> &'static str {
         if !self.peer_url_ready() {
             "Find a LAN peer or paste the sharing computer's URL first."
@@ -3543,9 +3547,11 @@ impl eframe::App for SyncMyFontsGui {
                         );
                     }
                 });
-            if ui.button("Load Saved Peer").clicked() {
-                self.load_selected_saved_peer_into_form();
-            }
+            ui.add_enabled_ui(self.can_load_saved_peer(), |ui| {
+                if ui.button("Load Saved Peer").clicked() {
+                    self.load_selected_saved_peer_into_form();
+                }
+            });
         });
         ui.horizontal(|ui| {
             ui.label("Name");
@@ -6605,6 +6611,16 @@ mod tests {
         assert_eq!(app.peer_name, "Shop PC");
         assert_eq!(app.peer_url, "http://192.168.1.20:7370");
         assert_eq!(app.peer_key, "shop-key");
+    }
+
+    #[test]
+    fn gui_load_saved_peer_control_requires_saved_peers() {
+        let mut app = SyncMyFontsGui::new();
+        app.saved_peer_names.clear();
+        assert!(!app.can_load_saved_peer());
+
+        app.saved_peer_names.push("Shop PC".to_string());
+        assert!(app.can_load_saved_peer());
     }
 
     #[test]
