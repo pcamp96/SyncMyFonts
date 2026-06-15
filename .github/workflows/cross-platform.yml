@@ -58,6 +58,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           sh -n packaging/macos/Start-SyncMyFonts.command
+          sh -n packaging/macos/Collect-Validation-Evidence.command
           sh -n packaging/macos/install-launchagent.sh
           sh -n packaging/macos/uninstall-launchagent.sh
           sed -e 's|{{SYNCMYFONTS_RUNNER_PATH}}|/tmp/syncmyfonts-runner.sh|g' \
@@ -79,7 +80,9 @@ jobs:
           [System.Management.Automation.PSParser]::Tokenize((Get-Content packaging/windows/install-startup-task.ps1 -Raw), [ref]$null) | Out-Null
           [System.Management.Automation.PSParser]::Tokenize((Get-Content packaging/windows/uninstall-startup-task.ps1 -Raw), [ref]$null) | Out-Null
           [System.Management.Automation.PSParser]::Tokenize((Get-Content packaging/windows/create-startup-shortcut.ps1 -Raw), [ref]$null) | Out-Null
+          [System.Management.Automation.PSParser]::Tokenize((Get-Content packaging/windows/Collect-Validation-Evidence.ps1 -Raw), [ref]$null) | Out-Null
           if (-not (Test-Path packaging/windows/Start-SyncMyFonts.cmd)) { throw "Windows app launcher is missing" }
+          if (-not (Test-Path packaging/windows/Collect-Validation-Evidence.cmd)) { throw "Windows evidence helper is missing" }
 
       - name: Build macOS archive
         if: runner.os == 'macOS'
@@ -96,17 +99,23 @@ jobs:
           test -x "$package_dir/bin/syncmyfonts-agent"
           test -x "$package_dir/bin/syncmyfonts-gui"
           test -x "$package_dir/Start-SyncMyFonts.command"
+          test -x "$package_dir/Collect-Validation-Evidence.command"
           test -x "$package_dir/SyncMyFonts.app/Contents/MacOS/SyncMyFonts"
           test -x "$package_dir/SyncMyFonts.app/Contents/MacOS/syncmyfonts-agent"
           plutil -lint "$package_dir/SyncMyFonts.app/Contents/Info.plist"
           plutil -extract CFBundleExecutable raw -o - "$package_dir/SyncMyFonts.app/Contents/Info.plist" | grep -q '^SyncMyFonts$'
           grep -q 'syncmyfonts-gui' "$package_dir/Start-SyncMyFonts.command"
+          sh -n "$package_dir/Collect-Validation-Evidence.command"
+          grep -q 'validation-report --write' "$package_dir/Collect-Validation-Evidence.command"
+          grep -q 'gui-self-test.json' "$package_dir/Collect-Validation-Evidence.command"
+          grep -q 'Launching SyncMyFonts' "$package_dir/Collect-Validation-Evidence.command"
           grep -q 'Install Validation' "$package_dir/START-HERE.txt"
           grep -q 'OFL test font' "$package_dir/START-HERE.txt"
           grep -q 'Copy Pairing Instructions' "$package_dir/START-HERE.txt"
           grep -q "sharing computer's LAN URL" "$package_dir/START-HERE.txt"
           grep -q 'URL field manually' "$package_dir/START-HERE.txt"
           grep -q 'Local Network discovery is denied' "$package_dir/START-HERE.txt"
+          grep -q 'Collect-Validation-Evidence.command' "$package_dir/START-HERE.txt"
           SYNCMYFONTS_CONFIG_DIR="$smoke_root/config" \
           SYNCMYFONTS_LOG_DIR="$smoke_root/logs" \
           SYNCMYFONTS_USER_FONT_DIR="$smoke_root/fonts" \
@@ -274,16 +283,25 @@ jobs:
           $agent = Join-Path $packageDir.FullName "bin\syncmyfonts-agent.exe"
           $gui = Join-Path $packageDir.FullName "bin\syncmyfonts-gui.exe"
           $launcher = Join-Path $packageDir.FullName "Start-SyncMyFonts.cmd"
+          $evidenceLauncher = Join-Path $packageDir.FullName "Collect-Validation-Evidence.cmd"
+          $evidenceScript = Join-Path $packageDir.FullName "Collect-Validation-Evidence.ps1"
           if (-not (Test-Path $agent)) { throw "Packaged agent missing" }
           if (-not (Test-Path $gui)) { throw "Packaged GUI launcher missing" }
           if (-not (Test-Path $launcher)) { throw "Packaged launcher missing" }
+          if (-not (Test-Path $evidenceLauncher)) { throw "Packaged evidence launcher missing" }
+          if (-not (Test-Path $evidenceScript)) { throw "Packaged evidence script missing" }
           $launcherText = Get-Content $launcher -Raw
           if (-not $launcherText.Contains("syncmyfonts-gui.exe")) { throw "Packaged launcher does not target GUI binary" }
+          $evidenceScriptText = Get-Content $evidenceScript -Raw
+          if (-not $evidenceScriptText.Contains("validation-report") -or -not $evidenceScriptText.Contains("--write")) { throw "Evidence helper does not write a validation report" }
+          if (-not $evidenceScriptText.Contains("gui-self-test.json")) { throw "Evidence helper does not capture GUI self-test" }
+          if (-not $evidenceScriptText.Contains("Launching SyncMyFonts")) { throw "Evidence helper does not launch the native app" }
           $startHereText = Get-Content (Join-Path $packageDir.FullName "START-HERE.txt") -Raw
           if (-not $startHereText.Contains("Install Validation") -or -not $startHereText.Contains("OFL test font")) { throw "Packaged START-HERE does not mention the validation font setup" }
           if (-not $startHereText.Contains("Copy Pairing Instructions")) { throw "Packaged START-HERE does not mention copyable pairing instructions" }
           if (-not $startHereText.Contains("paste the sharing computer's LAN URL")) { throw "Packaged START-HERE does not mention manual LAN URL fallback" }
           if (-not $startHereText.Contains("Client-only sync should not need an inbound firewall prompt")) { throw "Packaged START-HERE does not distinguish Windows client-only firewall behavior" }
+          if (-not $startHereText.Contains("Collect-Validation-Evidence.cmd")) { throw "Packaged START-HERE does not mention the evidence helper" }
           $env:SYNCMYFONTS_CONFIG_DIR = Join-Path $smokeRoot "config"
           $env:SYNCMYFONTS_LOG_DIR = Join-Path $smokeRoot "logs"
           $env:SYNCMYFONTS_USER_FONT_DIR = Join-Path $smokeRoot "fonts"

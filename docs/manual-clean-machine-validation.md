@@ -25,14 +25,18 @@ On both computers:
 1. Launch the native app.
    - macOS: open `SyncMyFonts.app`.
    - Windows: open `bin\syncmyfonts-gui.exe`.
-2. Click `Diagnostics` and save or paste the support report path/output.
-3. Click `Readiness Check`.
-4. Click `Validation Report` and keep the saved JSON as the before-sync
+2. Optional but recommended: run the packaged evidence helper.
+   - macOS: double-click `Collect-Validation-Evidence.command`.
+   - Windows: double-click `Collect-Validation-Evidence.cmd`.
+   - Keep the Desktop evidence folder with the rest of this checklist.
+3. Click `Diagnostics` and save or paste the support report path/output.
+4. Click `Readiness Check`.
+5. Click `Validation Report` and keep the saved JSON as the before-sync
    evidence.
-5. Confirm the managed font folder is a per-user path.
+6. Confirm the managed font folder is a per-user path.
    - macOS should use `~/Library/Fonts/SyncMyFonts`.
    - Windows should use `%LOCALAPPDATA%\Microsoft\Windows\Fonts`.
-6. Confirm the app does not ask for administrator permission.
+7. Confirm the app does not ask for administrator permission.
 
 Evidence:
 
@@ -43,6 +47,8 @@ macOS readiness:
 Windows readiness:
 macOS validation report:
 Windows validation report:
+macOS evidence helper folder:
+Windows evidence helper folder:
 ```
 
 ## macOS To Windows

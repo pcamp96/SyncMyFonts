@@ -28,6 +28,8 @@ Copy-Item (Join-Path $RepoRoot "target/release/syncmyfonts-agent.exe") (Join-Pat
 Copy-Item (Join-Path $RepoRoot "target/release/syncmyfonts-gui.exe") (Join-Path $DistDir "bin/")
 Copy-Item -Recurse (Join-Path $RepoRoot "packaging/windows") (Join-Path $DistDir "packaging/")
 Copy-Item (Join-Path $RepoRoot "packaging/windows/Start-SyncMyFonts.cmd") $DistDir
+Copy-Item (Join-Path $RepoRoot "packaging/windows/Collect-Validation-Evidence.ps1") $DistDir
+Copy-Item (Join-Path $RepoRoot "packaging/windows/Collect-Validation-Evidence.cmd") $DistDir
 Copy-Item (Join-Path $RepoRoot "README.md") $DistDir
 Copy-Item (Join-Path $RepoRoot "docs/app-install.md") (Join-Path $DistDir "docs/")
 Copy-Item (Join-Path $RepoRoot "docs/manual-clean-machine-validation.md") (Join-Path $DistDir "docs/")
@@ -53,6 +55,9 @@ SyncMyFonts Windows MVP
 
 4. Click Validation Report before and after a real two-computer sync test to
    save clean-machine evidence in the log folder.
+
+   For a one-click launch/readiness evidence bundle, double-click:
+   Collect-Validation-Evidence.cmd
 
 5. If you need a safe non-system font for testing, click Install Validation
    Font. SyncMyFonts installs an OFL test font into your normal user font

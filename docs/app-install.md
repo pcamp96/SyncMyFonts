@@ -45,6 +45,11 @@ paths, saved peers, and sign-in sync helper status.
 Use `Validation Report` before and after a real Mac-to-Windows test to save
 diagnostics, readiness, managed-font verification, and the manual pass criteria
 as one redacted JSON bundle in the log folder.
+The portable archives also include a `Collect-Validation-Evidence` helper:
+`Collect-Validation-Evidence.command` on macOS and
+`Collect-Validation-Evidence.cmd` on Windows. It gathers diagnostics, readiness,
+GUI self-test, and validation-report evidence into a Desktop folder, then
+launches the native app.
 Use `Enable Sign-In Sync` after pairing peers if this computer should pull
 missing fonts from saved peers whenever the user signs in.
 On Windows, use `Install App Shortcuts` to create current-user Start Menu

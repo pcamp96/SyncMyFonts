@@ -198,6 +198,8 @@ The app MVP should reuse the current agent commands:
   and verifies current-user font registration after sync.
 - [x] GitHub Actions smoke-tests native GUI state initialization from the
   packaged macOS and Windows GUI launchers.
+- [x] GitHub Actions verifies packaged launch/readiness evidence helpers are
+  present for macOS and Windows.
 - [x] GitHub Actions verifies packaged GUI first-run setup includes validation
   font, LAN sharing, manual URL fallback, and preview guidance.
 - [x] GitHub Actions verifies the Windows release archive uses the resolved

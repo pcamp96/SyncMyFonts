@@ -18,11 +18,12 @@ cp "$repo_root/target/release/syncmyfonts-agent" "$dist_dir/bin/"
 cp "$repo_root/target/release/syncmyfonts-gui" "$dist_dir/bin/"
 cp -R "$repo_root/packaging/macos" "$dist_dir/packaging/"
 cp "$repo_root/packaging/macos/Start-SyncMyFonts.command" "$dist_dir/"
+cp "$repo_root/packaging/macos/Collect-Validation-Evidence.command" "$dist_dir/"
 cp "$repo_root/README.md" "$dist_dir/"
 cp "$repo_root/docs/app-install.md" "$dist_dir/docs/"
 cp "$repo_root/docs/manual-clean-machine-validation.md" "$dist_dir/docs/"
 cp "$repo_root/docs/desktop-app-surface.md" "$dist_dir/docs/" 2>/dev/null || true
-chmod +x "$dist_dir/Start-SyncMyFonts.command"
+chmod +x "$dist_dir/Start-SyncMyFonts.command" "$dist_dir/Collect-Validation-Evidence.command"
 
 app_dir="$dist_dir/SyncMyFonts.app"
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
@@ -75,6 +76,9 @@ SyncMyFonts macOS MVP
 
 4. Click Validation Report before and after a real two-computer sync test to
    save clean-machine evidence in the log folder.
+
+   For a one-click launch/readiness evidence bundle, double-click:
+   Collect-Validation-Evidence.command
 
 5. If you need a safe non-system font for testing, click Install Validation
    Font. SyncMyFonts installs an OFL test font into your normal user font
