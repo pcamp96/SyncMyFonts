@@ -128,6 +128,9 @@ The app MVP should reuse the current agent commands:
   client-only sync does not look like it needs inbound firewall setup.
 - [x] Native GUI enables Share and Stop Sharing controls according to the
   current sharing state.
+- [x] Native GUI shows a concise sync receipt with installed, already-present,
+  skipped, failed-peer, and checked-peer counts while keeping detailed JSON
+  copyable for support.
 - [x] A copyable support report with app version, agent version, platform,
   config paths, font paths, last command, and last result.
 - [x] Native GUI copy buttons for the current result and latest redacted
