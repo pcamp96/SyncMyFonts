@@ -66,6 +66,8 @@ The app MVP should reuse the current agent commands:
 - [x] `Pair Peer` exchanges an 8-digit pairing code for a saved LAN token.
 - [x] Saved-peer selector loads a chosen saved Mac or Windows PC instead of
   assuming the first saved peer.
+- [x] `Forget Peer` removes the selected saved peer from the native GUI and
+  clears stale connection fields after removal.
 - [x] `Sync Saved Peers` wraps `syncmyfonts-agent lan-sync-all`.
 - [x] `Diagnostics` wraps `syncmyfonts-agent diagnostics`.
 - [x] `Validation Report` wraps `syncmyfonts-agent validation-report`.

@@ -2668,6 +2668,7 @@ struct GuiTaskResult {
     peer: Option<LanPeerConfig>,
     discovered_peer: Option<LanDiscoveredPeer>,
     clear_peer_key: bool,
+    clear_peer_form: bool,
     refresh_saved_peers: bool,
     support_report: Option<String>,
     warning_count: usize,
@@ -2756,6 +2757,13 @@ impl SyncMyFontsGui {
                 }
                 if result.clear_peer_key {
                     self.peer_key.clear();
+                }
+                if result.clear_peer_form {
+                    self.peer_name.clear();
+                    self.peer_url.clear();
+                    self.peer_key.clear();
+                    self.pairing_code.clear();
+                    self.selected_peer_name.clear();
                 }
                 self.output = result.output;
                 if let Some(support_report) = result.support_report {
@@ -3217,26 +3225,29 @@ impl SyncMyFontsGui {
     }
 
     fn forget_peer(&mut self) {
-        let name = self.peer_name.clone();
+        let name = self.peer_to_forget_name();
         self.start_task("Forgetting peer", move || match forget_lan_peer(&name) {
             Ok(result) => {
                 let next_step = if result.removed {
-                    "Peer removed. Pair or save it again if you still need it.".to_string()
+                    format!(
+                        "{name} was removed. Pair or save that computer again if you still need it."
+                    )
                 } else {
-                    "No saved peer matched that name.".to_string()
+                    format!("No saved peer named {name} was found.")
                 };
-                let clear_peer_key = result.removed;
-                gui_ok_with_updates(
+                let mut gui = gui_ok_with_updates(
                     &result,
                     next_step,
                     None,
                     None,
                     None,
                     None,
-                    clear_peer_key,
+                    result.removed,
                     true,
                     0,
-                )
+                );
+                gui.clear_peer_form = result.removed;
+                gui
             }
             Err(error) => gui_error(error),
         });
@@ -3758,6 +3769,29 @@ impl SyncMyFontsGui {
         !self.saved_peer_names.is_empty()
     }
 
+    fn peer_to_forget_name(&self) -> String {
+        if !self.selected_peer_name.trim().is_empty()
+            && self.saved_peer_names.contains(&self.selected_peer_name)
+        {
+            self.selected_peer_name.clone()
+        } else {
+            self.peer_name.trim().to_string()
+        }
+    }
+
+    fn can_forget_peer(&self) -> bool {
+        !self.peer_to_forget_name().is_empty()
+    }
+
+    fn forget_peer_button_label(&self) -> String {
+        let name = self.peer_to_forget_name();
+        if name.is_empty() {
+            "Forget Peer".to_string()
+        } else {
+            format!("Forget {name}")
+        }
+    }
+
     fn can_enable_saved_peer_automation(&self) -> bool {
         !self.saved_peer_names.is_empty()
     }
@@ -4093,8 +4127,8 @@ impl eframe::App for SyncMyFontsGui {
                         self.save_peer();
                     }
                 });
-                ui.add_enabled_ui(!self.peer_name.trim().is_empty(), |ui| {
-                    if ui.button("Forget Peer").clicked() {
+                ui.add_enabled_ui(self.can_forget_peer(), |ui| {
+                    if ui.button(self.forget_peer_button_label()).clicked() {
                         self.forget_peer();
                     }
                 });
@@ -4306,6 +4340,7 @@ fn gui_ok_with_updates<T: Serialize>(
         peer,
         discovered_peer,
         clear_peer_key,
+        clear_peer_form: false,
         refresh_saved_peers,
         support_report: None,
         warning_count,
@@ -4323,6 +4358,7 @@ fn gui_diagnostics_result(report: &DiagnosticsReport, warning_count: usize) -> G
         peer: None,
         discovered_peer: None,
         clear_peer_key: false,
+        clear_peer_form: false,
         refresh_saved_peers: false,
         support_report: Some(report.support_report_text.clone()),
         warning_count,
@@ -4367,6 +4403,7 @@ fn gui_error(error: anyhow::Error) -> GuiTaskResult {
         refresh_saved_peers: false,
         support_report: None,
         warning_count: 1,
+        clear_peer_form: false,
     }
 }
 
@@ -7314,6 +7351,30 @@ mod tests {
 
         app.saved_peer_names.push("Shop PC".to_string());
         assert!(app.can_load_saved_peer());
+    }
+
+    #[test]
+    fn gui_forget_peer_targets_selected_saved_peer_first() {
+        let mut app = SyncMyFontsGui::new();
+        app.saved_peer_names = vec!["Office MacBook".to_string(), "Shop PC".to_string()];
+        app.selected_peer_name = "Shop PC".to_string();
+        app.peer_name = "Office MacBook".to_string();
+
+        assert_eq!(app.peer_to_forget_name(), "Shop PC");
+        assert!(app.can_forget_peer());
+        assert_eq!(app.forget_peer_button_label(), "Forget Shop PC");
+    }
+
+    #[test]
+    fn gui_forget_peer_can_fall_back_to_typed_name() {
+        let mut app = SyncMyFontsGui::new();
+        app.saved_peer_names.clear();
+        app.selected_peer_name.clear();
+        app.peer_name = "Workshop laptop".to_string();
+
+        assert_eq!(app.peer_to_forget_name(), "Workshop laptop");
+        assert!(app.can_forget_peer());
+        assert_eq!(app.forget_peer_button_label(), "Forget Workshop laptop");
     }
 
     #[test]
