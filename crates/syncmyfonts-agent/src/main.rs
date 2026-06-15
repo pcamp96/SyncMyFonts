@@ -2500,6 +2500,7 @@ fn run_gui() -> Result<()> {
 }
 
 fn gui_self_test() -> Result<GuiSelfTestReport> {
+    let _env = IsolatedGuiSelfTestEnv::activate();
     let app = SyncMyFontsGui::new();
     Ok(GuiSelfTestReport {
         ok: true,
@@ -2531,12 +2532,68 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
     })
 }
 
+struct IsolatedGuiSelfTestEnv {
+    previous: Vec<(&'static str, Option<std::ffi::OsString>)>,
+}
+
+impl IsolatedGuiSelfTestEnv {
+    fn activate() -> Self {
+        if std::env::var("SYNCMYFONTS_GUI_SELF_TEST_REAL_ENV").as_deref() == Ok("1") {
+            return Self {
+                previous: Vec::new(),
+            };
+        }
+
+        let root =
+            std::env::temp_dir().join(format!("syncmyfonts-gui-self-test-{}", Uuid::new_v4()));
+        let vars = [
+            ("SYNCMYFONTS_CONFIG_DIR", root.join("config")),
+            ("SYNCMYFONTS_LOG_DIR", root.join("logs")),
+            ("SYNCMYFONTS_USER_FONT_DIR", root.join("fonts")),
+        ];
+        let previous = vars
+            .iter()
+            .map(|(name, _)| (*name, std::env::var_os(name)))
+            .collect();
+        for (name, value) in vars {
+            unsafe {
+                std::env::set_var(name, value);
+            }
+        }
+        Self { previous }
+    }
+}
+
+impl Drop for IsolatedGuiSelfTestEnv {
+    fn drop(&mut self) {
+        for (name, value) in &self.previous {
+            unsafe {
+                match value {
+                    Some(value) => std::env::set_var(name, value),
+                    None => std::env::remove_var(name),
+                }
+            }
+        }
+    }
+}
+
 pub fn run_native_gui_from_args() -> Result<()> {
     if std::env::args().nth(1).as_deref() == Some("--self-test") {
         print_json(&gui_self_test()?)?;
         return Ok(());
     }
     run_gui()
+}
+
+pub fn run_native_gui_entrypoint() {
+    if let Err(error) = run_native_gui_from_args() {
+        let report = cli_error_report("gui", &error);
+        if let Err(print_error) = print_json_to_stderr(&report) {
+            eprintln!("SyncMyFonts GUI failed: {error}");
+            eprintln!("Could not print JSON error report: {print_error}");
+        }
+        process::exit(1);
+    }
 }
 
 struct SyncMyFontsGui {
@@ -7234,12 +7291,16 @@ mod tests {
         }
 
         assert!(report.ok);
-        assert!(report.setup_phase.contains("Sync mode"));
+        assert!(report.setup_phase.contains("Pairing mode"));
         assert!(report.role_card_text.contains("This computer"));
         assert!(report.role_card_text.contains("Other computer"));
-        assert!(report.role_card_text.contains("Sync Saved Peers"));
-        assert_eq!(report.saved_peer_count, 1);
-        assert_eq!(report.selected_peer_name, "Shop PC");
+        assert!(
+            report
+                .role_card_text
+                .contains("Share Fonts On This Network")
+        );
+        assert_eq!(report.saved_peer_count, 0);
+        assert_eq!(report.selected_peer_name, "");
         assert_eq!(report.listen, AppPreferences::default().lan_listen_address);
         assert!(report.message.contains("Native GUI state initialized"));
         assert!(report.lan_sharing_guidance.contains("No port forwarding"));
@@ -7275,7 +7336,7 @@ mod tests {
             report
                 .lan_readiness
                 .iter()
-                .any(|line| line.contains("1 ready (Shop PC)"))
+                .any(|line| line.contains("Saved peers: none yet"))
         );
         assert_eq!(report.sync_validation_matrix.len(), 2);
         assert!(
@@ -7404,7 +7465,19 @@ mod tests {
 
     #[test]
     fn gui_lan_readiness_lines_track_share_pair_and_saved_peer_state() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", root.join("config"));
+            std::env::set_var("SYNCMYFONTS_LOG_DIR", root.join("logs"));
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", root.join("fonts"));
+        }
         let mut app = SyncMyFontsGui::new();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_LOG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+        }
 
         let first_run = app.lan_readiness_lines();
         assert!(first_run.iter().any(|line| line.contains("Sharing: off")));
