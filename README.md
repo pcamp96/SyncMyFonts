@@ -131,6 +131,9 @@ forget.
 The result panel includes copy buttons for the current result and the latest
 redacted support report, which helps capture firewall, permission, and sync
 evidence from clean-machine tests.
+CLI failures are also emitted as structured JSON on stderr with a redacted
+cause chain and a next-step hint, while successful command reports remain on
+stdout.
 When sharing is on, the GUI provides copy buttons for the active LAN URL,
 pairing code, and a one-shot pairing instruction packet for the other computer
 so manual pairing is less error-prone.

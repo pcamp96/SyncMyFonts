@@ -319,7 +319,7 @@ Already present in the repo:
 - [x] Basic release archive scripts for macOS and Windows.
 - [x] Stored per-user config with saved peer URLs and LAN keys.
 - [ ] Keychain or Credential Manager integration for secrets.
-- [ ] Stable machine-readable reports for every command and error.
+- [x] Stable machine-readable reports for every command and error.
 - [x] Dedicated diagnostics command or support-report artifact.
 - [x] Local ownership manifest for managed fonts.
 - [x] Explicit conflict and skipped-font review UI.

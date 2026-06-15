@@ -4,7 +4,7 @@ use std::{
     io::Write,
     net::{SocketAddr, TcpStream, UdpSocket},
     path::{Path, PathBuf},
-    process::{Child, Command},
+    process::{self, Child, Command},
     sync::{Arc, Mutex, mpsc},
     thread,
     time::{Duration, Instant},
@@ -27,7 +27,7 @@ use axum::{
     routing::{get, post},
 };
 use chrono::Utc;
-use clap::{Parser, Subcommand};
+use clap::{Parser, error::ErrorKind};
 use reqwest::blocking::{Client, multipart};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -48,7 +48,7 @@ struct Cli {
     command: Commands,
 }
 
-#[derive(Subcommand)]
+#[derive(clap::Subcommand)]
 enum Commands {
     /// Scan local user fonts and print JSON inventory.
     Scan {
@@ -192,8 +192,49 @@ impl LocalFont {
     }
 }
 
-fn main() -> Result<()> {
-    let cli = Cli::parse();
+#[derive(Debug, Serialize)]
+struct CliErrorReport {
+    ok: bool,
+    command: String,
+    message: String,
+    causes: Vec<String>,
+    next_step: String,
+}
+
+fn main() {
+    match Cli::try_parse() {
+        Ok(cli) => {
+            let command_name = cli.command.name().to_string();
+            if let Err(error) = run_cli(cli) {
+                let report = cli_error_report(&command_name, &error);
+                if let Err(print_error) = print_json_to_stderr(&report) {
+                    eprintln!("SyncMyFonts failed: {error}");
+                    eprintln!("Could not print JSON error report: {print_error}");
+                }
+                process::exit(1);
+            }
+        }
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            let _ = error.print();
+            process::exit(0);
+        }
+        Err(error) => {
+            let report = cli_parse_error_report(&error);
+            if let Err(print_error) = print_json_to_stderr(&report) {
+                eprintln!("{error}");
+                eprintln!("Could not print JSON error report: {print_error}");
+            }
+            process::exit(2);
+        }
+    }
+}
+
+fn run_cli(cli: Cli) -> Result<()> {
     match cli.command {
         Commands::Scan { include_managed } => {
             print_json(&scan(include_managed)?)?;
@@ -288,6 +329,34 @@ fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+impl Commands {
+    fn name(&self) -> &'static str {
+        match self {
+            Commands::Scan { .. } => "scan",
+            Commands::Push { .. } => "push",
+            Commands::Sync { .. } => "sync",
+            Commands::LanServe { .. } => "lan-serve",
+            Commands::LanSync { .. } => "lan-sync",
+            Commands::LanAddPeer { .. } => "lan-add-peer",
+            Commands::LanPair { .. } => "lan-pair",
+            Commands::LanPeers => "lan-peers",
+            Commands::LanDiscover { .. } => "lan-discover",
+            Commands::LanSyncAll { .. } => "lan-sync-all",
+            Commands::Diagnostics => "diagnostics",
+            Commands::Doctor => "doctor",
+            Commands::ValidationReport { .. } => "validation-report",
+            Commands::VerifyManaged => "verify-managed",
+            Commands::RepairManaged => "repair-managed",
+            Commands::InstallValidationFont { .. } => "install-validation-font",
+            Commands::InstallStartupSync => "install-startup-sync",
+            Commands::InstallAppShortcuts => "install-app-shortcuts",
+            Commands::Gui => "gui",
+            Commands::GuiSelfTest => "gui-self-test",
+            Commands::App { .. } => "app",
+        }
+    }
 }
 
 fn scan(include_managed: bool) -> Result<ScanOutput> {
@@ -1299,6 +1368,55 @@ fn format_error_chain(error: &anyhow::Error) -> String {
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join(": ")
+}
+
+fn cli_error_report(command: &str, error: &anyhow::Error) -> CliErrorReport {
+    let causes = error
+        .chain()
+        .map(|cause| redact_secret_text(&cause.to_string()))
+        .collect::<Vec<_>>();
+    let message = causes
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "SyncMyFonts command failed.".to_string());
+    let error_chain = causes.join(": ");
+    CliErrorReport {
+        ok: false,
+        command: command.to_string(),
+        message,
+        causes,
+        next_step: gui_error_next_step(&error_chain),
+    }
+}
+
+fn cli_parse_error_report(error: &clap::Error) -> CliErrorReport {
+    CliErrorReport {
+        ok: false,
+        command: "parse".to_string(),
+        message: redact_secret_text(error.to_string().trim()),
+        causes: Vec::new(),
+        next_step: "Run syncmyfonts --help or the command-specific help to see required options."
+            .to_string(),
+    }
+}
+
+fn redact_secret_text(value: &str) -> String {
+    let mut redacted = Vec::new();
+    for token in value.split_whitespace() {
+        let lower = token.to_ascii_lowercase();
+        if lower.contains("key=")
+            || lower.contains("api_key")
+            || lower.contains("api-key")
+            || lower.contains("lan_key")
+            || lower.contains("lan-key")
+            || token.starts_with("smf-")
+        {
+            redacted.push("[redacted]");
+        } else {
+            redacted.push(token);
+        }
+    }
+    redacted.join(" ")
 }
 
 fn discover_lan_peers(port: u16) -> Result<Vec<LanDiscoveredPeer>> {
@@ -6231,6 +6349,12 @@ fn print_json<T: Serialize>(value: &T) -> Result<()> {
     Ok(())
 }
 
+fn print_json_to_stderr<T: Serialize>(value: &T) -> Result<()> {
+    let mut stderr = std::io::stderr().lock();
+    writeln!(stderr, "{}", serde_json::to_string_pretty(value)?)?;
+    Ok(())
+}
+
 fn platform_name() -> &'static str {
     std::env::consts::OS
 }
@@ -7678,6 +7802,32 @@ mod tests {
             format_error_chain(&error),
             "outer failure: middle failure: inner failure"
         );
+    }
+
+    #[test]
+    fn cli_error_report_is_machine_readable_and_guided() {
+        let error = anyhow!("connection refused").context("contacting LAN peer http://127.0.0.1");
+
+        let report = cli_error_report("lan-sync", &error);
+
+        assert!(!report.ok);
+        assert_eq!(report.command, "lan-sync");
+        assert_eq!(report.message, "contacting LAN peer http://127.0.0.1");
+        assert_eq!(report.causes.len(), 2);
+        assert!(report.next_step.contains("could not reach that peer"));
+    }
+
+    #[test]
+    fn cli_error_report_redacts_obvious_secret_tokens() {
+        let error = anyhow!("invalid LAN key smf-super-secret")
+            .context("request failed with api-key=abc123");
+
+        let report = cli_error_report("lan-sync", &error);
+        let json = serde_json::to_string(&report).unwrap();
+
+        assert!(json.contains("[redacted]"));
+        assert!(!json.contains("smf-super-secret"));
+        assert!(!json.contains("api-key=abc123"));
     }
 
     #[test]
