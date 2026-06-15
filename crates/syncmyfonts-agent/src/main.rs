@@ -984,6 +984,8 @@ struct GuiSelfTestReport {
     peer_sync_ready: bool,
     peer_install_ready: bool,
     peer_action_hint: &'static str,
+    peer_key_label: &'static str,
+    share_key_label: &'static str,
     config_path: PathBuf,
     log_dir: PathBuf,
     user_font_dir: PathBuf,
@@ -2567,6 +2569,8 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         peer_sync_ready: app.peer_sync_ready(),
         peer_install_ready: app.peer_install_ready(),
         peer_action_hint: app.peer_action_hint(),
+        peer_key_label: peer_key_label(),
+        share_key_label: share_key_label(),
         config_path: app_config_path()?,
         log_dir: app_log_dir()?,
         user_font_dir: user_font_dir()?,
@@ -4218,7 +4222,7 @@ impl eframe::App for SyncMyFontsGui {
             ui.text_edit_singleline(&mut self.peer_url);
         });
         ui.horizontal(|ui| {
-            ui.label("Shared Key");
+            ui.label(peer_key_label());
             ui.add(eframe::egui::TextEdit::singleline(&mut self.peer_key).password(true));
             ui.label("Pairing Code");
             ui.text_edit_singleline(&mut self.pairing_code);
@@ -4270,7 +4274,7 @@ impl eframe::App for SyncMyFontsGui {
         ui.horizontal(|ui| {
             ui.label("Listen Address");
             ui.text_edit_singleline(&mut self.listen);
-            ui.label("Shared Key");
+            ui.label(share_key_label());
             ui.add(eframe::egui::TextEdit::singleline(&mut self.share_key).password(true));
         });
         ui.add_enabled_ui(!task_running, |ui| {
@@ -4901,6 +4905,14 @@ fn platform_manual_peer_fallback_guidance() -> &'static str {
     {
         "If discovery fails, paste the sharing computer's LAN URL manually."
     }
+}
+
+fn peer_key_label() -> &'static str {
+    "Shared Key (optional)"
+}
+
+fn share_key_label() -> &'static str {
+    "Shared Key (optional)"
 }
 
 fn should_auto_sync_saved_peers(
@@ -6895,7 +6907,7 @@ const APP_HTML: &str = r#"<!doctype html>
       <div class="grid">
         <label>Name <input id="peerName" placeholder="Workshop PC"></label>
         <label>URL <input id="peerUrl" placeholder="http://192.168.1.50:7370"></label>
-        <label>Shared Key <input id="peerKey" type="password" placeholder="saved after pairing"></label>
+        <label>Shared Key (optional) <input id="peerKey" type="password" placeholder="saved after pairing"></label>
         <label>Pairing Code <input id="pairingCode" placeholder="8 digits from sharing computer"></label>
       </div>
       <p class="row">
@@ -6915,7 +6927,7 @@ const APP_HTML: &str = r#"<!doctype html>
       <h2>Share This Device</h2>
       <div class="grid">
         <label>Listen Address <input id="listen" value="0.0.0.0:7370"></label>
-        <label>Shared Key <input id="shareKey" type="password" placeholder="optional; blank creates pairing code"></label>
+      <label>Shared Key (optional) <input id="shareKey" type="password" placeholder="blank creates pairing code"></label>
       </div>
       <p class="row">
         <button class="primary" onclick="startShare()">Share Fonts On This Network</button>
@@ -7574,6 +7586,8 @@ mod tests {
         assert!(!report.peer_sync_ready);
         assert!(!report.peer_install_ready);
         assert!(report.peer_action_hint.contains("Find a LAN peer or paste"));
+        assert_eq!(report.peer_key_label, "Shared Key (optional)");
+        assert_eq!(report.share_key_label, "Shared Key (optional)");
         assert!(report.message.contains("Native GUI state initialized"));
         assert!(report.lan_sharing_guidance.contains("No port forwarding"));
         assert!(

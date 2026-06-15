@@ -176,6 +176,8 @@ jobs:
           assert gui["peer_sync_ready"] is False
           assert gui["peer_install_ready"] is False
           assert "Find a LAN peer or paste" in gui["peer_action_hint"]
+          assert gui["peer_key_label"] == "Shared Key (optional)"
+          assert gui["share_key_label"] == "Shared Key (optional)"
           assert "Pairing mode" in gui["setup_phase"]
           assert "This computer" in gui["role_card_text"]
           assert "Other computer" in gui["role_card_text"]
@@ -353,6 +355,8 @@ jobs:
           if ($guiSelfTestJson.peer_sync_ready -ne $false) { throw "GUI peer preview should not be ready on first launch" }
           if ($guiSelfTestJson.peer_install_ready -ne $false) { throw "GUI peer install should be locked before preview" }
           if (-not $guiSelfTestJson.peer_action_hint.Contains("Find a LAN peer or paste")) { throw "GUI peer action hint did not explain first peer step" }
+          if ($guiSelfTestJson.peer_key_label -ne "Shared Key (optional)") { throw "GUI peer key label should mark the shared key optional" }
+          if ($guiSelfTestJson.share_key_label -ne "Shared Key (optional)") { throw "GUI share key label should mark the shared key optional" }
           if (-not $guiSelfTestJson.setup_phase.Contains("Pairing mode")) { throw "GUI self-test setup phase did not explain pairing mode" }
           if (-not $guiSelfTestJson.role_card_text.Contains("This computer")) { throw "GUI self-test role card omitted this-computer guidance" }
           if (-not $guiSelfTestJson.role_card_text.Contains("Other computer")) { throw "GUI self-test role card omitted other-computer guidance" }

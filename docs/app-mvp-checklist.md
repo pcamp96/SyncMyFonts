@@ -134,6 +134,8 @@ The app MVP should reuse the current agent commands:
   appear in the intended LAN setup order.
 - [x] Native GUI keeps `Get Missing Fonts From Peer` disabled until the current
   peer URL has completed a successful preview in this app session.
+- [x] Native GUI labels shared keys as optional so pairing codes read as the
+  default first-run path.
 - [x] Native GUI distinguishes receiving fonts from hosting, so Windows
   client-only sync does not look like it needs inbound firewall setup.
 - [x] Native GUI enables Share and Stop Sharing controls according to the
@@ -218,6 +220,8 @@ The app MVP should reuse the current agent commands:
   font, LAN sharing, manual URL fallback, and preview guidance.
 - [x] GitHub Actions verifies packaged GUI self-test starts with peer pairing,
   preview, and install actions locked until a LAN peer is selected and previewed.
+- [x] GitHub Actions verifies packaged GUI self-test keeps shared-key labels
+  optional for pairing-code-first setup.
 - [x] GitHub Actions verifies the Windows release archive uses the resolved
   Cargo package version instead of the workspace-inheritance marker.
 - [x] GitHub Actions parses packaged `scan` output as JSON inventory on macOS
