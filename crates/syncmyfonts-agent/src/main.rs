@@ -984,6 +984,7 @@ struct GuiSelfTestReport {
     peer_sync_ready: bool,
     peer_install_ready: bool,
     peer_action_hint: &'static str,
+    peer_pairing_detail: String,
     peer_key_label: &'static str,
     share_key_label: &'static str,
     pairing_instructions_next_step: &'static str,
@@ -2570,6 +2571,7 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         peer_sync_ready: app.peer_sync_ready(),
         peer_install_ready: app.peer_install_ready(),
         peer_action_hint: app.peer_action_hint(),
+        peer_pairing_detail: app.peer_pairing_detail(),
         peer_key_label: peer_key_label(),
         share_key_label: share_key_label(),
         pairing_instructions_next_step: pairing_instructions_copied_next_step(),
@@ -2666,6 +2668,7 @@ struct SyncMyFontsGui {
     peer_url: String,
     peer_key: String,
     pairing_code: String,
+    discovered_peer_requires_lan_key: bool,
     listen: String,
     share_key: String,
     share: Option<RunningShare>,
@@ -2725,6 +2728,7 @@ impl SyncMyFontsGui {
             peer_url: String::new(),
             peer_key: String::new(),
             pairing_code: String::new(),
+            discovered_peer_requires_lan_key: false,
             listen: preferences.lan_listen_address,
             share_key: String::new(),
             share: None,
@@ -2778,10 +2782,14 @@ impl SyncMyFontsGui {
                     self.peer_name = peer.name;
                     self.peer_url = peer.url;
                     self.peer_key = peer.lan_key.unwrap_or_default();
+                    self.discovered_peer_requires_lan_key = !self.peer_key.trim().is_empty();
+                    self.last_previewed_peer = None;
                 }
                 if let Some(peer) = result.discovered_peer {
                     self.peer_name = peer.name;
                     self.peer_url = peer.url;
+                    self.discovered_peer_requires_lan_key = peer.requires_lan_key;
+                    self.last_previewed_peer = None;
                 }
                 if result.clear_peer_key {
                     self.peer_key.clear();
@@ -2792,6 +2800,7 @@ impl SyncMyFontsGui {
                     self.peer_key.clear();
                     self.pairing_code.clear();
                     self.selected_peer_name.clear();
+                    self.discovered_peer_requires_lan_key = false;
                     self.last_previewed_peer = None;
                 }
                 if let Some(previewed_peer) = result.previewed_peer {
@@ -2979,6 +2988,8 @@ impl SyncMyFontsGui {
                     self.peer_name = peer.name.clone();
                     self.peer_url = peer.url.clone();
                     self.peer_key = peer.lan_key.clone().unwrap_or_default();
+                    self.discovered_peer_requires_lan_key = peer.lan_key.is_some();
+                    self.last_previewed_peer = None;
                     self.next_step = format!(
                         "Loaded saved peer {}. Click Test Connection, then Preview From Peer before Get Missing Fonts From Peer. Use Sync Saved Peers only after each saved peer has previewed successfully.",
                         peer.name
@@ -3941,6 +3952,41 @@ impl SyncMyFontsGui {
         }
     }
 
+    fn peer_pairing_detail(&self) -> String {
+        if !self.peer_url_ready() {
+            return "No peer selected yet. Discovery works only on the same trusted LAN; manual URL entry is still available."
+                .to_string();
+        }
+
+        let peer_name = if self.peer_name.trim().is_empty() {
+            "This peer"
+        } else {
+            self.peer_name.trim()
+        };
+
+        if self.peer_sync_ready() {
+            return format!(
+                "{peer_name} has a saved LAN token on this computer. Preview again after changing the URL or shared key."
+            );
+        }
+
+        if self.peer_pairing_ready() {
+            return format!(
+                "{peer_name} has a pairing code entered. Pairing saves a redacted LAN token so future syncs do not need the short code."
+            );
+        }
+
+        if self.discovered_peer_requires_lan_key {
+            return format!(
+                "{peer_name} was discovered and requires pairing. Enter the 8-digit code shown on that computer."
+            );
+        }
+
+        format!(
+            "{peer_name} is selected. If it is sharing with the default setup, enter the 8-digit pairing code shown on that computer."
+        )
+    }
+
     fn can_start_sharing(&self) -> bool {
         self.share.is_none()
     }
@@ -4236,6 +4282,7 @@ impl eframe::App for SyncMyFontsGui {
             ui.text_edit_singleline(&mut self.pairing_code);
         });
         ui.label(self.peer_action_hint());
+        ui.label(self.peer_pairing_detail());
         ui.add_enabled_ui(!task_running, |ui| {
             ui.horizontal_wrapped(|ui| {
                 if ui.button("Find LAN Peers").clicked() {
@@ -7610,6 +7657,7 @@ mod tests {
         assert!(!report.peer_sync_ready);
         assert!(!report.peer_install_ready);
         assert!(report.peer_action_hint.contains("Find a LAN peer or paste"));
+        assert!(report.peer_pairing_detail.contains("No peer selected yet"));
         assert_eq!(report.peer_key_label, "Shared Key (optional)");
         assert_eq!(report.share_key_label, "Shared Key (optional)");
         assert!(
@@ -7744,14 +7792,20 @@ mod tests {
             app.peer_action_hint(),
             "Find a LAN peer or paste the sharing computer's URL first."
         );
+        assert!(app.peer_pairing_detail().contains("No peer selected yet"));
         assert!(!app.peer_pairing_ready());
         assert!(!app.peer_sync_ready());
 
         app.peer_name = "Shop PC".to_string();
         app.peer_url = "http://192.168.1.25:7370".to_string();
+        app.discovered_peer_requires_lan_key = true;
         assert!(app.setup_phase().contains("enter the code"));
         assert!(app.role_card_text().contains("Pair Peer"));
         assert!(app.peer_action_hint().contains("Enter the pairing code"));
+        assert!(
+            app.peer_pairing_detail()
+                .contains("was discovered and requires pairing")
+        );
         assert!(!app.peer_pairing_ready());
         assert!(!app.peer_sync_ready());
         let loaded_peer_steps = app.first_run_steps();
@@ -7765,6 +7819,10 @@ mod tests {
         assert!(app.peer_pairing_ready());
         assert!(!app.peer_sync_ready());
         assert!(app.peer_action_hint().contains("Pair this peer"));
+        assert!(
+            app.peer_pairing_detail()
+                .contains("Pairing saves a redacted LAN token")
+        );
         app.pairing_code.clear();
 
         app.peer_key = "saved-token".to_string();
@@ -7773,6 +7831,7 @@ mod tests {
         assert!(app.peer_sync_ready());
         assert!(!app.peer_install_ready());
         assert!(app.peer_action_hint().contains("Preview this peer first"));
+        assert!(app.peer_pairing_detail().contains("has a saved LAN token"));
         let keyed_steps = app.first_run_steps();
         assert!(
             keyed_steps

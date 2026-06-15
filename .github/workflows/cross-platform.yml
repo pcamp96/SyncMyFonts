@@ -177,6 +177,7 @@ jobs:
           assert gui["peer_sync_ready"] is False
           assert gui["peer_install_ready"] is False
           assert "Find a LAN peer or paste" in gui["peer_action_hint"]
+          assert "No peer selected yet" in gui["peer_pairing_detail"]
           assert gui["peer_key_label"] == "Shared Key (optional)"
           assert gui["share_key_label"] == "Shared Key (optional)"
           assert "Get Missing Fonts From Peer" in gui["pairing_instructions_next_step"]
@@ -358,6 +359,7 @@ jobs:
           if ($guiSelfTestJson.peer_sync_ready -ne $false) { throw "GUI peer preview should not be ready on first launch" }
           if ($guiSelfTestJson.peer_install_ready -ne $false) { throw "GUI peer install should be locked before preview" }
           if (-not $guiSelfTestJson.peer_action_hint.Contains("Find a LAN peer or paste")) { throw "GUI peer action hint did not explain first peer step" }
+          if (-not $guiSelfTestJson.peer_pairing_detail.Contains("No peer selected yet")) { throw "GUI peer pairing detail did not explain initial peer state" }
           if ($guiSelfTestJson.peer_key_label -ne "Shared Key (optional)") { throw "GUI peer key label should mark the shared key optional" }
           if ($guiSelfTestJson.share_key_label -ne "Shared Key (optional)") { throw "GUI share key label should mark the shared key optional" }
           if (-not $guiSelfTestJson.pairing_instructions_next_step.Contains("Get Missing Fonts From Peer")) { throw "GUI pairing instruction receipt should mention the install button" }
