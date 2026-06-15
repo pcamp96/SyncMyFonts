@@ -2875,7 +2875,7 @@ impl SyncMyFontsGui {
                     self.peer_url = peer.url.clone();
                     self.peer_key = peer.lan_key.clone().unwrap_or_default();
                     self.next_step = format!(
-                        "Loaded saved peer {}. Use Test Connection, Preview From Peer, or Sync Saved Peers.",
+                        "Loaded saved peer {}. Click Test Connection, then Preview From Peer before Get Missing Fonts From Peer. Use Sync Saved Peers only after each saved peer has previewed successfully.",
                         peer.name
                     );
                 }
@@ -3157,7 +3157,7 @@ impl SyncMyFontsGui {
             match add_lan_peer(name, url, lan_key) {
                 Ok(peer) => {
                     let next_step = format!(
-                        "{} is saved. Use Sync Saved Peers for repeat syncs.",
+                        "{} is saved. Test Connection, Preview From Peer, then Get Missing Fonts From Peer. Use Sync Saved Peers later for repeat syncs.",
                         peer.name
                     );
                     let output = redacted_peer_config(&peer);
@@ -7232,6 +7232,14 @@ mod tests {
         assert_eq!(app.peer_name, "Shop PC");
         assert_eq!(app.peer_url, "http://192.168.1.20:7370");
         assert_eq!(app.peer_key, "shop-key");
+        assert!(app.next_step.contains("Test Connection"));
+        assert!(
+            app.next_step
+                .contains("Preview From Peer before Get Missing Fonts From Peer")
+        );
+        assert!(app.next_step.contains(
+            "Use Sync Saved Peers only after each saved peer has previewed successfully"
+        ));
     }
 
     #[test]
