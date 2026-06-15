@@ -47,7 +47,7 @@ Files:
 
 Next:
 1. Confirm the SyncMyFonts window opens.
-2. Run Preview From Peer before installing fonts.
+2. Run Preview From Peer before Get Missing Fonts From Peer.
 3. Keep this folder with the before/after clean-machine validation notes.
 EOF
 

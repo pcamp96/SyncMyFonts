@@ -163,6 +163,8 @@ The app MVP should reuse the current agent commands:
   next-step guidance after relaunch.
 - [x] Native GUI copy actions for the LAN URL and pairing code leave visible,
   remembered receipts for the two-computer handoff.
+- [x] Packaged release instructions and clean-machine evidence helpers use the
+  exact native GUI button names for previewing and installing from a peer.
 
 ### macOS
 
@@ -222,6 +224,8 @@ The app MVP should reuse the current agent commands:
   preview, and install actions locked until a LAN peer is selected and previewed.
 - [x] GitHub Actions verifies packaged GUI self-test keeps shared-key labels
   optional for pairing-code-first setup.
+- [x] GitHub Actions verifies packaged release instructions use the native
+  `Get Missing Fonts From Peer` button name.
 - [x] GitHub Actions verifies the Windows release archive uses the resolved
   Cargo package version instead of the workspace-inheritance marker.
 - [x] GitHub Actions parses packaged `scan` output as JSON inventory on macOS

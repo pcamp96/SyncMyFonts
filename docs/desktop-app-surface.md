@@ -60,7 +60,7 @@ Actions:
 - `Test Peer`
 - `Save Peer`
 - `Preview From Peer`
-- `Get Missing Fonts`
+- `Get Missing Fonts From Peer`
 - `Sync Saved Peers`
 
 The app can hide this section after at least one peer is saved, but it must keep
@@ -116,7 +116,7 @@ Use the bundled `syncmyfonts-agent` executable directly.
 | Save Peer | `syncmyfonts-agent lan-add-peer --name <name> --url <peer> --lan-key <key>` |
 | List Saved Peers | `syncmyfonts-agent lan-peers` |
 | Preview From Peer | `syncmyfonts-agent lan-sync --peer <peer> --lan-key <key> --dry-run` |
-| Get Missing Fonts | `syncmyfonts-agent lan-sync --peer <peer> --lan-key <key>` |
+| Get Missing Fonts From Peer | `syncmyfonts-agent lan-sync --peer <peer> --lan-key <key>` |
 | Preview Saved Peers | `syncmyfonts-agent lan-sync-all --dry-run` |
 | Sync Saved Peers | `syncmyfonts-agent lan-sync-all` |
 | Preview From Server | `syncmyfonts-agent sync --server <url> --api-key <key> --dry-run` |
@@ -247,9 +247,9 @@ Windows service for the MVP.
 - Windows can save that Mac peer with `lan-add-peer`.
 - Windows `Preview From Peer` runs `lan-sync --dry-run` and shows planned
   installs without writing fonts.
-- Windows `Get Missing Fonts` runs `lan-sync` and installs missing fonts for
+- Windows `Get Missing Fonts From Peer` runs `lan-sync` and installs missing fonts for
   the current user only.
-- Running Windows `Get Missing Fonts` a second time reports already-present
+- Running Windows `Get Missing Fonts From Peer` a second time reports already-present
   fonts instead of reinstalling them.
 - Windows can start `Share`, macOS can preview from Windows, and macOS can
   install missing fonts into `~/Library/Fonts/SyncMyFonts`.

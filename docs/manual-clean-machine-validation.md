@@ -65,7 +65,7 @@ Windows evidence helper folder:
 6. Click `Preview From Peer`.
 7. Confirm the test font appears as missing and no system fonts are offered as
    missing.
-8. Click `Get Missing Fonts`.
+8. Click `Get Missing Fonts From Peer`.
 9. Confirm the font installs for the current Windows user.
 10. Reopen a normal Windows design or text app and confirm the test font appears
     in the font picker.
@@ -96,7 +96,7 @@ Installed Windows font path:
 7. Click `Preview From Peer`.
 8. Confirm the test font appears as missing and no system fonts are offered as
    missing.
-9. Click `Get Missing Fonts`.
+9. Click `Get Missing Fonts From Peer`.
 10. Confirm the font installs under `~/Library/Fonts/SyncMyFonts`.
 11. Reopen Font Book or a normal macOS design/text app and confirm the test font
     appears in the font picker.

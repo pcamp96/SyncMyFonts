@@ -77,7 +77,7 @@ Avoid making non-technical users choose push versus sync first. The MVP app can
 label the actions as:
 
 - `Send My Fonts`
-- `Get Missing Fonts`
+- `Get Missing Fonts From Peer`
 - `Sync Both Ways`
 
 Internally, `Sync Both Ways` can run `push` followed by `sync`.
@@ -168,7 +168,7 @@ Suggested shortcuts:
 
 - `SyncMyFonts - Sync Now`
 - `SyncMyFonts - Send My Fonts`
-- `SyncMyFonts - Get Missing Fonts`
+- `SyncMyFonts - Get Missing Fonts From Peer`
 - `SyncMyFonts - Diagnostics`
 
 The shortcuts should run without opening a long-lived terminal window. If the
