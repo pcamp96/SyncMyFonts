@@ -3843,13 +3843,13 @@ impl SyncMyFontsGui {
                 "Pairing code: {code} ({})",
                 pairing_code_validity_text(remaining_seconds)
             ));
-            lines.push("On the other computer: paste or discover this URL, enter the pairing code, click Pair Peer, then Preview From Peer.".to_string());
+            lines.push("On the other computer: paste or discover this URL, enter the pairing code, click Pair Peer, run Preview From Peer, then Get Missing Fonts From Peer.".to_string());
         } else {
             lines.push(
                 "Shared key: use the key entered on the sharing computer; it is not copied here."
                     .to_string(),
             );
-            lines.push("On the other computer: paste or discover this URL, enter the shared key, then Preview From Peer.".to_string());
+            lines.push("On the other computer: paste or discover this URL, enter the shared key, run Preview From Peer, then Get Missing Fonts From Peer.".to_string());
         }
 
         lines.push("No port forwarding is required. Only use this on a trusted LAN.".to_string());
@@ -7956,12 +7956,15 @@ mod tests {
         assert!(invitation.contains("URL: http://192.168.1.10:7370"));
         assert!(invitation.contains("Pairing code: 12345678"));
         assert!(invitation.contains("click Pair Peer"));
+        assert!(invitation.contains("Preview From Peer"));
+        assert!(invitation.contains("Get Missing Fonts From Peer"));
         assert!(!invitation.contains("Shared key:"));
 
         app.last_pairing_code = None;
         app.share_key = "super-secret-lan-key".to_string();
         let invitation = app.share_invitation_text().unwrap();
         assert!(invitation.contains("Shared key: use the key entered"));
+        assert!(invitation.contains("Get Missing Fonts From Peer"));
         assert!(!invitation.contains("super-secret-lan-key"));
     }
 

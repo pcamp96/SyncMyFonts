@@ -165,6 +165,8 @@ The app MVP should reuse the current agent commands:
   remembered receipts for the two-computer handoff.
 - [x] Packaged release instructions and clean-machine evidence helpers use the
   exact native GUI button names for previewing and installing from a peer.
+- [x] Copyable pairing instructions tell the other computer to pair, preview,
+  and use `Get Missing Fonts From Peer` without copying shared-key secrets.
 
 ### macOS
 
