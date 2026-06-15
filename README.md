@@ -123,6 +123,8 @@ current user's normal font folder, install a per-user sign-in helper that runs
 saved-peer sync without putting LAN keys in shortcut or plist arguments, and run
 a readiness check before live two-machine testing. Folder shortcuts open the
 managed font folder, action logs, and app support/config folder.
+The first-run area shows and can copy a short LAN readiness summary covering
+sharing, pairing, saved peers, and auto-sync state.
 When multiple computers are saved, the GUI includes a saved-peer selector so a
 user can load the exact Mac or Windows PC they want to test, preview, sync, or
 forget.

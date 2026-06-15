@@ -3374,6 +3374,10 @@ impl SyncMyFontsGui {
         vec![sharing, pairing, saved_peers, automation]
     }
 
+    fn lan_readiness_text(&self) -> String {
+        self.lan_readiness_lines().join("\n")
+    }
+
     fn peer_url_ready(&self) -> bool {
         !self.peer_url.trim().is_empty()
     }
@@ -3533,20 +3537,36 @@ impl eframe::App for SyncMyFontsGui {
         for line in self.lan_readiness_lines() {
             ui.label(line);
         }
-        if ui.button("Copy Role Card").clicked() {
-            let role_card = self.role_card_text();
-            ui.ctx().copy_text(role_card.clone());
-            self.output = role_card;
-            self.next_step =
-                "Role card copied. Use it to coordinate this computer with the other computer."
-                    .to_string();
-            self.last_result = format!(
-                "Copy Role Card completed at {}",
-                Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
-            );
-            self.warning_count = 0;
-            let _ = record_action("Copy Role Card", "success", 0, &self.next_step);
-        }
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Copy Role Card").clicked() {
+                let role_card = self.role_card_text();
+                ui.ctx().copy_text(role_card.clone());
+                self.output = role_card;
+                self.next_step =
+                    "Role card copied. Use it to coordinate this computer with the other computer."
+                        .to_string();
+                self.last_result = format!(
+                    "Copy Role Card completed at {}",
+                    Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+                );
+                self.warning_count = 0;
+                let _ = record_action("Copy Role Card", "success", 0, &self.next_step);
+            }
+            if ui.button("Copy Readiness").clicked() {
+                let readiness = self.lan_readiness_text();
+                ui.ctx().copy_text(readiness.clone());
+                self.output = readiness;
+                self.next_step =
+                    "LAN readiness copied. Paste it when checking setup on the other computer."
+                        .to_string();
+                self.last_result = format!(
+                    "Copy Readiness completed at {}",
+                    Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+                );
+                self.warning_count = 0;
+                let _ = record_action("Copy Readiness", "success", 0, &self.next_step);
+            }
+        });
         for step in self.first_run_steps() {
             ui.label(step);
         }
@@ -7130,6 +7150,24 @@ mod tests {
                 .iter()
                 .any(|line| line.contains("code 87654321 is ready"))
         );
+    }
+
+    #[test]
+    fn gui_lan_readiness_text_is_copyable_summary() {
+        let mut app = SyncMyFontsGui::new();
+        app.peer_url = "http://192.168.1.25:7370".to_string();
+        app.peer_key = "saved-token".to_string();
+        app.saved_peer_names = vec!["Shop PC".to_string(), "Office Mac".to_string()];
+        app.auto_sync_enabled = true;
+        app.auto_sync_interval_minutes = 30;
+
+        let readiness = app.lan_readiness_text();
+
+        assert!(readiness.contains("Sharing: off; no port forwarding is required."));
+        assert!(readiness.contains("Pairing: saved token is ready; preview can run."));
+        assert!(readiness.contains("Saved peers: 2 ready (Shop PC, Office Mac)"));
+        assert!(readiness.contains("Automation: auto-sync while app is open every 30 minute(s)."));
+        assert_eq!(readiness.lines().count(), 4);
     }
 
     #[test]

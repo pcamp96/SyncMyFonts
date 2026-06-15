@@ -120,6 +120,8 @@ The app MVP should reuse the current agent commands:
 - [x] A short first-run setup path for manual peer URL entry.
 - [x] Native GUI shows the current first-run phase: pairing, sharing, preview,
   or sync.
+- [x] Native GUI shows and can copy a LAN readiness summary with sharing,
+  pairing, saved-peer, and automation state.
 - [x] Native GUI shows a role card with what this computer and the other
   computer should do next.
 - [x] Native GUI gates peer actions so pairing, preview, and install buttons
