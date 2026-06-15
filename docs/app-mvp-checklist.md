@@ -134,6 +134,8 @@ The app MVP should reuse the current agent commands:
   appear in the intended LAN setup order.
 - [x] Native GUI keeps `Get Missing Fonts From Peer` disabled until the current
   peer URL has completed a successful preview in this app session.
+- [x] Native GUI relocks `Get Missing Fonts From Peer` if the peer URL or LAN
+  key changes after preview.
 - [x] Native GUI labels shared keys as optional so pairing codes read as the
   default first-run path.
 - [x] Native GUI distinguishes receiving fonts from hosting, so Windows

@@ -2676,7 +2676,13 @@ struct SyncMyFontsGui {
     auto_sync_enabled: bool,
     auto_sync_interval_minutes: u64,
     last_auto_sync_at: Option<Instant>,
-    last_previewed_peer_url: Option<String>,
+    last_previewed_peer: Option<PreviewedPeer>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PreviewedPeer {
+    url: String,
+    key_fingerprint: Option<String>,
 }
 
 struct GuiTaskResult {
@@ -2691,7 +2697,7 @@ struct GuiTaskResult {
     refresh_saved_peers: bool,
     support_report: Option<String>,
     warning_count: usize,
-    previewed_peer_url: Option<String>,
+    previewed_peer: Option<PreviewedPeer>,
 }
 
 impl SyncMyFontsGui {
@@ -2729,7 +2735,7 @@ impl SyncMyFontsGui {
             auto_sync_enabled: preferences.auto_sync_saved_peers,
             auto_sync_interval_minutes: preferences.auto_sync_interval_minutes,
             last_auto_sync_at: None,
-            last_previewed_peer_url: None,
+            last_previewed_peer: None,
         };
         app.refresh_status();
         app.load_saved_peers_into_form();
@@ -2786,10 +2792,10 @@ impl SyncMyFontsGui {
                     self.peer_key.clear();
                     self.pairing_code.clear();
                     self.selected_peer_name.clear();
-                    self.last_previewed_peer_url = None;
+                    self.last_previewed_peer = None;
                 }
-                if let Some(previewed_peer_url) = result.previewed_peer_url {
-                    self.last_previewed_peer_url = Some(previewed_peer_url);
+                if let Some(previewed_peer) = result.previewed_peer {
+                    self.last_previewed_peer = Some(previewed_peer);
                 }
                 self.output = result.output;
                 if let Some(support_report) = result.support_report {
@@ -3344,7 +3350,8 @@ impl SyncMyFontsGui {
                         result_review,
                     );
                     if dry_run {
-                        result.previewed_peer_url = Some(peer_url.clone());
+                        result.previewed_peer =
+                            Some(previewed_peer_from_parts(&peer_url, peer_key.as_deref()));
                     }
                     result
                 }
@@ -3872,10 +3879,9 @@ impl SyncMyFontsGui {
 
     fn peer_install_ready(&self) -> bool {
         self.peer_sync_ready()
-            && self
-                .last_previewed_peer_url
-                .as_deref()
-                .is_some_and(|url| url == self.peer_url.trim())
+            && self.last_previewed_peer.as_ref().is_some_and(|previewed| {
+                previewed == &previewed_peer_from_parts(&self.peer_url, Some(&self.peer_key))
+            })
     }
 
     fn can_load_saved_peer(&self) -> bool {
@@ -4472,7 +4478,7 @@ fn gui_ok_with_updates<T: Serialize>(
         refresh_saved_peers,
         support_report: None,
         warning_count,
-        previewed_peer_url: None,
+        previewed_peer: None,
     }
 }
 
@@ -4491,7 +4497,7 @@ fn gui_diagnostics_result(report: &DiagnosticsReport, warning_count: usize) -> G
         refresh_saved_peers: false,
         support_report: Some(report.support_report_text.clone()),
         warning_count,
-        previewed_peer_url: None,
+        previewed_peer: None,
     }
 }
 
@@ -4541,7 +4547,7 @@ fn gui_error(error: anyhow::Error) -> GuiTaskResult {
         support_report: None,
         warning_count: 1,
         clear_peer_form: false,
-        previewed_peer_url: None,
+        previewed_peer: None,
     }
 }
 
@@ -4917,6 +4923,20 @@ fn share_key_label() -> &'static str {
 
 fn pairing_instructions_copied_next_step() -> &'static str {
     "Pairing instructions copied. Paste them on the other computer, then pair, preview, and use Get Missing Fonts From Peer."
+}
+
+fn previewed_peer_from_parts(url: &str, lan_key: Option<&str>) -> PreviewedPeer {
+    PreviewedPeer {
+        url: url.trim().to_string(),
+        key_fingerprint: lan_key
+            .map(str::trim)
+            .filter(|key| !key.is_empty())
+            .map(lan_key_fingerprint),
+    }
+}
+
+fn lan_key_fingerprint(key: &str) -> String {
+    hex::encode(Sha256::digest(format!("syncmyfonts-lan-preview:{key}")))
 }
 
 fn should_auto_sync_saved_peers(
@@ -7760,9 +7780,17 @@ mod tests {
                 .any(|step| step.contains("Peer details are filled in"))
         );
 
-        app.last_previewed_peer_url = Some("http://192.168.1.25:7370".to_string());
+        app.last_previewed_peer = Some(previewed_peer_from_parts(
+            "http://192.168.1.25:7370",
+            Some("saved-token"),
+        ));
         assert!(app.peer_install_ready());
         assert!(app.peer_action_hint().contains("Peer preview is current"));
+
+        app.peer_key = "changed-token".to_string();
+        assert!(!app.peer_install_ready());
+        app.peer_key = "saved-token".to_string();
+        assert!(app.peer_install_ready());
 
         app.peer_url = "http://192.168.1.26:7370".to_string();
         assert!(!app.peer_install_ready());
@@ -7781,7 +7809,15 @@ mod tests {
         assert!(app.peer_sync_ready());
         assert!(!app.peer_install_ready());
 
-        app.last_previewed_peer_url = Some("http://192.168.1.25:7370".to_string());
+        app.last_previewed_peer = Some(previewed_peer_from_parts(
+            "http://192.168.1.25:7370",
+            Some("saved-token"),
+        ));
+        assert!(app.peer_install_ready());
+
+        app.peer_key = "different-token".to_string();
+        assert!(!app.peer_install_ready());
+        app.peer_key = "saved-token".to_string();
         assert!(app.peer_install_ready());
 
         app.peer_url = "http://192.168.1.26:7370".to_string();
