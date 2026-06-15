@@ -898,6 +898,7 @@ struct GuiSelfTestReport {
     role_card_text: String,
     next_step: String,
     first_run_steps: Vec<String>,
+    lan_readiness: Vec<String>,
     lan_sharing_guidance: &'static str,
     pre_share_guidance: &'static str,
     manual_peer_fallback_guidance: &'static str,
@@ -2291,6 +2292,7 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         role_card_text: app.role_card_text(),
         next_step: app.next_step.clone(),
         first_run_steps: app.first_run_steps(),
+        lan_readiness: app.lan_readiness_lines(),
         lan_sharing_guidance: platform_lan_sharing_guidance(),
         pre_share_guidance: platform_pre_share_guidance(),
         manual_peer_fallback_guidance: platform_manual_peer_fallback_guidance(),
@@ -3321,6 +3323,57 @@ impl SyncMyFontsGui {
             .to_string()
     }
 
+    fn lan_readiness_lines(&self) -> Vec<String> {
+        let sharing = if self.share.is_some() {
+            if self.share_urls.is_empty() {
+                "Sharing: on; LAN URL is still loading.".to_string()
+            } else {
+                format!("Sharing: on at {}", self.share_urls.join(" or "))
+            }
+        } else {
+            "Sharing: off; no port forwarding is required.".to_string()
+        };
+
+        let pairing = if self.share.is_some() {
+            if let Some(code) = &self.last_pairing_code {
+                format!("Pairing: code {code} is ready for the other computer.")
+            } else {
+                "Pairing: use the shared key entered above.".to_string()
+            }
+        } else if self.peer_pairing_ready() {
+            "Pairing: code entered; Pair Peer is ready.".to_string()
+        } else if self.peer_sync_ready() {
+            "Pairing: saved token is ready; preview can run.".to_string()
+        } else if self.peer_url_ready() {
+            "Pairing: peer URL found; enter its pairing code.".to_string()
+        } else {
+            "Pairing: find a LAN peer or paste its URL.".to_string()
+        };
+
+        let saved_peers = if self.saved_peer_names.is_empty() {
+            "Saved peers: none yet.".to_string()
+        } else {
+            format!(
+                "Saved peers: {} ready ({})",
+                self.saved_peer_names.len(),
+                self.saved_peer_names.join(", ")
+            )
+        };
+
+        let automation = if self.auto_sync_enabled {
+            format!(
+                "Automation: auto-sync while app is open every {} minute(s).",
+                self.auto_sync_interval_minutes
+            )
+        } else if self.saved_peer_names.is_empty() {
+            "Automation: available after saving a peer.".to_string()
+        } else {
+            "Automation: off; enable after a successful preview.".to_string()
+        };
+
+        vec![sharing, pairing, saved_peers, automation]
+    }
+
     fn peer_url_ready(&self) -> bool {
         !self.peer_url.trim().is_empty()
     }
@@ -3477,6 +3530,9 @@ impl eframe::App for SyncMyFontsGui {
         ui.heading("First LAN Sync");
         ui.label(self.setup_phase());
         ui.label(self.role_card_text());
+        for line in self.lan_readiness_lines() {
+            ui.label(line);
+        }
         if ui.button("Copy Role Card").clicked() {
             let role_card = self.role_card_text();
             ui.ctx().copy_text(role_card.clone());
@@ -6879,6 +6935,18 @@ mod tests {
                 .iter()
                 .any(|step| step.contains("Preview From Peer"))
         );
+        assert!(
+            report
+                .lan_readiness
+                .iter()
+                .any(|line| line.contains("Sharing: off"))
+        );
+        assert!(
+            report
+                .lan_readiness
+                .iter()
+                .any(|line| line.contains("1 ready (Shop PC)"))
+        );
         assert_eq!(report.sync_validation_matrix.len(), 2);
         assert!(
             report
@@ -7002,6 +7070,66 @@ mod tests {
         app.saved_peer_names = vec!["Shop PC".to_string()];
         assert!(app.setup_phase().contains("Sync mode"));
         assert!(app.role_card_text().contains("opposite direction"));
+    }
+
+    #[test]
+    fn gui_lan_readiness_lines_track_share_pair_and_saved_peer_state() {
+        let mut app = SyncMyFontsGui::new();
+
+        let first_run = app.lan_readiness_lines();
+        assert!(first_run.iter().any(|line| line.contains("Sharing: off")));
+        assert!(
+            first_run
+                .iter()
+                .any(|line| line.contains("find a LAN peer"))
+        );
+        assert!(
+            first_run
+                .iter()
+                .any(|line| line.contains("Saved peers: none yet"))
+        );
+
+        app.peer_url = "http://192.168.1.25:7370".to_string();
+        app.pairing_code = "12345678".to_string();
+        let ready_to_pair = app.lan_readiness_lines();
+        assert!(
+            ready_to_pair
+                .iter()
+                .any(|line| line.contains("Pair Peer is ready"))
+        );
+
+        app.pairing_code.clear();
+        app.peer_key = "saved-token".to_string();
+        app.saved_peer_names = vec!["Shop PC".to_string()];
+        let ready_to_sync = app.lan_readiness_lines();
+        assert!(
+            ready_to_sync
+                .iter()
+                .any(|line| line.contains("saved token is ready"))
+        );
+        assert!(
+            ready_to_sync
+                .iter()
+                .any(|line| line.contains("1 ready (Shop PC)"))
+        );
+
+        app.share = Some(RunningShare {
+            child: spawn_short_lived_child_for_tests(),
+            listen: "127.0.0.1:7370".parse().unwrap(),
+        });
+        app.share_urls = vec!["http://127.0.0.1:7370".to_string()];
+        app.last_pairing_code = Some("87654321".to_string());
+        let sharing = app.lan_readiness_lines();
+        assert!(
+            sharing
+                .iter()
+                .any(|line| line.contains("Sharing: on at http://127.0.0.1:7370"))
+        );
+        assert!(
+            sharing
+                .iter()
+                .any(|line| line.contains("code 87654321 is ready"))
+        );
     }
 
     #[test]
