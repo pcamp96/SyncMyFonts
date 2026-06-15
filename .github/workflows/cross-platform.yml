@@ -154,6 +154,11 @@ jobs:
           assert any("Install Validation Font" in step for step in gui["first_run_steps"])
           assert any("Share Fonts On This Network" in step for step in gui["first_run_steps"])
           assert any("Preview From Peer" in step for step in gui["first_run_steps"])
+          assert isinstance(gui["lan_readiness"], list)
+          assert any("Sharing: off" in line for line in gui["lan_readiness"])
+          assert any("No port forwarding" in line for line in gui["lan_readiness"])
+          assert any("Saved peers: none yet" in line for line in gui["lan_readiness"])
+          assert any("Automation: available after saving a peer" in line for line in gui["lan_readiness"])
           assert gui["saved_peer_count"] == 0
           assert "Pairing mode" in gui["setup_phase"]
           assert "This computer" in gui["role_card_text"]
@@ -306,6 +311,12 @@ jobs:
           if (-not ($firstRunSteps | Where-Object { $_.Contains("Install Validation Font") })) { throw "GUI first-run steps omitted validation font guidance" }
           if (-not ($firstRunSteps | Where-Object { $_.Contains("Share Fonts On This Network") })) { throw "GUI first-run steps omitted LAN sharing guidance" }
           if (-not ($firstRunSteps | Where-Object { $_.Contains("Preview From Peer") })) { throw "GUI first-run steps omitted preview guidance" }
+          if ($null -eq $guiSelfTestJson.lan_readiness) { throw "GUI self-test LAN readiness lines were missing" }
+          $lanReadiness = @($guiSelfTestJson.lan_readiness)
+          if (-not ($lanReadiness | Where-Object { $_.Contains("Sharing: off") })) { throw "GUI LAN readiness omitted sharing-off state" }
+          if (-not ($lanReadiness | Where-Object { $_.Contains("No port forwarding") })) { throw "GUI LAN readiness omitted no-port-forwarding state" }
+          if (-not ($lanReadiness | Where-Object { $_.Contains("Saved peers: none yet") })) { throw "GUI LAN readiness omitted saved-peer state" }
+          if (-not ($lanReadiness | Where-Object { $_.Contains("Automation: available after saving a peer") })) { throw "GUI LAN readiness omitted automation gating state" }
           if ($guiSelfTestJson.saved_peer_count -ne 0) { throw "GUI self-test unexpectedly loaded saved peers" }
           if (-not $guiSelfTestJson.setup_phase.Contains("Pairing mode")) { throw "GUI self-test setup phase did not explain pairing mode" }
           if (-not $guiSelfTestJson.role_card_text.Contains("This computer")) { throw "GUI self-test role card omitted this-computer guidance" }
