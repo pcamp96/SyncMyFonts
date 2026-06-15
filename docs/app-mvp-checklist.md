@@ -167,6 +167,8 @@ The app MVP should reuse the current agent commands:
   exact native GUI button names for previewing and installing from a peer.
 - [x] Copyable pairing instructions tell the other computer to pair, preview,
   and use `Get Missing Fonts From Peer` without copying shared-key secrets.
+- [x] The visible `Copy Pairing Instructions` receipt repeats the full
+  pair-preview-install path.
 
 ### macOS
 
@@ -228,6 +230,8 @@ The app MVP should reuse the current agent commands:
   optional for pairing-code-first setup.
 - [x] GitHub Actions verifies packaged release instructions use the native
   `Get Missing Fonts From Peer` button name.
+- [x] GitHub Actions verifies packaged GUI self-test exposes the full
+  `Copy Pairing Instructions` receipt.
 - [x] GitHub Actions verifies the Windows release archive uses the resolved
   Cargo package version instead of the workspace-inheritance marker.
 - [x] GitHub Actions parses packaged `scan` output as JSON inventory on macOS

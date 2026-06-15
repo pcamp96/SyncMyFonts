@@ -986,6 +986,7 @@ struct GuiSelfTestReport {
     peer_action_hint: &'static str,
     peer_key_label: &'static str,
     share_key_label: &'static str,
+    pairing_instructions_next_step: &'static str,
     config_path: PathBuf,
     log_dir: PathBuf,
     user_font_dir: PathBuf,
@@ -2571,6 +2572,7 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         peer_action_hint: app.peer_action_hint(),
         peer_key_label: peer_key_label(),
         share_key_label: share_key_label(),
+        pairing_instructions_next_step: pairing_instructions_copied_next_step(),
         config_path: app_config_path()?,
         log_dir: app_log_dir()?,
         user_font_dir: user_font_dir()?,
@@ -4327,9 +4329,7 @@ impl eframe::App for SyncMyFontsGui {
                     if let Some(invitation) = self.share_invitation_text() {
                         ui.ctx().copy_text(invitation.clone());
                         self.output = invitation;
-                        self.next_step =
-                            "Pairing instructions copied. Paste them on the other computer, then pair and preview."
-                                .to_string();
+                        self.next_step = pairing_instructions_copied_next_step().to_string();
                         self.last_result = format!(
                             "Copy Pairing Instructions completed at {}",
                             Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
@@ -4913,6 +4913,10 @@ fn peer_key_label() -> &'static str {
 
 fn share_key_label() -> &'static str {
     "Shared Key (optional)"
+}
+
+fn pairing_instructions_copied_next_step() -> &'static str {
+    "Pairing instructions copied. Paste them on the other computer, then pair, preview, and use Get Missing Fonts From Peer."
 }
 
 fn should_auto_sync_saved_peers(
@@ -7588,6 +7592,11 @@ mod tests {
         assert!(report.peer_action_hint.contains("Find a LAN peer or paste"));
         assert_eq!(report.peer_key_label, "Shared Key (optional)");
         assert_eq!(report.share_key_label, "Shared Key (optional)");
+        assert!(
+            report
+                .pairing_instructions_next_step
+                .contains("Get Missing Fonts From Peer")
+        );
         assert!(report.message.contains("Native GUI state initialized"));
         assert!(report.lan_sharing_guidance.contains("No port forwarding"));
         assert!(

@@ -179,6 +179,7 @@ jobs:
           assert "Find a LAN peer or paste" in gui["peer_action_hint"]
           assert gui["peer_key_label"] == "Shared Key (optional)"
           assert gui["share_key_label"] == "Shared Key (optional)"
+          assert "Get Missing Fonts From Peer" in gui["pairing_instructions_next_step"]
           assert "Pairing mode" in gui["setup_phase"]
           assert "This computer" in gui["role_card_text"]
           assert "Other computer" in gui["role_card_text"]
@@ -359,6 +360,7 @@ jobs:
           if (-not $guiSelfTestJson.peer_action_hint.Contains("Find a LAN peer or paste")) { throw "GUI peer action hint did not explain first peer step" }
           if ($guiSelfTestJson.peer_key_label -ne "Shared Key (optional)") { throw "GUI peer key label should mark the shared key optional" }
           if ($guiSelfTestJson.share_key_label -ne "Shared Key (optional)") { throw "GUI share key label should mark the shared key optional" }
+          if (-not $guiSelfTestJson.pairing_instructions_next_step.Contains("Get Missing Fonts From Peer")) { throw "GUI pairing instruction receipt should mention the install button" }
           if (-not $guiSelfTestJson.setup_phase.Contains("Pairing mode")) { throw "GUI self-test setup phase did not explain pairing mode" }
           if (-not $guiSelfTestJson.role_card_text.Contains("This computer")) { throw "GUI self-test role card omitted this-computer guidance" }
           if (-not $guiSelfTestJson.role_card_text.Contains("Other computer")) { throw "GUI self-test role card omitted other-computer guidance" }
