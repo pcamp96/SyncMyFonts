@@ -3486,6 +3486,40 @@ impl SyncMyFontsGui {
         self.lan_readiness_lines().join("\n")
     }
 
+    fn share_invitation_text(&self) -> Option<String> {
+        let urls = if self.share_urls.is_empty() {
+            return None;
+        } else {
+            self.share_urls.join(" or ")
+        };
+        let mut lines = vec![
+            "SyncMyFonts LAN pairing".to_string(),
+            format!("Sharing computer: {}", self.device_name_input),
+            format!("URL: {urls}"),
+        ];
+
+        if let Some(code) = &self.last_pairing_code {
+            let remaining_seconds = self
+                .last_pairing_started_at
+                .and_then(|started_at| pairing_code_remaining_seconds(started_at, Instant::now()))
+                .or(self.last_pairing_expires_seconds);
+            lines.push(format!(
+                "Pairing code: {code} ({})",
+                pairing_code_validity_text(remaining_seconds)
+            ));
+            lines.push("On the other computer: paste or discover this URL, enter the pairing code, click Pair Peer, then Preview From Peer.".to_string());
+        } else {
+            lines.push(
+                "Shared key: use the key entered on the sharing computer; it is not copied here."
+                    .to_string(),
+            );
+            lines.push("On the other computer: paste or discover this URL, enter the shared key, then Preview From Peer.".to_string());
+        }
+
+        lines.push("No port forwarding is required. Only use this on a trusted LAN.".to_string());
+        Some(lines.join("\n"))
+    }
+
     fn peer_url_ready(&self) -> bool {
         !self.peer_url.trim().is_empty()
     }
@@ -3902,6 +3936,26 @@ impl eframe::App for SyncMyFontsGui {
                         self.next_step = format!(
                             "Pairing code copied and {}. Enter it on the other computer.",
                             pairing_code_validity_text(remaining_seconds)
+                        );
+                    }
+                }
+                if ui.button("Copy Pairing Instructions").clicked() {
+                    if let Some(invitation) = self.share_invitation_text() {
+                        ui.ctx().copy_text(invitation.clone());
+                        self.output = invitation;
+                        self.next_step =
+                            "Pairing instructions copied. Paste them on the other computer, then pair and preview."
+                                .to_string();
+                        self.last_result = format!(
+                            "Copy Pairing Instructions completed at {}",
+                            Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+                        );
+                        self.warning_count = 0;
+                        let _ = record_action(
+                            "Copy Pairing Instructions",
+                            "success",
+                            0,
+                            &self.next_step,
                         );
                     }
                 }
@@ -7300,6 +7354,30 @@ mod tests {
         assert!(readiness.contains("Saved peers: 2 ready (Shop PC, Office Mac)"));
         assert!(readiness.contains("Automation: auto-sync while app is open every 30 minute(s)."));
         assert_eq!(readiness.lines().count(), 4);
+    }
+
+    #[test]
+    fn gui_share_invitation_copies_pairing_instructions_without_custom_key() {
+        let mut app = SyncMyFontsGui::new();
+        app.device_name_input = "Office Mac".to_string();
+        app.share_urls = vec!["http://192.168.1.10:7370".to_string()];
+        app.last_pairing_code = Some("12345678".to_string());
+        app.last_pairing_expires_seconds = Some(600);
+
+        let invitation = app.share_invitation_text().unwrap();
+
+        assert!(invitation.contains("SyncMyFonts LAN pairing"));
+        assert!(invitation.contains("Sharing computer: Office Mac"));
+        assert!(invitation.contains("URL: http://192.168.1.10:7370"));
+        assert!(invitation.contains("Pairing code: 12345678"));
+        assert!(invitation.contains("click Pair Peer"));
+        assert!(!invitation.contains("Shared key:"));
+
+        app.last_pairing_code = None;
+        app.share_key = "super-secret-lan-key".to_string();
+        let invitation = app.share_invitation_text().unwrap();
+        assert!(invitation.contains("Shared key: use the key entered"));
+        assert!(!invitation.contains("super-secret-lan-key"));
     }
 
     #[test]
