@@ -517,25 +517,37 @@ h2 {
 
 .flow-line {
   position: absolute;
-  left: 36px;
-  right: 36px;
-  bottom: 39px;
-  height: 2px;
-  background: var(--line-strong);
+  left: 38px;
+  right: 38px;
+  bottom: 47px;
+  height: 1px;
+  background: var(--line);
 }
 
 .flow-step {
   position: relative;
   display: grid;
-  place-items: center;
+  justify-items: center;
+  align-content: center;
+  gap: 6px;
   min-width: 58px;
-  height: 36px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
+  height: 48px;
+  border: 0;
+  border-radius: 0;
   color: var(--muted);
-  background: var(--surface);
+  background: transparent;
   cursor: pointer;
   box-shadow: none;
+}
+
+.flow-step::before {
+  content: "";
+  display: block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
 }
 
 .flow-step span {
@@ -544,9 +556,13 @@ h2 {
 }
 
 .flow-step.active {
-  color: white;
+  color: var(--blue-dark);
+  background: transparent;
+}
+
+.flow-step.active::before {
   border-color: var(--blue);
-  background: var(--blue);
+  background: radial-gradient(circle at center, var(--blue) 0 4px, var(--surface) 5px);
 }
 
 .action-grid {
