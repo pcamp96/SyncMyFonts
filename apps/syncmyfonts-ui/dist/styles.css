@@ -133,7 +133,7 @@ button {
 
 .workspace {
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
+  grid-template-rows: auto 1fr;
   gap: 18px;
   min-width: 0;
   padding: 32px 44px 28px;
@@ -199,6 +199,17 @@ h2 {
   color: var(--muted);
   background: var(--surface);
   font-size: 13px;
+}
+
+.view-panel {
+  display: none;
+  min-width: 0;
+}
+
+.view-panel.active {
+  display: grid;
+  gap: 18px;
+  align-content: start;
 }
 
 .button {
@@ -426,6 +437,220 @@ h2 {
   white-space: nowrap;
 }
 
+.library-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  align-items: start;
+}
+
+.panel-list,
+.inspector-card,
+.setting-card,
+.support-action {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 18px 52px rgba(23, 32, 51, 0.08);
+}
+
+.panel-list {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-heading h2,
+.inspector-card h2,
+.setting-card h2 {
+  margin-bottom: 4px;
+  font-size: 20px;
+}
+
+.font-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 74px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.font-row:last-child {
+  border-bottom: 0;
+}
+
+.font-row div {
+  display: grid;
+  gap: 4px;
+}
+
+.font-row span,
+.empty-state span,
+.input-row span,
+.inspector-card p,
+.setting-card p,
+.support-action span {
+  color: var(--muted);
+}
+
+.muted-row {
+  background: #fafbfd;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.badge.success {
+  color: #1c6b47;
+  background: var(--green-soft);
+}
+
+.badge.neutral {
+  color: #5f6d83;
+  background: #eef3fb;
+}
+
+.badge.locked {
+  color: #8b5d10;
+  background: #fff4db;
+}
+
+.inspector-card {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.check-list {
+  display: grid;
+  gap: 8px;
+}
+
+.check-list span {
+  position: relative;
+  padding-left: 20px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.check-list span::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.empty-state {
+  display: grid;
+  gap: 6px;
+  padding: 28px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.input-row {
+  display: grid;
+  gap: 8px;
+  padding: 20px;
+}
+
+.input-row input {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  background: #fbfcff;
+  font: inherit;
+}
+
+.settings-grid,
+.support-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.setting-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 138px;
+  padding: 20px;
+}
+
+.setting-card p {
+  margin-bottom: 0;
+}
+
+.toggle {
+  position: relative;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.toggle::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 4px 10px rgba(23, 32, 51, 0.2);
+}
+
+.toggle.on {
+  background: var(--blue);
+}
+
+.toggle.on::after {
+  left: 24px;
+}
+
+.support-action {
+  display: grid;
+  gap: 6px;
+  min-height: 128px;
+  padding: 20px;
+  border-color: var(--line);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.support-action:hover {
+  border-color: #a9c3f5;
+  background: #f8faff;
+}
+
 @media (max-width: 1020px) {
   body {
     min-width: 0;
@@ -474,7 +699,10 @@ h2 {
   }
 
   .sync-board,
-  .action-grid {
+  .action-grid,
+  .library-layout,
+  .settings-grid,
+  .support-grid {
     grid-template-columns: 1fr;
   }
 

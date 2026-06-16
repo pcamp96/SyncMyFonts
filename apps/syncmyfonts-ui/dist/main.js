@@ -19,11 +19,33 @@ const stepContent = {
   }
 };
 
+function activePanel() {
+  return document.querySelector(".view-panel.active");
+}
+
 function setText(id, value) {
   const element = document.getElementById(id);
   if (element) {
     element.textContent = value;
   }
+}
+
+function setView(viewName) {
+  const panel = document.getElementById(`view-${viewName}`);
+  if (!panel) {
+    return;
+  }
+
+  document.querySelectorAll(".view-panel").forEach((view) => {
+    view.classList.toggle("active", view === panel);
+  });
+  document.querySelectorAll(".nav-item").forEach((button) => {
+    button.classList.toggle("active", button.dataset.view === viewName);
+  });
+
+  setText("viewTitle", panel.dataset.title ?? "SyncMyFonts");
+  setText("viewEyebrow", panel.dataset.eyebrow ?? "Desktop app");
+  setText("viewLede", panel.dataset.lede ?? "");
 }
 
 function updateStep(step) {
@@ -58,7 +80,12 @@ document.querySelectorAll(".flow-step").forEach((button) => {
   button.addEventListener("click", () => updateStep(button.dataset.step));
 });
 
+document.querySelectorAll(".nav-item").forEach((button) => {
+  button.addEventListener("click", () => setView(button.dataset.view));
+});
+
 document.getElementById("refreshButton")?.addEventListener("click", refreshSnapshot);
 
+setView(activePanel()?.id.replace("view-", "") ?? "sync");
 updateStep("share");
 refreshSnapshot();

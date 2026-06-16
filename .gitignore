@@ -5,5 +5,5 @@
 .DS_Store
 .playwright-mcp/
 __pycache__/
-apps/syncmyfonts-ui/dist/ui-smoke.png
+apps/syncmyfonts-ui/dist/ui-*.png
 apps/syncmyfonts-ui/src-tauri/target/
