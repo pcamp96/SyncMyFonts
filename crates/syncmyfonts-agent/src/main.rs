@@ -992,6 +992,7 @@ struct GuiSelfTestReport {
     saved_peer_summary: String,
     saved_peer_sync_ready: bool,
     saved_peer_sync_hint: Option<String>,
+    sign_in_sync_installed: bool,
     selected_peer_name: String,
     listen: String,
     auto_sync_enabled: bool,
@@ -2784,6 +2785,7 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         saved_peer_summary: app.saved_peer_summary.clone(),
         saved_peer_sync_ready: app.saved_peer_sync_ready(),
         saved_peer_sync_hint: app.saved_peer_sync_hint(),
+        sign_in_sync_installed: sign_in_sync_installed().unwrap_or(false),
         selected_peer_name: app.selected_peer_name.clone(),
         listen: app.listen.clone(),
         auto_sync_enabled: app.auto_sync_enabled,
@@ -4062,7 +4064,25 @@ impl SyncMyFontsGui {
             )
         };
 
-        vec![sharing, pairing, saved_peers, automation, secrets]
+        vec![
+            sharing,
+            pairing,
+            saved_peers,
+            self.sign_in_sync_status_line(),
+            automation,
+            secrets,
+        ]
+    }
+
+    fn sign_in_sync_status_line(&self) -> String {
+        match sign_in_sync_installed() {
+            Ok(true) => "Sign-in sync: on; saved peers sync when this user signs in.".to_string(),
+            Ok(false) if self.can_enable_saved_peer_automation() => {
+                "Sign-in sync: off; enable it after a successful saved-peer preview.".to_string()
+            }
+            Ok(false) => "Sign-in sync: off; available after pairing a peer.".to_string(),
+            Err(error) => format!("Sign-in sync: status unavailable ({error})."),
+        }
     }
 
     fn lan_readiness_text(&self) -> String {
@@ -5827,6 +5847,22 @@ fn startup_sync_helper_path() -> Result<PathBuf> {
     #[cfg(not(target_os = "windows"))]
     {
         Ok(app_data_dir()?.join("run-sign-in-sync.sh"))
+    }
+}
+
+fn sign_in_sync_installed() -> Result<bool> {
+    let helper_path = startup_sync_helper_path()?;
+    #[cfg(target_os = "macos")]
+    {
+        Ok(helper_path.exists() && macos_startup_sync_plist_path()?.exists())
+    }
+    #[cfg(target_os = "windows")]
+    {
+        Ok(helper_path.exists() && windows_startup_sync_shortcut_path()?.exists())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        Ok(helper_path.exists())
     }
 }
 
@@ -8370,6 +8406,7 @@ mod tests {
             report.saved_peer_sync_hint,
             Some("Pair a LAN peer before enabling saved-peer sync.".to_string())
         );
+        assert!(!report.sign_in_sync_installed);
         assert_eq!(report.selected_peer_name, "");
         assert_eq!(report.listen, AppPreferences::default().lan_listen_address);
         assert!(report.listen_address_ready);
@@ -8434,6 +8471,12 @@ mod tests {
                 .lan_readiness
                 .iter()
                 .any(|line| line.contains("Saved peers: none yet"))
+        );
+        assert!(
+            report
+                .lan_readiness
+                .iter()
+                .any(|line| line.contains("Sign-in sync: off"))
         );
         assert_eq!(report.sync_validation_matrix.len(), 2);
         assert!(
@@ -8770,9 +8813,10 @@ mod tests {
         assert!(readiness.contains("Sharing: off; no port forwarding is required."));
         assert!(readiness.contains("Pairing: saved token is ready; preview can run."));
         assert!(readiness.contains("Saved peers: 2 ready (Shop PC, Office Mac)"));
+        assert!(readiness.contains("Sign-in sync: off; enable it after a successful saved-peer preview."));
         assert!(readiness.contains("Automation: auto-sync while app is open every 30 minute(s)."));
         assert!(readiness.contains("Secrets: 2 saved LAN token(s) are redacted"));
-        assert_eq!(readiness.lines().count(), 5);
+        assert_eq!(readiness.lines().count(), 6);
     }
 
     #[test]

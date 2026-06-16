@@ -256,6 +256,8 @@ The app MVP should reuse the current agent commands:
   preview, and install actions locked until a LAN peer is selected and previewed.
 - [x] GitHub Actions verifies packaged GUI self-test exposes saved-peer summary
   and saved-peer sync readiness fields.
+- [x] GitHub Actions verifies packaged GUI self-test exposes sign-in sync
+  readiness state.
 - [x] GitHub Actions verifies packaged GUI self-test exposes first-run LAN
   action enabled/disabled states.
 - [x] GitHub Actions verifies packaged GUI self-test exposes first-run peer

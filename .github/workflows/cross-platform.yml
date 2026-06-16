@@ -182,12 +182,14 @@ jobs:
           assert any("Sharing: off" in line for line in gui["lan_readiness"])
           assert any("no port forwarding" in line for line in gui["lan_readiness"])
           assert any("Saved peers: none yet" in line for line in gui["lan_readiness"])
+          assert any("Sign-in sync: off" in line for line in gui["lan_readiness"])
           assert any("Automation: available after pairing a peer" in line for line in gui["lan_readiness"])
           assert any("Secrets: no saved LAN tokens yet" in line for line in gui["lan_readiness"])
           assert gui["saved_peer_count"] == 0
           assert gui["saved_peer_summary"] == "Saved peers: none yet."
           assert gui["saved_peer_sync_ready"] is False
           assert gui["saved_peer_sync_hint"] == "Pair a LAN peer before enabling saved-peer sync."
+          assert gui["sign_in_sync_installed"] is False
           assert gui["listen_address_ready"] is True
           assert "0.0.0.0:7370" in gui["listen_address_detail"]
           assert gui["peer_url_ready"] is False
@@ -414,12 +416,14 @@ jobs:
           if (-not ($lanReadiness | Where-Object { $_.Contains("Sharing: off") })) { throw "GUI LAN readiness omitted sharing-off state" }
           if (-not ($lanReadiness | Where-Object { $_.Contains("no port forwarding") })) { throw "GUI LAN readiness omitted no-port-forwarding state" }
           if (-not ($lanReadiness | Where-Object { $_.Contains("Saved peers: none yet") })) { throw "GUI LAN readiness omitted saved-peer state" }
+          if (-not ($lanReadiness | Where-Object { $_.Contains("Sign-in sync: off") })) { throw "GUI LAN readiness omitted sign-in sync state" }
           if (-not ($lanReadiness | Where-Object { $_.Contains("Automation: available after pairing a peer") })) { throw "GUI LAN readiness omitted automation gating state" }
           if (-not ($lanReadiness | Where-Object { $_.Contains("Secrets: no saved LAN tokens yet") })) { throw "GUI LAN readiness omitted secret-storage state" }
           if ($guiSelfTestJson.saved_peer_count -ne 0) { throw "GUI self-test unexpectedly loaded saved peers" }
           if ($guiSelfTestJson.saved_peer_summary -ne "Saved peers: none yet.") { throw "GUI self-test saved-peer summary did not explain empty state" }
           if ($guiSelfTestJson.saved_peer_sync_ready -ne $false) { throw "GUI saved-peer sync should not be ready on first launch" }
           if ($guiSelfTestJson.saved_peer_sync_hint -ne "Pair a LAN peer before enabling saved-peer sync.") { throw "GUI saved-peer sync hint did not explain first pairing step" }
+          if ($guiSelfTestJson.sign_in_sync_installed -ne $false) { throw "GUI sign-in sync should not be installed on first launch" }
           if ($guiSelfTestJson.listen_address_ready -ne $true) { throw "GUI listen address should be ready on first launch" }
           if (-not $guiSelfTestJson.listen_address_detail.Contains("0.0.0.0:7370")) { throw "GUI listen address detail did not explain default LAN sharing address" }
           if ($guiSelfTestJson.peer_url_ready -ne $false) { throw "GUI peer URL should not be ready on first launch" }
