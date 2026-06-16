@@ -29,15 +29,22 @@ The first Tauri milestone is UI-only:
 
 ## Visual Language
 
+Stitch refinement direction:
+
+- Combine the macOS System Settings-style sidebar with Windows workstation-style precision in the content area.
+- Use tonal surfaces, 1px borders, and small shadows instead of large card elevation.
+- Keep controls compact: 32px buttons, small status chips, high-density list rows, and 4px-6px radii.
+- Use a platform preview control for macOS and Windows copy/layout checks without splitting the product into two separate UIs.
+
 Palette:
 
-- Ink: `#172033`
-- Muted ink: `#68758c`
-- Canvas: `#f5f7fb`
+- Ink: `#1a1c1e`
+- Muted ink: `#5f6b7f`
+- Canvas: `#f7f8fb`
 - Surface: `#ffffff`
-- Line: `#dde4ee`
-- Action blue: `#2d6cdf`
-- Success green: `#2f9c67`
+- Line: `#e2e8f0`
+- Action blue: `#0066ff`
+- Success green: `#138a5b`
 - Warning amber: `#c98214`
 
 Signature element:

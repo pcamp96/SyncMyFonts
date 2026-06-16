@@ -6,7 +6,7 @@
     <title>SyncMyFonts</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body>
+  <body data-platform="macos">
     <div class="app-shell">
       <aside class="sidebar" aria-label="Primary">
         <div class="brand">
@@ -18,12 +18,20 @@
         </div>
 
         <nav class="nav-list">
-          <button class="nav-item active" type="button" data-view="sync">Sync</button>
-          <button class="nav-item" type="button" data-view="fonts">Fonts</button>
-          <button class="nav-item" type="button" data-view="peers">Peers</button>
-          <button class="nav-item" type="button" data-view="settings">Settings</button>
-          <button class="nav-item" type="button" data-view="support">Support</button>
+          <button class="nav-item active" type="button" data-view="sync"><span class="nav-glyph">S</span>Sync</button>
+          <button class="nav-item" type="button" data-view="fonts"><span class="nav-glyph">F</span>Fonts</button>
+          <button class="nav-item" type="button" data-view="peers"><span class="nav-glyph">P</span>Peers</button>
+          <button class="nav-item" type="button" data-view="settings"><span class="nav-glyph">C</span>Settings</button>
+          <button class="nav-item" type="button" data-view="support"><span class="nav-glyph">?</span>Support</button>
         </nav>
+
+        <div class="safety-note">
+          <div class="shield-mark" aria-hidden="true"></div>
+          <div>
+            <strong>System fonts excluded</strong>
+            <span>Only user-installed fonts are eligible for LAN sync.</span>
+          </div>
+        </div>
 
         <div class="sidebar-status">
           <span id="deviceName">This computer</span>
@@ -41,6 +49,10 @@
             <p class="lede" id="viewLede">Move licensed, non-system fonts between trusted computers on this network.</p>
           </div>
           <div class="topbar-actions">
+            <div class="platform-switch" aria-label="Platform preview">
+              <button class="platform-option active" type="button" data-platform-option="macos">macOS</button>
+              <button class="platform-option" type="button" data-platform-option="windows">Windows</button>
+            </div>
             <span class="warning-pill"><span id="warningCount">0</span> warnings</span>
             <button class="button secondary" id="refreshButton" type="button">Refresh</button>
           </div>
@@ -51,7 +63,7 @@
             <article class="device-card current">
               <div class="card-label">This computer</div>
               <h2 id="localDeviceTitle">This computer</h2>
-              <p>Choose whether this machine has fonts to share or needs fonts from another computer.</p>
+              <p id="platformHint">macOS user font folders are eligible. System font folders stay excluded.</p>
               <div class="status-row">
                 <span class="status-dot off"></span>
                 <span id="localShareStatus">Sharing is off</span>
@@ -77,7 +89,7 @@
             <article class="device-card peer">
               <div class="card-label">Paired computer</div>
               <h2>No peer selected</h2>
-              <p>Find a nearby SyncMyFonts app on the same LAN, or paste a LAN URL manually.</p>
+              <p>Find a nearby SyncMyFonts app on the same LAN, or paste a LAN URL.</p>
               <button class="button primary" type="button">Find LAN peers</button>
             </article>
           </section>
@@ -192,6 +204,14 @@
         </section>
 
         <section class="view-panel" id="view-settings" data-title="Settings" data-eyebrow="App preferences" data-lede="Tune the desktop app behavior without exposing backend internals on the first screen.">
+          <div class="platform-preview">
+            <div>
+              <p class="eyebrow">Platform behavior</p>
+              <h2 id="platformTitle">macOS preview</h2>
+              <p id="platformCopy">Use this preview to keep copy and layout honest for macOS and Windows packaging.</p>
+            </div>
+            <span class="badge neutral" id="platformBadge">macOS</span>
+          </div>
           <div class="settings-grid">
             <article class="setting-card">
               <div>

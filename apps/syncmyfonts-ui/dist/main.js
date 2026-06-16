@@ -19,6 +19,21 @@ const stepContent = {
   }
 };
 
+const platformContent = {
+  macos: {
+    label: "macOS",
+    title: "macOS preview",
+    hint: "macOS user font folders are eligible. System font folders stay excluded.",
+    copy: "Use this preview to keep copy and layout honest for macOS packaging."
+  },
+  windows: {
+    label: "Windows",
+    title: "Windows preview",
+    hint: "Windows per-user font installs are eligible. Windows system fonts stay excluded.",
+    copy: "Use this preview to keep copy and layout honest for Windows packaging."
+  }
+};
+
 function activePanel() {
   return document.querySelector(".view-panel.active");
 }
@@ -57,6 +72,18 @@ function updateStep(step) {
   });
 }
 
+function setPlatform(platformName) {
+  const content = platformContent[platformName] ?? platformContent.macos;
+  document.body.dataset.platform = platformName;
+  document.querySelectorAll(".platform-option").forEach((button) => {
+    button.classList.toggle("active", button.dataset.platformOption === platformName);
+  });
+  setText("platformTitle", content.title);
+  setText("platformCopy", content.copy);
+  setText("platformBadge", content.label);
+  setText("platformHint", content.hint);
+}
+
 async function refreshSnapshot() {
   if (!invoke) {
     return;
@@ -84,8 +111,13 @@ document.querySelectorAll(".nav-item").forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
 });
 
+document.querySelectorAll(".platform-option").forEach((button) => {
+  button.addEventListener("click", () => setPlatform(button.dataset.platformOption));
+});
+
 document.getElementById("refreshButton")?.addEventListener("click", refreshSnapshot);
 
 setView(activePanel()?.id.replace("view-", "") ?? "sync");
+setPlatform(document.body.dataset.platform ?? "macos");
 updateStep("share");
 refreshSnapshot();
