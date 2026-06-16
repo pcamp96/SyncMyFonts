@@ -74,8 +74,9 @@ SyncMyFonts Windows MVP
 
 8. Reopen your design apps if an installed font does not appear immediately.
 
-9. To install startup helpers, click Enable Sign-In Sync after pairing peers,
-   or see:
+9. To install startup helpers, click Enable Sign-In Sync after pairing peers.
+   Click Disable Sign-In Sync later to remove that current-user helper without
+   removing saved peers, or see:
    packaging\windows\README.md
 
 10. To add Start Menu launchers for SyncMyFonts, saved-peer sync, dry-run

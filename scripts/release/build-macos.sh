@@ -96,7 +96,8 @@ SyncMyFonts macOS MVP
 8. Reopen your design apps if an installed font does not appear immediately.
 
 9. To install launch-at-login helpers, click Enable Sign-In Sync after pairing
-   peers, or see:
+   peers. Click Disable Sign-In Sync later to remove that current-user helper
+   without removing saved peers, or see:
    packaging/macos/README.md
 
 Validation:
