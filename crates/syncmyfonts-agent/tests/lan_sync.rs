@@ -70,7 +70,19 @@ fn saved_peer_sync_all_installs_matching_font_bytes() {
         .arg("--lan-key")
         .arg("test-key");
     apply_isolated_env(&mut add_peer, &peer_b_fonts, &peer_b_config);
-    assert!(add_peer.status().unwrap().success());
+    let add_peer_output = add_peer.output().unwrap();
+    assert!(
+        add_peer_output.status.success(),
+        "lan-add-peer failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&add_peer_output.stdout),
+        String::from_utf8_lossy(&add_peer_output.stderr)
+    );
+    let add_peer_json = parse_json(&add_peer_output);
+    assert_eq!(add_peer_json["has_lan_key"], true);
+    assert!(
+        !String::from_utf8_lossy(&add_peer_output.stdout).contains("test-key"),
+        "lan-add-peer output leaked the LAN key"
+    );
 
     let mut sync_all = Command::new(&bin);
     sync_all.arg("lan-sync-all");
@@ -657,7 +669,19 @@ fn add_saved_peer(bin: &Path, font_dir: &Path, config_dir: &Path, name: &str, ur
         .arg("--lan-key")
         .arg("shared-test-key");
     apply_isolated_env(&mut add_peer, font_dir, config_dir);
-    assert!(add_peer.status().unwrap().success());
+    let output = add_peer.output().unwrap();
+    assert!(
+        output.status.success(),
+        "lan-add-peer failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json = parse_json(&output);
+    assert_eq!(json["has_lan_key"], true);
+    assert!(
+        !String::from_utf8_lossy(&output.stdout).contains("shared-test-key"),
+        "lan-add-peer output leaked the LAN key"
+    );
 }
 
 fn sync_saved_peers(bin: &Path, font_dir: &Path, config_dir: &Path) -> serde_json::Value {

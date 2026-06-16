@@ -273,7 +273,7 @@ fn run_cli(cli: Cli) -> Result<()> {
         }
         Commands::LanAddPeer { name, url, lan_key } => {
             let peer = add_lan_peer(name, url, lan_key)?;
-            print_json(&peer)?;
+            print_json(&redacted_peer_config(&peer))?;
         }
         Commands::LanPair {
             name,
