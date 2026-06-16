@@ -604,8 +604,9 @@ h2 {
 }
 
 .role-card.selected {
-  border-color: #a9c3f5;
-  background: #f7faff;
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: inset 3px 0 0 var(--blue);
 }
 
 .role-icon {
