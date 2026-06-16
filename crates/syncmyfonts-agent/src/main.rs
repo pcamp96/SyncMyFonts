@@ -1782,19 +1782,33 @@ fn doctor() -> Result<DoctorReport> {
     checks.push(sign_in_sync_readiness_check());
 
     let failed = checks.iter().filter(|check| !check.ok).count();
-    let next_step = if failed == 0 {
-        "This computer is ready for saved-peer LAN sync.".to_string()
-    } else if config.peers.is_empty() || saved_key_count < config.peers.len() {
-        "Pair saved LAN peers, then run Readiness Check again.".to_string()
-    } else {
-        "Review failed checks, then run Readiness Check again.".to_string()
-    };
+    let next_step = doctor_next_step(&checks, config.peers.len(), saved_key_count);
 
     Ok(DoctorReport {
         ok: failed == 0,
         checks,
         next_step,
     })
+}
+
+fn doctor_next_step(checks: &[DoctorCheck], peer_count: usize, saved_key_count: usize) -> String {
+    let failed = checks.iter().filter(|check| !check.ok).count();
+    if failed == 0 {
+        return "This computer is ready for saved-peer LAN sync.".to_string();
+    }
+
+    if checks
+        .iter()
+        .any(|check| check.name == "sign-in-sync-helper" && !check.ok)
+    {
+        return "Repair sign-in sync with Disable Sign-In Sync, then Enable Sign-In Sync, and run Readiness Check again.".to_string();
+    }
+
+    if peer_count == 0 || saved_key_count < peer_count {
+        return "Pair saved LAN peers, then run Readiness Check again.".to_string();
+    }
+
+    "Review failed checks, then run Readiness Check again.".to_string()
 }
 
 fn secret_storage_check(config: &AppConfig) -> DoctorCheck {
@@ -9487,6 +9501,51 @@ mod tests {
         assert!(!saved_peers.ok);
         assert!(saved_peers.message.contains("still need pairing"));
         assert!(report.next_step.contains("Pair saved LAN peers"));
+    }
+
+    #[test]
+    fn doctor_next_step_prioritizes_sign_in_sync_repair() {
+        let checks = vec![
+            doctor_check(
+                "saved-peers",
+                false,
+                "No saved peers yet. Pair another computer.",
+            ),
+            doctor_check(
+                "sign-in-sync-helper",
+                false,
+                "Sign-in sync helper exists, but startup registration is missing.",
+            ),
+        ];
+
+        let next_step = doctor_next_step(&checks, 0, 0);
+
+        assert!(next_step.contains("Repair sign-in sync"));
+        assert!(next_step.contains("Disable Sign-In Sync"));
+        assert!(next_step.contains("Enable Sign-In Sync"));
+    }
+
+    #[test]
+    fn doctor_next_step_keeps_pairing_guidance_for_first_run() {
+        let checks = vec![
+            doctor_check(
+                "saved-peers",
+                false,
+                "No saved peers yet. Pair another computer.",
+            ),
+            doctor_check(
+                "sign-in-sync-helper",
+                true,
+                "Optional sign-in sync helper is not installed.",
+            ),
+        ];
+
+        let next_step = doctor_next_step(&checks, 0, 0);
+
+        assert_eq!(
+            next_step,
+            "Pair saved LAN peers, then run Readiness Check again."
+        );
     }
 
     #[test]
