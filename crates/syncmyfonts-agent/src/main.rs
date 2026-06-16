@@ -982,6 +982,8 @@ struct GuiSelfTestReport {
     listen: String,
     auto_sync_enabled: bool,
     auto_sync_interval_minutes: u64,
+    listen_address_ready: bool,
+    listen_address_detail: String,
     peer_url_ready: bool,
     peer_pairing_ready: bool,
     peer_sync_ready: bool,
@@ -2588,6 +2590,8 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         listen: app.listen.clone(),
         auto_sync_enabled: app.auto_sync_enabled,
         auto_sync_interval_minutes: app.auto_sync_interval_minutes,
+        listen_address_ready: app.listen_address_ready(),
+        listen_address_detail: app.listen_address_detail(),
         peer_url_ready: app.peer_url_ready(),
         peer_pairing_ready: app.peer_pairing_ready(),
         peer_sync_ready: app.peer_sync_ready(),
@@ -4017,11 +4021,26 @@ impl SyncMyFontsGui {
     }
 
     fn can_start_sharing(&self) -> bool {
-        self.share.is_none()
+        self.share.is_none() && self.listen_address_ready()
     }
 
     fn can_stop_sharing(&self) -> bool {
         self.share.is_some()
+    }
+
+    fn listen_address_ready(&self) -> bool {
+        self.listen.trim().parse::<SocketAddr>().is_ok()
+    }
+
+    fn listen_address_detail(&self) -> String {
+        if self.listen_address_ready() {
+            return format!(
+                "Sharing will listen on {}. Use 0.0.0.0:7370 for normal LAN sharing.",
+                self.listen.trim()
+            );
+        }
+        "Listen Address must look like 0.0.0.0:7370 or 127.0.0.1:7370 before sharing can start."
+            .to_string()
     }
 
     fn stop_share(&mut self) {
@@ -4361,6 +4380,7 @@ impl eframe::App for SyncMyFontsGui {
             ui.label(share_key_label());
             ui.add(eframe::egui::TextEdit::singleline(&mut self.share_key).password(true));
         });
+        ui.label(self.listen_address_detail());
         ui.add_enabled_ui(!task_running, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.add_enabled_ui(self.can_start_sharing(), |ui| {
@@ -7724,6 +7744,8 @@ mod tests {
         assert_eq!(report.saved_peer_count, 0);
         assert_eq!(report.selected_peer_name, "");
         assert_eq!(report.listen, AppPreferences::default().lan_listen_address);
+        assert!(report.listen_address_ready);
+        assert!(report.listen_address_detail.contains("0.0.0.0:7370"));
         assert!(!report.peer_url_ready);
         assert!(!report.peer_pairing_ready);
         assert!(!report.peer_sync_ready);
@@ -8185,6 +8207,18 @@ mod tests {
         let mut app = SyncMyFontsGui::new();
         assert!(app.can_start_sharing());
         assert!(!app.can_stop_sharing());
+        assert!(app.listen_address_ready());
+        assert!(app.listen_address_detail().contains("Use 0.0.0.0:7370"));
+
+        app.listen = "not-a-socket".to_string();
+        assert!(!app.can_start_sharing());
+        assert!(!app.listen_address_ready());
+        assert!(
+            app.listen_address_detail()
+                .contains("must look like 0.0.0.0:7370")
+        );
+        app.listen = "127.0.0.1:7370".to_string();
+        assert!(app.can_start_sharing());
 
         app.share = Some(RunningShare {
             child: spawn_short_lived_child_for_tests(),

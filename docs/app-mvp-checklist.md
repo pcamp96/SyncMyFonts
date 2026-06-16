@@ -148,6 +148,8 @@ The app MVP should reuse the current agent commands:
   default first-run path.
 - [x] Native GUI distinguishes receiving fonts from hosting, so Windows
   client-only sync does not look like it needs inbound firewall setup.
+- [x] Native GUI keeps `Share Fonts On This Network` disabled until the listen
+  address is a valid socket address and explains the expected format.
 - [x] Native GUI enables Share and Stop Sharing controls according to the
   current sharing state.
 - [x] Native GUI disables saved-peer loading until at least one LAN peer is
