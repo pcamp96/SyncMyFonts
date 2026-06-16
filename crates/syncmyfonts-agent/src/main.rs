@@ -3900,7 +3900,7 @@ impl SyncMyFontsGui {
     }
 
     fn peer_pairing_ready(&self) -> bool {
-        self.peer_url_ready() && !self.pairing_code.trim().is_empty()
+        self.peer_url_ready() && normalized_pairing_code_is_ready(&self.pairing_code)
     }
 
     fn peer_sync_ready(&self) -> bool {
@@ -3992,6 +3992,13 @@ impl SyncMyFontsGui {
         if self.peer_pairing_ready() {
             return format!(
                 "{peer_name} has a pairing code entered. Pairing saves a redacted LAN token so future syncs do not need the short code."
+            );
+        }
+
+        if !self.pairing_code.trim().is_empty() {
+            let digits = normalize_pairing_code(&self.pairing_code).len();
+            return format!(
+                "{peer_name} needs the full 8-digit pairing code from the sharing computer. {digits}/8 digit(s) entered."
             );
         }
 
@@ -6675,6 +6682,10 @@ fn normalize_pairing_code(code: &str) -> String {
     code.chars().filter(|ch| ch.is_ascii_digit()).collect()
 }
 
+fn normalized_pairing_code_is_ready(code: &str) -> bool {
+    normalize_pairing_code(code).len() == 8
+}
+
 fn validate_sha256(value: &str) -> Result<()> {
     if value.len() == 64 && value.chars().all(|c| c.is_ascii_hexdigit()) {
         Ok(())
@@ -7389,6 +7400,16 @@ mod tests {
     }
 
     #[test]
+    fn normalized_pairing_code_ready_requires_exactly_eight_digits() {
+        assert!(normalized_pairing_code_is_ready("12345678"));
+        assert!(normalized_pairing_code_is_ready("1234-5678"));
+        assert!(!normalized_pairing_code_is_ready(""));
+        assert!(!normalized_pairing_code_is_ready("abcd"));
+        assert!(!normalized_pairing_code_is_ready("1234567"));
+        assert!(!normalized_pairing_code_is_ready("123456789"));
+    }
+
+    #[test]
     fn pairing_code_validity_text_rounds_up_to_minutes() {
         assert_eq!(
             pairing_code_validity_text(Some(10 * 60)),
@@ -7846,7 +7867,15 @@ mod tests {
                 .any(|step| step.contains("Enter its pairing code"))
         );
 
-        app.pairing_code = "12345678".to_string();
+        app.pairing_code = "abcd".to_string();
+        assert!(!app.peer_pairing_ready());
+        assert!(app.peer_pairing_detail().contains("0/8 digit(s) entered"));
+
+        app.pairing_code = "1234567".to_string();
+        assert!(!app.peer_pairing_ready());
+        assert!(app.peer_pairing_detail().contains("7/8 digit(s) entered"));
+
+        app.pairing_code = "1234-5678".to_string();
         assert!(app.peer_pairing_ready());
         assert!(!app.peer_sync_ready());
         assert!(app.peer_action_hint().contains("Pair this peer"));
