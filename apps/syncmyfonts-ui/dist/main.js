@@ -66,6 +66,10 @@ function formatSharingState(sharing) {
   return sharing ? "On" : "Off";
 }
 
+function formatReadiness(warnings) {
+  return Number(warnings) > 0 ? "Needs attention" : "Ready";
+}
+
 function renderPeerList(peers = []) {
   const list = document.getElementById("peerList");
   const empty = document.getElementById("peerEmptyState");
@@ -127,7 +131,6 @@ function setPlatform(platformName) {
   document.body.dataset.platform = platformName;
   setText("platformTitle", content.title);
   setText("platformCopy", content.copy);
-  setText("platformBadge", content.label);
   setText("platformPanelBadge", content.label);
   setText("platformHint", content.hint);
 }
@@ -150,6 +153,7 @@ async function refreshSnapshot() {
     setText("stripSharingState", formatSharingState(snapshot.sharing));
     setText("stripPeerCount", String(snapshot.saved_peers));
     setText("warningCount", snapshot.warnings);
+    setText("appReadiness", formatReadiness(snapshot.warnings));
     setText("userFontDir", snapshot.user_font_dir);
     setText("managedFontDir", snapshot.managed_font_dir);
     setText("userFontCount", `${snapshot.user_font_count} found`);
