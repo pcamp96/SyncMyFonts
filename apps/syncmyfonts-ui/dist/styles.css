@@ -468,7 +468,7 @@ h2 {
 .status-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   padding: 0;
 }
 
@@ -476,18 +476,18 @@ h2 {
   display: inline-grid;
   grid-template-columns: auto auto;
   align-items: baseline;
-  gap: 8px;
+  gap: 7px;
   min-width: 0;
-  min-height: 30px;
-  padding: 0 10px;
+  min-height: 26px;
+  padding: 0 9px;
   border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.52);
 }
 
 .metric-label {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -497,7 +497,7 @@ h2 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .button.primary {
@@ -545,7 +545,7 @@ body[data-platform="macos"] .button.primary {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.68);
   box-shadow: var(--shadow);
 }
 
@@ -570,7 +570,7 @@ body[data-platform="windows"] .platform-preview {
 .details-panel {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #fbfcff;
+  background: rgba(251, 252, 255, 0.8);
   box-shadow: var(--shadow);
 }
 
@@ -583,7 +583,7 @@ body[data-platform="windows"] .platform-preview {
 }
 
 .device-card.peer {
-  border-color: #bfcde0;
+  border-color: var(--line-strong);
 }
 
 .device-card p {
@@ -622,7 +622,7 @@ body[data-platform="windows"] .platform-preview {
   padding: 22px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #fbfdff;
+  background: rgba(251, 253, 255, 0.82);
   box-shadow: none;
 }
 
@@ -756,8 +756,8 @@ body[data-platform="windows"] .platform-preview {
 }
 
 .role-card.selected {
-  border-color: var(--line);
-  background: var(--surface);
+  border-color: #b7c8e8;
+  background: linear-gradient(90deg, rgba(0, 102, 255, 0.08), rgba(255, 255, 255, 0.78) 42%);
   box-shadow: inset 3px 0 0 var(--blue);
 }
 
