@@ -425,11 +425,10 @@ h2 {
   grid-template-columns: minmax(220px, 1fr) 312px minmax(220px, 1fr);
   gap: 10px 12px;
   align-items: stretch;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, #ffffff, #f8faff);
-  box-shadow: var(--shadow);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .device-card,
@@ -573,8 +572,8 @@ h2 {
 
 .sync-board .action-grid {
   grid-column: 1 / -1;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
+  padding-top: 2px;
+  border-top: 0;
 }
 
 .role-card {
