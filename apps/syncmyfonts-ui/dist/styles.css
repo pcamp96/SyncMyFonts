@@ -785,7 +785,7 @@ body[data-platform="windows"] .platform-preview {
   justify-content: space-between;
   gap: 20px;
   max-width: 920px;
-  padding: 16px 18px;
+  padding: 14px 18px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
@@ -1081,12 +1081,18 @@ body[data-platform="windows"] .platform-preview {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
-  min-height: 76px;
-  padding: 14px 18px;
+  min-height: 82px;
+  padding: 13px 18px;
   border: 0;
   border-bottom: 1px solid var(--line);
   border-radius: 0;
   box-shadow: none;
+}
+
+.setting-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 
 .setting-row:last-child {
@@ -1094,12 +1100,30 @@ body[data-platform="windows"] .platform-preview {
 }
 
 .setting-row h2 {
+  margin-bottom: 0;
   font-size: 16px;
 }
 
 .setting-row p {
   margin-bottom: 0;
   color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.setting-kicker {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+body[data-platform="windows"] .setting-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .toggle {
