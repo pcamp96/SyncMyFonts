@@ -128,6 +128,8 @@ The app MVP should reuse the current agent commands:
 - [x] A short first-run setup path for manual peer URL entry.
 - [x] Native GUI shows the current first-run phase: pairing, sharing, preview,
   or sync.
+- [x] Native GUI shows and copies a recommended next action for the current
+  first-run LAN setup state.
 - [x] Native GUI shows and can copy a LAN readiness summary with sharing,
   pairing, current-user/system-font scope, saved-peer, and automation state.
 - [x] Native GUI shows and can copy whether saved LAN tokens exist without
@@ -257,6 +259,8 @@ The app MVP should reuse the current agent commands:
   present for macOS and Windows.
 - [x] GitHub Actions verifies packaged GUI first-run setup includes validation
   font, LAN sharing, manual URL fallback, and preview guidance.
+- [x] GitHub Actions verifies packaged GUI self-test exposes the recommended
+  next action in first-run state and setup packets.
 - [x] GitHub Actions verifies packaged GUI self-test starts with peer pairing,
   preview, and install actions locked until a LAN peer is selected and previewed.
 - [x] GitHub Actions verifies packaged GUI self-test exposes saved-peer summary

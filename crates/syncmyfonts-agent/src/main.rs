@@ -978,6 +978,7 @@ struct GuiSelfTestReport {
     version: &'static str,
     status: String,
     setup_phase: String,
+    setup_next_action: String,
     role_card_text: String,
     next_step: String,
     first_run_steps: Vec<String>,
@@ -2852,6 +2853,7 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         version: env!("CARGO_PKG_VERSION"),
         status: app.status.clone(),
         setup_phase: app.setup_phase(),
+        setup_next_action: app.setup_next_action(),
         role_card_text: app.role_card_text(),
         next_step: app.next_step.clone(),
         first_run_steps: app.first_run_steps(),
@@ -4043,6 +4045,49 @@ impl SyncMyFontsGui {
             .to_string()
     }
 
+    fn setup_next_action(&self) -> String {
+        if self.share.is_some() {
+            if self.last_pairing_code.is_some() {
+                return "Keep this computer sharing, then copy the LAN URL and pairing code to the other computer."
+                    .to_string();
+            }
+            return "Keep this computer sharing, then copy the LAN URL and use the shared key on the other computer."
+                .to_string();
+        }
+
+        if self.peer_url.trim().is_empty() {
+            return "Click Find LAN Peers, or paste the sharing computer's LAN URL manually."
+                .to_string();
+        }
+
+        if self.peer_key.trim().is_empty() && self.pairing_code.trim().is_empty() {
+            return "Enter the 8-digit pairing code from the sharing computer, then click Pair Peer."
+                .to_string();
+        }
+
+        if self.peer_pairing_ready() {
+            return "Click Pair Peer to save this computer's secure LAN token.".to_string();
+        }
+
+        if !self.peer_sync_ready() {
+            return "Load a paired saved peer or pair this URL before previewing fonts."
+                .to_string();
+        }
+
+        if !self.peer_install_ready() {
+            return "Click Preview From Peer and review the missing fonts before installing."
+                .to_string();
+        }
+
+        if !self.saved_peer_sync_ready() {
+            return "Click Get Missing Fonts From Peer, then pair any remaining saved peers before repeat sync."
+                .to_string();
+        }
+
+        "Use Sync Saved Peers for repeat LAN sync, or repeat setup in the other direction."
+            .to_string()
+    }
+
     fn role_card_text(&self) -> String {
         if self.share.is_some() {
             let urls = if self.share_urls.is_empty() {
@@ -4176,6 +4221,7 @@ impl SyncMyFontsGui {
             "SyncMyFonts LAN setup packet".to_string(),
             format!("Device: {}", self.device_name_input.trim()),
             format!("Phase: {}", self.setup_phase()),
+            format!("Recommended next action: {}", self.setup_next_action()),
             String::new(),
             "Role card:".to_string(),
             self.role_card_text(),
@@ -4531,6 +4577,10 @@ impl eframe::App for SyncMyFontsGui {
         ui.separator();
         ui.heading("First LAN Sync");
         ui.label(self.setup_phase());
+        ui.label(format!(
+            "Recommended next action: {}",
+            self.setup_next_action()
+        ));
         ui.label(self.role_card_text());
         for line in self.lan_readiness_lines() {
             ui.label(line);
@@ -8474,6 +8524,7 @@ mod tests {
 
         assert!(report.ok);
         assert!(report.setup_phase.contains("Pairing mode"));
+        assert!(report.setup_next_action.contains("Find LAN Peers"));
         assert!(report.role_card_text.contains("This computer"));
         assert!(report.role_card_text.contains("Other computer"));
         assert!(
@@ -8599,6 +8650,11 @@ mod tests {
                 .setup_packet_text
                 .contains("SyncMyFonts LAN setup packet")
         );
+        assert!(
+            report
+                .setup_packet_text
+                .contains("Recommended next action: Click Find LAN Peers")
+        );
         assert!(report.setup_packet_text.contains("Proof checklist"));
         assert!(!json.contains("super-secret-lan-key"));
     }
@@ -8652,6 +8708,7 @@ mod tests {
         );
         assert!(platform_manual_peer_fallback_guidance().contains("manually"));
         assert!(app.setup_phase().contains("Pairing mode"));
+        assert!(app.setup_next_action().contains("Find LAN Peers"));
         assert!(app.role_card_text().contains("Share Fonts On This Network"));
         assert_eq!(
             app.peer_action_hint(),
@@ -8676,6 +8733,10 @@ mod tests {
         app.peer_url = "http://192.168.1.25:7370".to_string();
         assert!(app.peer_url_ready());
         assert!(app.setup_phase().contains("enter the code"));
+        assert!(
+            app.setup_next_action()
+                .contains("Enter the 8-digit pairing code")
+        );
         assert!(app.role_card_text().contains("Pair Peer"));
         assert!(app.peer_action_hint().contains("Enter the pairing code"));
         assert!(
@@ -8702,6 +8763,7 @@ mod tests {
         app.pairing_code = "1234-5678".to_string();
         assert!(app.peer_pairing_ready());
         assert!(!app.peer_sync_ready());
+        assert!(app.setup_next_action().contains("Click Pair Peer"));
         assert!(app.peer_action_hint().contains("Pair this peer"));
         assert!(
             app.peer_pairing_detail()
@@ -8711,6 +8773,7 @@ mod tests {
 
         app.peer_key = "saved-token".to_string();
         assert!(app.setup_phase().contains("Preview mode"));
+        assert!(app.setup_next_action().contains("Click Preview From Peer"));
         assert!(app.role_card_text().contains("Get Missing Fonts From Peer"));
         assert!(app.peer_sync_ready());
         assert!(!app.peer_install_ready());
@@ -8728,6 +8791,10 @@ mod tests {
             Some("saved-token"),
         ));
         assert!(app.peer_install_ready());
+        assert!(
+            app.setup_next_action()
+                .contains("Get Missing Fonts From Peer")
+        );
         assert!(app.peer_action_hint().contains("Peer preview is current"));
 
         app.peer_key = "changed-token".to_string();
@@ -8924,6 +8991,8 @@ mod tests {
 
         assert!(packet.contains("SyncMyFonts LAN setup packet"));
         assert!(packet.contains("Device: Office Mac"));
+        assert!(packet.contains("Recommended next action:"));
+        assert!(packet.contains("Sync Saved Peers"));
         assert!(packet.contains("Role card:"));
         assert!(packet.contains("Readiness:"));
         assert!(packet.contains("Saved peers: 1 ready (Shop PC)"));
