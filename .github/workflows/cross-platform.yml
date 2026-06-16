@@ -166,6 +166,8 @@ jobs:
           grep -q '"support_report_text"' "$smoke_root/diagnostics.json"
           grep -q '"ok": true' "$smoke_root/gui-self-test.json"
           grep -q '"Native GUI state initialized' "$smoke_root/gui-self-test.json"
+          grep -q '"font-sync-scope"' "$smoke_root/doctor.json"
+          grep -q 'system font directories are excluded' "$smoke_root/doctor.json"
           python3 - "$smoke_root/gui-self-test.json" <<'PY'
           import json
           import sys
@@ -468,6 +470,8 @@ jobs:
           if (-not $diagnostics.Contains('"support_report_text"')) { throw "Diagnostics support report missing" }
           if (-not $diagnostics.Contains('"log_dir"')) { throw "Diagnostics log dir missing" }
           if (-not $doctor.Contains('"checks"')) { throw "Doctor checks missing" }
+          if (-not $doctor.Contains('"font-sync-scope"')) { throw "Doctor font sync scope check missing" }
+          if (-not $doctor.Contains("system font directories are excluded")) { throw "Doctor font sync scope guidance missing" }
           if (-not $doctor.Contains('"saved-peers"')) { throw "Doctor saved peer check missing" }
           if (-not $validationReport.Contains('"registration_issues"')) { throw "Validation report registration issues missing" }
           if (-not $validationReport.Contains('"manual_validation_steps"')) { throw "Validation report manual steps missing" }

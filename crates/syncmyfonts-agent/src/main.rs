@@ -1749,6 +1749,7 @@ fn doctor() -> Result<DoctorReport> {
         true,
         platform_lan_sharing_guidance(),
     ));
+    checks.push(font_sync_scope_check());
     checks.push(windows_network_profile_check());
     let saved_key_count = saved_lan_key_count(&config);
     checks.push(if config.peers.is_empty() {
@@ -1838,6 +1839,14 @@ fn secret_storage_check(config: &AppConfig) -> DoctorCheck {
             ),
         )
     }
+}
+
+fn font_sync_scope_check() -> DoctorCheck {
+    doctor_check(
+        "font-sync-scope",
+        true,
+        "SyncMyFonts scans and installs current-user fonts only; system font directories are excluded from LAN sync.",
+    )
 }
 
 fn saved_lan_key_count(config: &AppConfig) -> usize {
@@ -9446,6 +9455,20 @@ mod tests {
             .expect("doctor should include LAN sharing guidance");
         assert!(guidance.ok);
         assert!(guidance.message.contains("No port forwarding is needed"));
+    }
+
+    #[test]
+    fn doctor_includes_font_sync_scope_guidance() {
+        let check = font_sync_scope_check();
+
+        assert_eq!(check.name, "font-sync-scope");
+        assert!(check.ok);
+        assert!(check.message.contains("current-user fonts only"));
+        assert!(
+            check
+                .message
+                .contains("system font directories are excluded")
+        );
     }
 
     #[test]
