@@ -978,6 +978,8 @@ struct GuiSelfTestReport {
     validation_checklist_text: String,
     setup_packet_text: String,
     saved_peer_count: usize,
+    saved_peer_sync_ready: bool,
+    saved_peer_sync_hint: Option<String>,
     selected_peer_name: String,
     listen: String,
     auto_sync_enabled: bool,
@@ -2584,6 +2586,8 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         validation_checklist_text: validation_checklist_text(),
         setup_packet_text: app.setup_packet_text(),
         saved_peer_count: app.saved_peer_names.len(),
+        saved_peer_sync_ready: app.saved_peer_sync_ready(),
+        saved_peer_sync_hint: app.saved_peer_sync_hint(),
         selected_peer_name: app.selected_peer_name.clone(),
         listen: app.listen.clone(),
         auto_sync_enabled: app.auto_sync_enabled,
@@ -3426,8 +3430,9 @@ impl SyncMyFontsGui {
     fn save_auto_sync_preferences(&mut self) {
         if self.auto_sync_enabled && !self.can_enable_saved_peer_automation() {
             self.auto_sync_enabled = false;
-            self.next_step =
-                "Pair or save a LAN peer before turning on auto sync for saved peers.".to_string();
+            self.next_step = self.saved_peer_sync_hint().unwrap_or_else(|| {
+                "Pair saved LAN peers before turning on auto sync for saved peers.".to_string()
+            });
             return;
         }
         let preferences = AppPreferences {
@@ -3461,7 +3466,7 @@ impl SyncMyFontsGui {
         if !should_auto_sync_saved_peers(
             self.auto_sync_enabled,
             self.task.is_some(),
-            saved_peer_count().unwrap_or(0),
+            saved_peer_repeat_sync_ready().unwrap_or(false),
             self.last_auto_sync_at,
             self.auto_sync_interval_minutes,
             Instant::now(),
@@ -3490,7 +3495,9 @@ impl SyncMyFontsGui {
 
     fn install_startup_sync(&mut self) {
         if !self.can_enable_saved_peer_automation() {
-            self.next_step = "Pair or save a LAN peer before enabling sign-in sync.".to_string();
+            self.next_step = self.saved_peer_sync_hint().unwrap_or_else(|| {
+                "Pair saved LAN peers before enabling sign-in sync.".to_string()
+            });
             return;
         }
         self.start_task("Enabling sign-in sync", || match install_startup_sync() {
@@ -3947,16 +3954,26 @@ impl SyncMyFontsGui {
     }
 
     fn can_enable_saved_peer_automation(&self) -> bool {
-        !self.saved_peer_names.is_empty()
+        self.saved_peer_sync_ready()
     }
 
     fn can_change_auto_sync_preference(&self) -> bool {
         self.auto_sync_enabled || self.can_enable_saved_peer_automation()
     }
 
-    fn saved_peer_automation_hint(&self) -> Option<&'static str> {
+    fn saved_peer_sync_ready(&self) -> bool {
+        !self.saved_peer_names.is_empty()
+            && self.saved_peer_key_count == self.saved_peer_names.len()
+    }
+
+    fn saved_peer_sync_hint(&self) -> Option<String> {
         if self.saved_peer_names.is_empty() {
-            Some("Pair or save a LAN peer before enabling saved-peer automation.")
+            Some("Pair or save a LAN peer before enabling saved-peer sync.".to_string())
+        } else if self.saved_peer_key_count < self.saved_peer_names.len() {
+            let missing = self.saved_peer_names.len() - self.saved_peer_key_count;
+            Some(format!(
+                "Pair {missing} saved peer(s) before using saved-peer sync or automation."
+            ))
         } else {
             None
         }
@@ -4247,7 +4264,7 @@ impl eframe::App for SyncMyFontsGui {
                 if ui.button("Open App Support").clicked() {
                     self.open_app_support_folder();
                 }
-                ui.add_enabled_ui(!self.saved_peer_names.is_empty(), |ui| {
+                ui.add_enabled_ui(self.saved_peer_sync_ready(), |ui| {
                     if ui.button("Sync Saved Peers").clicked() {
                         self.sync_saved_peers(false);
                     }
@@ -4284,7 +4301,7 @@ impl eframe::App for SyncMyFontsGui {
                     self.save_auto_sync_preferences();
                 }
             });
-            if let Some(hint) = self.saved_peer_automation_hint() {
+            if let Some(hint) = self.saved_peer_sync_hint() {
                 ui.label(hint);
             }
         });
@@ -5036,12 +5053,12 @@ fn lan_key_fingerprint(key: &str) -> String {
 fn should_auto_sync_saved_peers(
     enabled: bool,
     task_running: bool,
-    saved_peer_count: usize,
+    saved_peer_sync_ready: bool,
     last_sync_at: Option<Instant>,
     interval_minutes: u64,
     now: Instant,
 ) -> bool {
-    if !enabled || task_running || saved_peer_count == 0 {
+    if !enabled || task_running || !saved_peer_sync_ready {
         return false;
     }
     let interval = Duration::from_secs(interval_minutes.max(1) * 60);
@@ -5186,8 +5203,9 @@ fn load_app_config() -> Result<AppConfig> {
     Ok(config)
 }
 
-fn saved_peer_count() -> Result<usize> {
-    Ok(load_app_config()?.peers.len())
+fn saved_peer_repeat_sync_ready() -> Result<bool> {
+    let config = load_app_config()?;
+    Ok(!config.peers.is_empty() && saved_lan_key_count(&config) == config.peers.len())
 }
 
 fn normalize_app_config(config: &mut AppConfig) -> bool {
@@ -7720,11 +7738,12 @@ mod tests {
     fn gui_saved_peer_automation_requires_saved_peers_but_can_turn_off() {
         let mut app = SyncMyFontsGui::new();
         app.saved_peer_names.clear();
+        app.saved_peer_key_count = 0;
         app.auto_sync_enabled = false;
 
         assert!(!app.can_enable_saved_peer_automation());
         assert!(!app.can_change_auto_sync_preference());
-        assert!(app.saved_peer_automation_hint().is_some());
+        assert!(app.saved_peer_sync_hint().is_some());
 
         app.auto_sync_enabled = true;
         assert!(app.can_change_auto_sync_preference());
@@ -7733,9 +7752,17 @@ mod tests {
         assert!(app.next_step.contains("Pair or save a LAN peer"));
 
         app.saved_peer_names.push("Shop PC".to_string());
+        assert!(!app.can_enable_saved_peer_automation());
+        assert!(!app.can_change_auto_sync_preference());
+        assert_eq!(
+            app.saved_peer_sync_hint(),
+            Some("Pair 1 saved peer(s) before using saved-peer sync or automation.".to_string())
+        );
+
+        app.saved_peer_key_count = 1;
         assert!(app.can_enable_saved_peer_automation());
         assert!(app.can_change_auto_sync_preference());
-        assert!(app.saved_peer_automation_hint().is_none());
+        assert!(app.saved_peer_sync_hint().is_none());
     }
 
     #[test]
@@ -7772,6 +7799,11 @@ mod tests {
                 .contains("Share Fonts On This Network")
         );
         assert_eq!(report.saved_peer_count, 0);
+        assert!(!report.saved_peer_sync_ready);
+        assert_eq!(
+            report.saved_peer_sync_hint,
+            Some("Pair or save a LAN peer before enabling saved-peer sync.".to_string())
+        );
         assert_eq!(report.selected_peer_name, "");
         assert_eq!(report.listen, AppPreferences::default().lan_listen_address);
         assert!(report.listen_address_ready);
@@ -8282,11 +8314,17 @@ mod tests {
         let now = Instant::now();
 
         assert!(!should_auto_sync_saved_peers(
-            false, false, 1, None, 15, now
+            false, false, true, None, 15, now
         ));
-        assert!(!should_auto_sync_saved_peers(true, true, 1, None, 15, now));
-        assert!(!should_auto_sync_saved_peers(true, false, 0, None, 15, now));
-        assert!(should_auto_sync_saved_peers(true, false, 1, None, 15, now));
+        assert!(!should_auto_sync_saved_peers(
+            true, true, true, None, 15, now
+        ));
+        assert!(!should_auto_sync_saved_peers(
+            true, false, false, None, 15, now
+        ));
+        assert!(should_auto_sync_saved_peers(
+            true, false, true, None, 15, now
+        ));
     }
 
     #[test]
@@ -8295,7 +8333,7 @@ mod tests {
         assert!(!should_auto_sync_saved_peers(
             true,
             false,
-            1,
+            true,
             Some(now - Duration::from_secs(30)),
             1,
             now
@@ -8303,7 +8341,7 @@ mod tests {
         assert!(should_auto_sync_saved_peers(
             true,
             false,
-            1,
+            true,
             Some(now - Duration::from_secs(60)),
             1,
             now
