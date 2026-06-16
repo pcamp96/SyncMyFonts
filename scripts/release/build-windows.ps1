@@ -3,6 +3,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if ($PSVersionTable.PSVersion.Major -ge 7) {
+    $PSNativeCommandUseErrorActionPreference = $true
+}
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "../..")
 $Version = "0.1.0"
@@ -21,6 +24,9 @@ Push-Location $RepoRoot
 try {
     cargo build --release -p syncmyfonts-agent --bins
     cargo build --release --manifest-path (Join-Path $RepoRoot "apps/syncmyfonts-ui/src-tauri/Cargo.toml")
+    if ($LASTEXITCODE -ne 0) {
+        throw "Tauri desktop app build failed."
+    }
 } finally {
     Pop-Location
 }

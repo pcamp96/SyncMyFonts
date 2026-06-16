@@ -6,4 +6,6 @@
 .playwright-mcp/
 __pycache__/
 apps/syncmyfonts-ui/dist/ui-*.png
+apps/syncmyfonts-ui/node_modules/
+apps/syncmyfonts-ui/smoke/
 apps/syncmyfonts-ui/src-tauri/target/
