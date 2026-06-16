@@ -1589,17 +1589,30 @@ fn doctor() -> Result<DoctorReport> {
         platform_lan_sharing_guidance(),
     ));
     checks.push(windows_network_profile_check());
+    let saved_key_count = saved_lan_key_count(&config);
     checks.push(if config.peers.is_empty() {
         doctor_check(
             "saved-peers",
             false,
-            "No saved peers yet. Pair or save another computer before relying on repeat sync.",
+            "No saved peers yet. Pair another computer before relying on repeat sync.",
+        )
+    } else if saved_key_count < config.peers.len() {
+        let missing = config.peers.len() - saved_key_count;
+        doctor_check(
+            "saved-peers",
+            false,
+            format!(
+                "{missing} saved peer(s) still need pairing before repeat sync or automation can run."
+            ),
         )
     } else {
         doctor_check(
             "saved-peers",
             true,
-            format!("{} saved peer(s) are configured.", config.peers.len()),
+            format!(
+                "{} saved peer(s) are paired for repeat sync.",
+                config.peers.len()
+            ),
         )
     });
     checks.push(secret_storage_check(&config));
@@ -1628,8 +1641,8 @@ fn doctor() -> Result<DoctorReport> {
     let failed = checks.iter().filter(|check| !check.ok).count();
     let next_step = if failed == 0 {
         "This computer is ready for saved-peer LAN sync.".to_string()
-    } else if config.peers.is_empty() {
-        "Pair or save a LAN peer, then run Readiness Check again.".to_string()
+    } else if config.peers.is_empty() || saved_key_count < config.peers.len() {
+        "Pair saved LAN peers, then run Readiness Check again.".to_string()
     } else {
         "Review failed checks, then run Readiness Check again.".to_string()
     };
@@ -3019,7 +3032,7 @@ impl SyncMyFontsGui {
                     self.discovered_peer_requires_lan_key = peer.lan_key.is_some();
                     self.last_previewed_peer = None;
                     self.next_step = format!(
-                        "Loaded saved peer {}. Click Test Connection, then Preview From Peer before Get Missing Fonts From Peer. Use Sync Saved Peers only after each saved peer has previewed successfully.",
+                        "Loaded saved peer {}. Click Test Connection, then Preview From Peer before Get Missing Fonts From Peer. Use Sync Saved Peers only after each saved peer is paired.",
                         peer.name
                     );
                 }
@@ -3790,6 +3803,13 @@ impl SyncMyFontsGui {
 
         let saved_peers = if self.saved_peer_names.is_empty() {
             "Saved peers: none yet.".to_string()
+        } else if self.saved_peer_key_count < self.saved_peer_names.len() {
+            format!(
+                "Saved peers: {} saved, {} paired; pair the remaining peer(s) before repeat sync ({})",
+                self.saved_peer_names.len(),
+                self.saved_peer_key_count,
+                self.saved_peer_names.join(", ")
+            )
         } else {
             format!(
                 "Saved peers: {} ready ({})",
@@ -3804,7 +3824,9 @@ impl SyncMyFontsGui {
                 self.auto_sync_interval_minutes
             )
         } else if self.saved_peer_names.is_empty() {
-            "Automation: available after saving a peer.".to_string()
+            "Automation: available after pairing a peer.".to_string()
+        } else if self.saved_peer_key_count < self.saved_peer_names.len() {
+            "Automation: pair saved peers before enabling repeat sync.".to_string()
         } else {
             "Automation: off; enable after a successful preview.".to_string()
         };
@@ -3968,7 +3990,7 @@ impl SyncMyFontsGui {
 
     fn saved_peer_sync_hint(&self) -> Option<String> {
         if self.saved_peer_names.is_empty() {
-            Some("Pair or save a LAN peer before enabling saved-peer sync.".to_string())
+            Some("Pair a LAN peer before enabling saved-peer sync.".to_string())
         } else if self.saved_peer_key_count < self.saved_peer_names.len() {
             let missing = self.saved_peer_names.len() - self.saved_peer_key_count;
             Some(format!(
@@ -7695,9 +7717,10 @@ mod tests {
             app.next_step
                 .contains("Preview From Peer before Get Missing Fonts From Peer")
         );
-        assert!(app.next_step.contains(
-            "Use Sync Saved Peers only after each saved peer has previewed successfully"
-        ));
+        assert!(
+            app.next_step
+                .contains("Use Sync Saved Peers only after each saved peer is paired")
+        );
     }
 
     #[test]
@@ -7749,7 +7772,7 @@ mod tests {
         assert!(app.can_change_auto_sync_preference());
         app.save_auto_sync_preferences();
         assert!(!app.auto_sync_enabled);
-        assert!(app.next_step.contains("Pair or save a LAN peer"));
+        assert!(app.next_step.contains("Pair a LAN peer"));
 
         app.saved_peer_names.push("Shop PC".to_string());
         assert!(!app.can_enable_saved_peer_automation());
@@ -7802,7 +7825,7 @@ mod tests {
         assert!(!report.saved_peer_sync_ready);
         assert_eq!(
             report.saved_peer_sync_hint,
-            Some("Pair or save a LAN peer before enabling saved-peer sync.".to_string())
+            Some("Pair a LAN peer before enabling saved-peer sync.".to_string())
         );
         assert_eq!(report.selected_peer_name, "");
         assert_eq!(report.listen, AppPreferences::default().lan_listen_address);
@@ -8089,6 +8112,11 @@ mod tests {
         assert!(
             first_run
                 .iter()
+                .any(|line| line.contains("Automation: available after pairing a peer"))
+        );
+        assert!(
+            first_run
+                .iter()
                 .any(|line| line.contains("Secrets: no saved LAN tokens yet"))
         );
 
@@ -8099,6 +8127,20 @@ mod tests {
             ready_to_pair
                 .iter()
                 .any(|line| line.contains("Pair Peer is ready"))
+        );
+
+        app.saved_peer_names = vec!["Shop PC".to_string(), "Office Mac".to_string()];
+        app.saved_peer_key_count = 1;
+        let partially_paired = app.lan_readiness_lines();
+        assert!(
+            partially_paired
+                .iter()
+                .any(|line| line.contains("2 saved, 1 paired"))
+        );
+        assert!(
+            partially_paired
+                .iter()
+                .any(|line| line.contains("pair saved peers before enabling repeat sync"))
         );
 
         app.pairing_code.clear();
@@ -8707,7 +8749,41 @@ mod tests {
                 .message
                 .contains("Optional sign-in sync helper")
         );
-        assert!(report.next_step.contains("Pair or save a LAN peer"));
+        assert!(report.next_step.contains("Pair saved LAN peers"));
+    }
+
+    #[test]
+    fn doctor_reports_saved_peers_without_pairing_tokens() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", root.join("config"));
+            std::env::set_var("SYNCMYFONTS_LOG_DIR", root.join("logs"));
+            std::env::set_var("SYNCMYFONTS_USER_FONT_DIR", root.join("fonts"));
+        }
+        add_lan_peer(
+            "Shop PC".to_string(),
+            "http://127.0.0.1:7370".to_string(),
+            None,
+        )
+        .unwrap();
+
+        let report = doctor().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+            std::env::remove_var("SYNCMYFONTS_LOG_DIR");
+            std::env::remove_var("SYNCMYFONTS_USER_FONT_DIR");
+        }
+
+        assert!(!report.ok);
+        let saved_peers = report
+            .checks
+            .iter()
+            .find(|check| check.name == "saved-peers")
+            .expect("doctor should include saved-peer readiness");
+        assert!(!saved_peers.ok);
+        assert!(saved_peers.message.contains("still need pairing"));
+        assert!(report.next_step.contains("Pair saved LAN peers"));
     }
 
     #[test]
@@ -9365,10 +9441,10 @@ mod tests {
                 doctor_check(
                     "saved-peers",
                     false,
-                    "No saved peers yet. Pair or save another computer.",
+                    "No saved peers yet. Pair another computer.",
                 ),
             ],
-            next_step: "Pair or save a LAN peer, then run Readiness Check again.".to_string(),
+            next_step: "Pair saved LAN peers, then run Readiness Check again.".to_string(),
         };
 
         let summary = gui_readiness_result_summary(&report);
@@ -9379,7 +9455,7 @@ mod tests {
             "Readiness: 1 check(s) passed; 1 check(s) need attention."
         );
         assert!(review.contains("SyncMyFonts readiness review"));
-        assert!(review.contains("Next step: Pair or save a LAN peer"));
+        assert!(review.contains("Next step: Pair saved LAN peers"));
         assert!(review.contains("- OK: agent-binary"));
         assert!(review.contains("- Needs attention: saved-peers"));
     }
