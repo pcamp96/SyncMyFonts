@@ -158,6 +158,8 @@ The app MVP should reuse the current agent commands:
   saved.
 - [x] Native GUI explains whether a loaded saved peer is already paired or
   still needs an 8-digit pairing code.
+- [x] Native GUI explains whether `Save Peer` saved a paired repeat-sync peer
+  or only saved a peer URL that still needs pairing.
 - [x] Native GUI disables saved-peer sync and automation until saved LAN peers
   have pairing tokens, while still allowing a previously enabled auto-sync
   preference to be turned off.

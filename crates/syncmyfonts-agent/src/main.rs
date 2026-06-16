@@ -3324,10 +3324,7 @@ impl SyncMyFontsGui {
         self.start_task("Saving peer", move || {
             match add_lan_peer(name, url, lan_key) {
                 Ok(peer) => {
-                    let next_step = format!(
-                        "{} is saved. Test Connection, Preview From Peer, then Get Missing Fonts From Peer. Use Sync Saved Peers later for repeat syncs.",
-                        peer.name
-                    );
+                    let next_step = gui_save_peer_next_step(&peer);
                     let output = redacted_peer_config(&peer);
                     gui_ok_with_updates(
                         &output,
@@ -4540,6 +4537,24 @@ impl eframe::App for SyncMyFontsGui {
 
 fn gui_ok<T: Serialize>(value: &T, next_step: String) -> GuiTaskResult {
     gui_ok_with_updates(value, next_step, None, None, None, None, false, false, 0)
+}
+
+fn gui_save_peer_next_step(peer: &LanPeerConfig) -> String {
+    if peer
+        .lan_key
+        .as_deref()
+        .is_some_and(|key| !key.trim().is_empty())
+    {
+        format!(
+            "{} is saved with a LAN token. Test Connection, Preview From Peer, then Get Missing Fonts From Peer. Use Sync Saved Peers later for repeat syncs.",
+            peer.name
+        )
+    } else {
+        format!(
+            "{} is saved as a peer URL. Enter the 8-digit pairing code from that computer, then click Pair Peer before using saved-peer sync.",
+            peer.name
+        )
+    }
 }
 
 fn gui_ok_with_warning_count<T: Serialize>(
@@ -7771,6 +7786,29 @@ mod tests {
             app.peer_pairing_detail()
                 .contains("was discovered and requires pairing")
         );
+    }
+
+    #[test]
+    fn gui_save_peer_next_step_distinguishes_pairing_state() {
+        let paired = LanPeerConfig {
+            name: "Shop PC".to_string(),
+            url: "http://192.168.1.20:7370".to_string(),
+            lan_key: Some("shop-key".to_string()),
+        };
+        let unpaired = LanPeerConfig {
+            name: "Office MacBook".to_string(),
+            url: "http://192.168.1.10:7370".to_string(),
+            lan_key: None,
+        };
+
+        let paired_step = gui_save_peer_next_step(&paired);
+        let unpaired_step = gui_save_peer_next_step(&unpaired);
+
+        assert!(paired_step.contains("saved with a LAN token"));
+        assert!(paired_step.contains("Use Sync Saved Peers later"));
+        assert!(unpaired_step.contains("saved as a peer URL"));
+        assert!(unpaired_step.contains("click Pair Peer"));
+        assert!(unpaired_step.contains("before using saved-peer sync"));
     }
 
     #[test]
