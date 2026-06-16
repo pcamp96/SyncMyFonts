@@ -62,6 +62,10 @@ function formatPeerCount(savedPeers, pairedPeers) {
   return `${savedPeers} saved, ${pairedPeers} paired`;
 }
 
+function formatSharingState(sharing) {
+  return sharing ? "On" : "Off";
+}
+
 function renderPeerList(peers = []) {
   const list = document.getElementById("peerList");
   const empty = document.getElementById("peerEmptyState");
@@ -112,6 +116,7 @@ function updateStep(step) {
   const content = stepContent[step] ?? stepContent.share;
   setText("stepTitle", content.title);
   setText("stepCopy", content.copy);
+  setText("flowStageTitle", content.title);
   document.querySelectorAll(".flow-step").forEach((button) => {
     button.classList.toggle("active", button.dataset.step === step);
   });
@@ -137,11 +142,14 @@ async function refreshSnapshot() {
   try {
     const snapshot = await invoke("app_snapshot");
     setText("deviceName", snapshot.device_name);
+    setText("stripDeviceName", snapshot.device_name);
     setText("localDeviceTitle", snapshot.device_name);
     setText("platformName", snapshot.platform);
     setText("sharingState", snapshot.sharing ? "sharing on" : "sharing off");
     setText("localShareStatus", snapshot.sharing ? "Sharing is on" : "Sharing is off");
     setText("peerCount", formatPeerCount(snapshot.saved_peers, snapshot.paired_peers));
+    setText("stripSharingState", formatSharingState(snapshot.sharing));
+    setText("stripPeerCount", String(snapshot.saved_peers));
     setText("warningCount", snapshot.warnings);
     setText("userFontDir", snapshot.user_font_dir);
     setText("managedFontDir", snapshot.managed_font_dir);

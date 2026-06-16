@@ -7,6 +7,48 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body data-platform="macos">
+    <svg class="icon-defs" aria-hidden="true">
+      <symbol id="icon-sync" viewBox="0 0 24 24">
+        <path d="M17.5 6.5A7.2 7.2 0 0 0 5.3 10" />
+        <path d="M5.3 6.8V10h3.2" />
+        <path d="M6.5 17.5A7.2 7.2 0 0 0 18.7 14" />
+        <path d="M18.7 17.2V14h-3.2" />
+      </symbol>
+      <symbol id="icon-fonts" viewBox="0 0 24 24">
+        <path d="M5 19h14" />
+        <path d="M8 19 12 5l4 14" />
+        <path d="M9.4 14h5.2" />
+      </symbol>
+      <symbol id="icon-peers" viewBox="0 0 24 24">
+        <rect x="4" y="6" width="6.5" height="5.5" rx="1.2" />
+        <rect x="13.5" y="12.5" width="6.5" height="5.5" rx="1.2" />
+        <path d="M10.5 9h3" />
+        <path d="M10.5 15h3" />
+      </symbol>
+      <symbol id="icon-settings" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="2.8" />
+        <path d="M19 12a7 7 0 0 0-.1-1.1l2-1.5-2-3.5-2.4 1a7.4 7.4 0 0 0-1.9-1.1L14.3 3h-4.1l-.4 2.8a7.4 7.4 0 0 0-1.9 1.1l-2.4-1-2 3.5 2 1.5A7 7 0 0 0 5.4 12c0 .4 0 .8.1 1.1l-2 1.5 2 3.5 2.4-1c.6.5 1.2.8 1.9 1.1l.4 2.8h4.1l.4-2.8c.7-.3 1.3-.6 1.9-1.1l2.4 1 2-3.5-2-1.5c.1-.3.1-.7.1-1.1Z" />
+      </symbol>
+      <symbol id="icon-support" viewBox="0 0 24 24">
+        <path d="M12 18h.01" />
+        <path d="M9.7 9a2.4 2.4 0 1 1 3.9 1.9c-.9.6-1.6 1.2-1.6 2.6" />
+        <circle cx="12" cy="12" r="8.5" />
+      </symbol>
+      <symbol id="icon-refresh" viewBox="0 0 24 24">
+        <path d="M17.5 6.5A7.2 7.2 0 0 0 5.3 10" />
+        <path d="M5.3 6.8V10h3.2" />
+        <path d="M6.5 17.5A7.2 7.2 0 0 0 18.7 14" />
+        <path d="M18.7 17.2V14h-3.2" />
+      </symbol>
+      <symbol id="icon-shield" viewBox="0 0 24 24">
+        <path d="M12 3.5 18.5 6v5.2c0 4.1-2.7 7.6-6.5 9.3-3.8-1.7-6.5-5.2-6.5-9.3V6L12 3.5Z" />
+        <path d="m9.3 12 1.8 1.8 3.8-4" />
+      </symbol>
+      <symbol id="icon-folder" viewBox="0 0 24 24">
+        <path d="M3.8 7.5h6l1.7 2h8.7v7.8a2 2 0 0 1-2 2H5.8a2 2 0 0 1-2-2Z" />
+        <path d="M3.8 7.5V6.8a2 2 0 0 1 2-2h3.5l1.8 2.7" />
+      </symbol>
+    </svg>
     <div class="app-shell">
       <aside class="sidebar" aria-label="Primary">
         <div class="brand">
@@ -18,15 +60,15 @@
         </div>
 
         <nav class="nav-list">
-          <button class="nav-item active" type="button" data-view="sync"><span class="nav-glyph">S</span>Sync</button>
-          <button class="nav-item" type="button" data-view="fonts"><span class="nav-glyph">F</span>Fonts</button>
-          <button class="nav-item" type="button" data-view="peers"><span class="nav-glyph">P</span>Peers</button>
-          <button class="nav-item" type="button" data-view="settings"><span class="nav-glyph">C</span>Settings</button>
-          <button class="nav-item" type="button" data-view="support"><span class="nav-glyph">?</span>Support</button>
+          <button class="nav-item active" type="button" data-view="sync"><svg class="nav-glyph"><use href="#icon-sync"></use></svg>Sync</button>
+          <button class="nav-item" type="button" data-view="fonts"><svg class="nav-glyph"><use href="#icon-fonts"></use></svg>Fonts</button>
+          <button class="nav-item" type="button" data-view="peers"><svg class="nav-glyph"><use href="#icon-peers"></use></svg>Peers</button>
+          <button class="nav-item" type="button" data-view="settings"><svg class="nav-glyph"><use href="#icon-settings"></use></svg>Settings</button>
+          <button class="nav-item" type="button" data-view="support"><svg class="nav-glyph"><use href="#icon-support"></use></svg>Support</button>
         </nav>
 
         <div class="safety-note">
-          <div class="shield-mark" aria-hidden="true"></div>
+          <svg class="shield-mark"><use href="#icon-shield"></use></svg>
           <div>
             <strong>System fonts excluded</strong>
             <span>Only user-installed fonts are eligible for LAN sync.</span>
@@ -54,11 +96,32 @@
               <button class="platform-option" type="button" data-platform-option="windows">Windows</button>
             </div>
             <span class="warning-pill"><span id="warningCount">0</span> warnings</span>
-            <button class="button secondary" id="refreshButton" type="button">Refresh</button>
+            <button class="icon-button" id="refreshButton" type="button" title="Refresh status" aria-label="Refresh status">
+              <svg><use href="#icon-refresh"></use></svg>
+            </button>
           </div>
         </header>
 
         <section class="view-panel active" id="view-sync" data-title="Sync" data-eyebrow="Local-first sync" data-lede="Move licensed, non-system fonts between trusted computers on this network.">
+          <section class="status-strip" aria-label="Local sync status">
+            <div class="status-metric">
+              <span class="metric-label">This computer</span>
+              <strong id="stripDeviceName">This computer</strong>
+            </div>
+            <div class="status-metric">
+              <span class="metric-label">Sharing</span>
+              <strong id="stripSharingState">Off</strong>
+            </div>
+            <div class="status-metric">
+              <span class="metric-label">Saved peers</span>
+              <strong id="stripPeerCount">0</strong>
+            </div>
+            <div class="status-metric">
+              <span class="metric-label">Policy</span>
+              <strong>User fonts only</strong>
+            </div>
+          </section>
+
           <section class="sync-board" aria-label="LAN sync setup">
             <article class="device-card current">
               <div class="card-label">This computer</div>
@@ -71,6 +134,10 @@
             </article>
 
             <div class="sync-flow" aria-label="Sync steps">
+              <div class="flow-caption">
+                <span>Workflow</span>
+                <strong id="flowStageTitle">Share fonts</strong>
+              </div>
               <div class="flow-line"></div>
               <button class="flow-step active" type="button" data-step="share">
                 <span>Share</span>
@@ -94,9 +161,9 @@
             </article>
           </section>
 
-          <section class="action-grid" aria-label="Choose a role">
+          <section class="action-grid compact-actions" aria-label="Choose a role">
             <article class="role-card selected">
-              <div class="role-icon share-icon" aria-hidden="true"></div>
+              <svg class="role-icon"><use href="#icon-sync"></use></svg>
               <div>
                 <p class="card-label">Start here on the computer with fonts</p>
                 <h2>I have fonts to share</h2>
@@ -106,7 +173,7 @@
             </article>
 
             <article class="role-card">
-              <div class="role-icon receive-icon" aria-hidden="true"></div>
+              <svg class="role-icon"><use href="#icon-peers"></use></svg>
               <div>
                 <p class="card-label">Start here on the computer missing fonts</p>
                 <h2>I need fonts from another computer</h2>
