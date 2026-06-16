@@ -3702,6 +3702,11 @@ impl SyncMyFontsGui {
                 "4. After pairing, click Preview From Peer first, then Get Missing Fonts From Peer when the preview looks right."
                     .to_string(),
             );
+        } else if !self.saved_peer_sync_ready() {
+            steps.push(format!(
+                "4. Saved peer URLs: {}. Pair each saved peer before using Sync Saved Peers.",
+                self.saved_peer_names.join(", ")
+            ));
         } else {
             steps.push(format!(
                 "4. Saved peers ready: {}. Use Preview From Peer or Sync Saved Peers before installing.",
@@ -3737,7 +3742,7 @@ impl SyncMyFontsGui {
                 .to_string();
         }
 
-        if self.saved_peer_names.is_empty() {
+        if self.saved_peer_names.is_empty() || !self.saved_peer_sync_ready() {
             return "Preview mode: peer details are filled in; preview before installing missing fonts."
                 .to_string();
         }
@@ -3773,7 +3778,7 @@ impl SyncMyFontsGui {
                 .to_string();
         }
 
-        if self.saved_peer_names.is_empty() {
+        if self.saved_peer_names.is_empty() || !self.saved_peer_sync_ready() {
             return "This computer: click Preview From Peer, review what will install, then click Get Missing Fonts From Peer.\nOther computer: keep sharing on until this sync finishes."
                 .to_string();
         }
@@ -8140,7 +8145,24 @@ mod tests {
         app.peer_url = "http://192.168.1.26:7370".to_string();
         assert!(!app.peer_install_ready());
 
+        app.saved_peer_names = vec!["Shop PC".to_string(), "Office Mac".to_string()];
+        app.saved_peer_key_count = 1;
+        let partially_paired_steps = app.first_run_steps();
+        assert!(
+            partially_paired_steps
+                .iter()
+                .any(|step| step.contains("Saved peer URLs"))
+        );
+        assert!(
+            partially_paired_steps
+                .iter()
+                .any(|step| step.contains("Pair each saved peer"))
+        );
+        assert!(app.setup_phase().contains("Preview mode"));
+        assert!(app.role_card_text().contains("Get Missing Fonts From Peer"));
+
         app.saved_peer_names = vec!["Shop PC".to_string()];
+        app.saved_peer_key_count = 1;
         assert!(app.setup_phase().contains("Sync mode"));
         assert!(app.role_card_text().contains("opposite direction"));
     }
