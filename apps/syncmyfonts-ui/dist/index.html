@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SyncMyFonts</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Primary">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">S</div>
+          <div>
+            <div class="brand-name">SyncMyFonts</div>
+            <div class="brand-subtitle">LAN font sync</div>
+          </div>
+        </div>
+
+        <nav class="nav-list">
+          <button class="nav-item active" type="button">Sync</button>
+          <button class="nav-item" type="button">Fonts</button>
+          <button class="nav-item" type="button">Peers</button>
+          <button class="nav-item" type="button">Settings</button>
+          <button class="nav-item" type="button">Support</button>
+        </nav>
+
+        <div class="sidebar-status">
+          <span id="deviceName">This computer</span>
+          <span id="platformName">desktop</span>
+          <span id="sharingState">sharing off</span>
+          <span id="peerCount">no saved peers</span>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Local-first sync</p>
+            <h1>Sync</h1>
+            <p class="lede">Move licensed, non-system fonts between trusted computers on this network.</p>
+          </div>
+          <div class="topbar-actions">
+            <span class="warning-pill"><span id="warningCount">0</span> warnings</span>
+            <button class="button secondary" id="refreshButton" type="button">Refresh</button>
+          </div>
+        </header>
+
+        <section class="sync-board" aria-label="LAN sync setup">
+          <article class="device-card current">
+            <div class="card-label">This computer</div>
+            <h2 id="localDeviceTitle">This computer</h2>
+            <p>Choose whether this machine has fonts to share or needs fonts from another computer.</p>
+            <div class="status-row">
+              <span class="status-dot off"></span>
+              <span id="localShareStatus">Sharing is off</span>
+            </div>
+          </article>
+
+          <div class="sync-flow" aria-label="Sync steps">
+            <div class="flow-line"></div>
+            <button class="flow-step active" type="button" data-step="share">
+              <span>Share</span>
+            </button>
+            <button class="flow-step" type="button" data-step="pair">
+              <span>Pair</span>
+            </button>
+            <button class="flow-step" type="button" data-step="preview">
+              <span>Preview</span>
+            </button>
+            <button class="flow-step" type="button" data-step="install">
+              <span>Install</span>
+            </button>
+          </div>
+
+          <article class="device-card peer">
+            <div class="card-label">Paired computer</div>
+            <h2>No peer selected</h2>
+            <p>Find a nearby SyncMyFonts app on the same LAN, or paste a LAN URL manually.</p>
+            <button class="button primary" type="button">Find LAN peers</button>
+          </article>
+        </section>
+
+        <section class="action-grid" aria-label="Choose a role">
+          <article class="role-card selected">
+            <div class="role-icon share-icon" aria-hidden="true"></div>
+            <div>
+              <p class="card-label">Start here on the computer with fonts</p>
+              <h2>I have fonts to share</h2>
+              <p>Turn on LAN sharing for this session. No port forwarding is required.</p>
+            </div>
+            <button class="button primary" type="button">Share fonts on this network</button>
+          </article>
+
+          <article class="role-card">
+            <div class="role-icon receive-icon" aria-hidden="true"></div>
+            <div>
+              <p class="card-label">Start here on the computer missing fonts</p>
+              <h2>I need fonts from another computer</h2>
+              <p>Find a peer, review exactly what will be installed, then bring over only the missing fonts.</p>
+            </div>
+            <button class="button secondary" type="button">Pair with a computer</button>
+          </article>
+        </section>
+
+        <section class="details-panel" aria-label="Current sync step">
+          <div>
+            <p class="eyebrow">Recommended next step</p>
+            <h2 id="stepTitle">Share or pair a computer</h2>
+            <p id="stepCopy">Use the left card if this computer already has the font. Use the right card if this computer needs the font.</p>
+          </div>
+          <div class="safety-list">
+            <span>User fonts only</span>
+            <span>System fonts excluded</span>
+            <span>LAN only</span>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="./main.js"></script>
+  </body>
+</html>

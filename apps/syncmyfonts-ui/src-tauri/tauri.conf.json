@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "SyncMyFonts",
+  "version": "0.1.0",
+  "identifier": "com.syncmyfonts.desktop",
+  "build": {
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "SyncMyFonts",
+        "label": "main",
+        "width": 1180,
+        "height": 760,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "LAN font sync for macOS and Windows",
+    "longDescription": "A local-first desktop app for syncing non-system fonts between trusted computers on the same LAN."
+  }
+}
