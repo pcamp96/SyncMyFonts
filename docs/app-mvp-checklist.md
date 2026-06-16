@@ -195,6 +195,7 @@ The app MVP should reuse the current agent commands:
   exact native GUI button names for previewing and installing from a peer.
 - [x] Packaged release instructions explain that sign-in sync can be disabled
   without removing saved peers.
+- [x] Packaged README explains readiness scope and sign-in sync reversibility.
 - [x] Copyable pairing instructions tell the other computer to pair, preview,
   and use `Get Missing Fonts From Peer` without copying shared-key secrets.
 - [x] The visible `Copy Pairing Instructions` receipt repeats the full

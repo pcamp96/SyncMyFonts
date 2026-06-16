@@ -124,7 +124,8 @@ saved-peer sync without putting LAN keys in shortcut or plist arguments, and run
 a readiness check before live two-machine testing. Folder shortcuts open the
 managed font folder, action logs, and app support/config folder.
 The first-run area shows and can copy a short LAN readiness summary covering
-sharing, pairing, saved peers, and auto-sync state.
+sharing, pairing, current-user/system-font scope, saved peers, sign-in sync,
+and auto-sync state.
 When multiple computers are saved, the GUI includes a saved-peer selector so a
 user can load the exact Mac or Windows PC they want to test, preview, sync, or
 forget.
@@ -244,9 +245,10 @@ cargo run -p syncmyfonts-agent -- lan-sync \
 The first LAN MVP has lightweight UDP peer discovery, manual peer URLs, and an
 8-digit app pairing code that saves the generated LAN token for future syncs.
 The native GUI can also auto-sync saved LAN peers on a saved interval while the
-app is open, and it remembers a valid custom LAN listen address after sharing
-starts. Bonjour/mDNS discovery, QR-code pairing, and tray/menu background agents
-for syncing after the window is closed are planned next-layer app features.
+app is open, install or remove a current-user sign-in sync helper, and remember
+a valid custom LAN listen address after sharing starts. Bonjour/mDNS discovery,
+QR-code pairing, and tray/menu background agents for syncing after the window is
+closed are planned next-layer app features.
 
 Save a peer for repeated sync:
 
