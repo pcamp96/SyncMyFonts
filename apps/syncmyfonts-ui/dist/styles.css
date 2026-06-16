@@ -601,7 +601,8 @@ h2 {
   font-size: 20px;
 }
 
-.font-row {
+.font-row,
+.peer-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -611,22 +612,39 @@ h2 {
   border-bottom: 1px solid var(--line);
 }
 
-.font-row:last-child {
+.font-row:last-child,
+.peer-row:last-child {
   border-bottom: 0;
 }
 
-.font-row div {
+.font-row div,
+.peer-row div {
   display: grid;
   gap: 4px;
+  min-width: 0;
 }
 
 .font-row span,
+.peer-row span,
 .empty-state span,
 .input-row span,
 .inspector-card p,
 .setting-card p,
 .support-action span {
   color: var(--muted);
+}
+
+.peer-list {
+  display: grid;
+  gap: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.peer-row span:not(.badge) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .muted-row {

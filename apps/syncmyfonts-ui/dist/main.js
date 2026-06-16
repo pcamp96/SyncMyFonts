@@ -45,6 +45,51 @@ function setText(id, value) {
   }
 }
 
+function setToggle(id, enabled) {
+  const element = document.getElementById(id);
+  if (element) {
+    element.classList.toggle("on", Boolean(enabled));
+  }
+}
+
+function formatPeerCount(savedPeers, pairedPeers) {
+  if (savedPeers === 0) {
+    return "no saved peers";
+  }
+  if (savedPeers === pairedPeers) {
+    return savedPeers === 1 ? "1 paired peer" : `${savedPeers} paired peers`;
+  }
+  return `${savedPeers} saved, ${pairedPeers} paired`;
+}
+
+function renderPeerList(peers = []) {
+  const list = document.getElementById("peerList");
+  const empty = document.getElementById("peerEmptyState");
+  if (!list || !empty) {
+    return;
+  }
+
+  list.hidden = peers.length === 0;
+  empty.hidden = peers.length > 0;
+  list.replaceChildren(
+    ...peers.map((peer) => {
+      const row = document.createElement("div");
+      row.className = "peer-row";
+      const body = document.createElement("div");
+      const name = document.createElement("strong");
+      name.textContent = peer.name;
+      const url = document.createElement("span");
+      url.textContent = peer.url;
+      body.append(name, url);
+      const badge = document.createElement("span");
+      badge.className = peer.paired ? "badge success" : "badge neutral";
+      badge.textContent = peer.paired ? "Paired" : "Needs code";
+      row.append(body, badge);
+      return row;
+    })
+  );
+}
+
 function setView(viewName) {
   const panel = document.getElementById(`view-${viewName}`);
   if (!panel) {
@@ -96,8 +141,29 @@ async function refreshSnapshot() {
     setText("platformName", snapshot.platform);
     setText("sharingState", snapshot.sharing ? "sharing on" : "sharing off");
     setText("localShareStatus", snapshot.sharing ? "Sharing is on" : "Sharing is off");
-    setText("peerCount", snapshot.saved_peers === 1 ? "1 saved peer" : `${snapshot.saved_peers} saved peers`);
+    setText("peerCount", formatPeerCount(snapshot.saved_peers, snapshot.paired_peers));
     setText("warningCount", snapshot.warnings);
+    setText("userFontDir", snapshot.user_font_dir);
+    setText("managedFontDir", snapshot.managed_font_dir);
+    setText("userFontCount", `${snapshot.user_font_count} found`);
+    setText("managedFontCount", `${snapshot.managed_manifest_count} managed`);
+    setText("listenAddress", `LAN sharing listens on ${snapshot.lan_listen_address}. No port forwarding is required.`);
+    setText(
+      "systemFontPolicy",
+      snapshot.system_fonts_excluded
+        ? "System font folders are excluded from scan, share, and install workflows."
+        : "System font exclusion needs attention before syncing."
+    );
+    setText(
+      "autoSyncStatus",
+      snapshot.auto_sync_saved_peers
+        ? `On every ${snapshot.auto_sync_interval_minutes} minute(s) while the app is open.`
+        : "Off until a saved peer is paired and you enable it."
+    );
+    setText("configPath", `Config: ${snapshot.config_path}`);
+    setText("logDir", `Logs: ${snapshot.log_dir}`);
+    setToggle("autoSyncToggle", snapshot.auto_sync_saved_peers);
+    renderPeerList(snapshot.peers);
   } catch (error) {
     console.error("Unable to refresh SyncMyFonts snapshot", error);
   }

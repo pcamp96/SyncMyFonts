@@ -142,17 +142,17 @@
               </div>
               <div class="font-row">
                 <div>
-                  <strong>Validation Sans</strong>
-                  <span>Installed for this user</span>
+                  <strong>User font folder</strong>
+                  <span id="userFontDir">Loading local font path...</span>
                 </div>
-                <span class="badge success">Ready</span>
+                <span class="badge success" id="userFontCount">Scanning</span>
               </div>
               <div class="font-row">
                 <div>
-                  <strong>Workshop Serif</strong>
-                  <span>Available after the next scan</span>
+                  <strong>Managed font folder</strong>
+                  <span id="managedFontDir">Loading managed font path...</span>
                 </div>
-                <span class="badge neutral">Pending</span>
+                <span class="badge neutral" id="managedFontCount">Loading</span>
               </div>
               <div class="font-row muted-row">
                 <div>
@@ -185,10 +185,11 @@
                 </div>
                 <button class="button primary" type="button">Find peers</button>
               </div>
-              <div class="empty-state">
+              <div class="empty-state" id="peerEmptyState">
                 <strong>No peers found yet</strong>
                 <span>Open SyncMyFonts on another computer and choose Share fonts on this network.</span>
               </div>
+              <div class="peer-list" id="peerList" hidden></div>
               <label class="input-row">
                 <span>Manual LAN URL</span>
                 <input type="text" placeholder="http://192.168.1.42:7370" />
@@ -216,23 +217,23 @@
             <article class="setting-card">
               <div>
                 <h2>Local sync first</h2>
-                <p>Prefer same-LAN peer transfer before any external sync provider.</p>
+                <p id="listenAddress">Prefer same-LAN peer transfer before any external sync provider.</p>
               </div>
               <span class="toggle on" aria-hidden="true"></span>
             </article>
             <article class="setting-card">
               <div>
                 <h2>Exclude system fonts</h2>
-                <p>Keep Windows and macOS system fonts out of every transfer.</p>
+                <p id="systemFontPolicy">Keep Windows and macOS system fonts out of every transfer.</p>
               </div>
               <span class="toggle on" aria-hidden="true"></span>
             </article>
             <article class="setting-card">
               <div>
-                <h2>Ask before installing</h2>
-                <p>Always preview missing fonts before installing anything.</p>
+                <h2>Saved-peer sync</h2>
+                <p id="autoSyncStatus">Loading saved-peer sync preference...</p>
               </div>
-              <span class="toggle on" aria-hidden="true"></span>
+              <span class="toggle" id="autoSyncToggle" aria-hidden="true"></span>
             </article>
             <article class="setting-card">
               <div>
@@ -248,7 +249,7 @@
           <div class="support-grid">
             <button class="support-action" type="button">
               <strong>Readiness check</strong>
-              <span>Confirm folders, permissions, and LAN state.</span>
+              <span id="configPath">Confirm folders, permissions, and LAN state.</span>
             </button>
             <button class="support-action" type="button">
               <strong>Validation report</strong>
@@ -256,7 +257,7 @@
             </button>
             <button class="support-action" type="button">
               <strong>Open logs</strong>
-              <span>Collect details for debugging without cluttering Sync.</span>
+              <span id="logDir">Collect details for debugging without cluttering Sync.</span>
             </button>
           </div>
         </section>
