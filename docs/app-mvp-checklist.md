@@ -159,6 +159,8 @@ The app MVP should reuse the current agent commands:
 - [x] Native GUI disables saved-peer sync and automation until saved LAN peers
   have pairing tokens, while still allowing a previously enabled auto-sync
   preference to be turned off.
+- [x] Native GUI disables the auto-sync interval controls alongside the
+  auto-sync checkbox when saved-peer sync is not ready.
 - [x] Native GUI shows a concise sync receipt with installed, already-present,
   skipped, failed-peer, and checked-peer counts while keeping detailed JSON
   copyable for support.

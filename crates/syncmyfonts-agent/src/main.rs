@@ -4305,20 +4305,21 @@ impl eframe::App for SyncMyFontsGui {
             });
             ui.horizontal(|ui| {
                 let mut changed = false;
+                let mut interval_changed = false;
                 ui.add_enabled_ui(self.can_change_auto_sync_preference(), |ui| {
                     changed = ui
                         .checkbox(&mut self.auto_sync_enabled, "Auto Sync Saved Peers")
                         .changed();
+                    ui.label("Every");
+                    interval_changed = ui
+                        .add(
+                            eframe::egui::DragValue::new(&mut self.auto_sync_interval_minutes)
+                                .range(1..=1440)
+                                .speed(1.0),
+                        )
+                        .changed();
+                    ui.label("minutes while this app is open");
                 });
-                ui.label("Every");
-                let interval_changed = ui
-                    .add(
-                        eframe::egui::DragValue::new(&mut self.auto_sync_interval_minutes)
-                            .range(1..=1440)
-                            .speed(1.0),
-                    )
-                    .changed();
-                ui.label("minutes while this app is open");
                 if changed || interval_changed {
                     self.save_auto_sync_preferences();
                 }
