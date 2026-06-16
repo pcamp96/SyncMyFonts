@@ -278,6 +278,8 @@ The app MVP should reuse the current agent commands:
   Mac-to-Windows and Windows-to-Mac evidence rows.
 - [x] GitHub Actions verifies packaged GUI self-test exposes a copyable
   clean-machine validation checklist.
+- [x] GitHub Actions verifies packaged sign-in sync can be enabled and disabled
+  without leaving the current-user helper registered.
 - [x] macOS managed verification checks CoreText loadability for intact managed
   font files.
 - [x] Manual clean-machine validation checklist exists for real macOS-to-Windows
