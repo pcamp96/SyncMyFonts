@@ -1303,11 +1303,9 @@ fn add_lan_peer(name: String, url: String, lan_key: Option<String>) -> Result<La
         url,
         lan_key,
     };
-    if let Some(existing) = config
-        .peers
-        .iter_mut()
-        .find(|existing| existing.name == peer.name)
-    {
+    if let Some(existing) = config.peers.iter_mut().find(|existing| {
+        existing.name == peer.name || normalize_peer_url(&existing.url) == peer.url
+    }) {
         *existing = peer.clone();
     } else {
         config.peers.push(peer.clone());
@@ -7432,6 +7430,38 @@ mod tests {
             normalized_peer_name("  Shop PC  ", "http://192.168.1.50:7370"),
             "Shop PC"
         );
+    }
+
+    #[test]
+    fn add_lan_peer_replaces_existing_peer_by_normalized_url() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let config_dir = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+        }
+
+        add_lan_peer(
+            "Shop PC".to_string(),
+            "http://192.168.1.50:7370/".to_string(),
+            Some("old-key".to_string()),
+        )
+        .unwrap();
+        let peer = add_lan_peer(
+            "Workshop PC".to_string(),
+            " http://192.168.1.50:7370/// ".to_string(),
+            Some("new-key".to_string()),
+        )
+        .unwrap();
+        let config = load_app_config().unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+        }
+
+        assert_eq!(peer.name, "Workshop PC");
+        assert_eq!(peer.url, "http://192.168.1.50:7370");
+        assert_eq!(config.peers.len(), 1);
+        assert_eq!(config.peers[0].name, "Workshop PC");
+        assert_eq!(config.peers[0].lan_key.as_deref(), Some("new-key"));
     }
 
     #[test]

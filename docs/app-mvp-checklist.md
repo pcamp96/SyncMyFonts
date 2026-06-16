@@ -140,6 +140,8 @@ The app MVP should reuse the current agent commands:
   to exactly 8 digits, while accepting pasted formats like `1234-5678`.
 - [x] Manually saved LAN peers get a readable fallback name if the user leaves
   the name field blank.
+- [x] Saving or pairing the same normalized LAN URL updates the existing saved
+  peer instead of creating duplicate repeat-sync entries.
 - [x] Native GUI keeps `Get Missing Fonts From Peer` disabled until the current
   peer URL has completed a successful preview in this app session.
 - [x] Native GUI relocks `Get Missing Fonts From Peer` if the peer URL or LAN
