@@ -162,6 +162,8 @@ The app MVP should reuse the current agent commands:
   or only saved a peer URL that still needs pairing.
 - [x] Native GUI first-run guidance treats saved peer URLs as setup drafts
   until every saved peer has a LAN token.
+- [x] Native GUI saved-peer summary shows how many saved peers are actually
+  paired for repeat sync.
 - [x] Native GUI disables saved-peer sync and automation until saved LAN peers
   have pairing tokens, while still allowing a previously enabled auto-sync
   preference to be turned off.

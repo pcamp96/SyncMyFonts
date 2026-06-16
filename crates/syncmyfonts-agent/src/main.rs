@@ -2964,16 +2964,7 @@ impl SyncMyFontsGui {
                     self.selected_peer_name =
                         self.saved_peer_names.first().cloned().unwrap_or_default();
                 }
-                self.saved_peer_summary = format!(
-                    "Saved peers: {} ({})",
-                    config.peers.len(),
-                    config
-                        .peers
-                        .iter()
-                        .map(|peer| peer.name.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
+                self.saved_peer_summary = saved_peer_summary_text(&config);
             }
             Err(error) => {
                 self.saved_peer_names.clear();
@@ -5260,6 +5251,27 @@ fn load_app_config() -> Result<AppConfig> {
 fn saved_peer_repeat_sync_ready() -> Result<bool> {
     let config = load_app_config()?;
     Ok(!config.peers.is_empty() && saved_lan_key_count(&config) == config.peers.len())
+}
+
+fn saved_peer_summary_text(config: &AppConfig) -> String {
+    if config.peers.is_empty() {
+        return "Saved peers: none yet.".to_string();
+    }
+
+    let saved = config.peers.len();
+    let paired = saved_lan_key_count(config);
+    let names = config
+        .peers
+        .iter()
+        .map(|peer| peer.name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    if paired == saved {
+        format!("Saved peers: {saved} paired ({names})")
+    } else {
+        format!("Saved peers: {saved} saved, {paired} paired ({names})")
+    }
 }
 
 fn normalize_app_config(config: &mut AppConfig) -> bool {
@@ -7814,6 +7826,48 @@ mod tests {
         assert!(unpaired_step.contains("saved as a peer URL"));
         assert!(unpaired_step.contains("click Pair Peer"));
         assert!(unpaired_step.contains("before using saved-peer sync"));
+    }
+
+    #[test]
+    fn saved_peer_summary_text_counts_paired_peers() {
+        let empty = AppConfig::default();
+        assert_eq!(saved_peer_summary_text(&empty), "Saved peers: none yet.");
+
+        let mixed = AppConfig {
+            schema: 1,
+            device_id: Some(Uuid::new_v4()),
+            friendly_device_name: None,
+            preferences: AppPreferences::default(),
+            peers: vec![
+                LanPeerConfig {
+                    name: "Shop PC".to_string(),
+                    url: "http://192.168.1.20:7370".to_string(),
+                    lan_key: Some("shop-key".to_string()),
+                },
+                LanPeerConfig {
+                    name: "Office Mac".to_string(),
+                    url: "http://192.168.1.10:7370".to_string(),
+                    lan_key: None,
+                },
+            ],
+        };
+        assert_eq!(
+            saved_peer_summary_text(&mixed),
+            "Saved peers: 2 saved, 1 paired (Shop PC, Office Mac)"
+        );
+
+        let paired = AppConfig {
+            peers: vec![LanPeerConfig {
+                name: "Shop PC".to_string(),
+                url: "http://192.168.1.20:7370".to_string(),
+                lan_key: Some("shop-key".to_string()),
+            }],
+            ..AppConfig::default()
+        };
+        assert_eq!(
+            saved_peer_summary_text(&paired),
+            "Saved peers: 1 paired (Shop PC)"
+        );
     }
 
     #[test]
