@@ -1047,6 +1047,15 @@ h2 {
     white-space: nowrap;
   }
 
+  .nav-item.active::before {
+    left: 8px;
+    right: 8px;
+    top: auto;
+    bottom: 4px;
+    width: auto;
+    height: 2px;
+  }
+
   .sidebar-status {
     display: none;
   }

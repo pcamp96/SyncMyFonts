@@ -41,6 +41,7 @@ for (const viewport of viewports) {
 
     for (const view of views) {
       await page.click(`[data-view="${view}"]`);
+      await page.mouse.move(4, viewport.height - 4);
       await page.screenshot({
         path: new URL(`ui-${viewport.name}-${platform}-${view}.png`, outputDir).pathname,
         fullPage: false,
