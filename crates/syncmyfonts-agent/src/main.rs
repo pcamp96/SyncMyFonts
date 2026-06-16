@@ -284,7 +284,7 @@ fn run_cli(cli: Cli) -> Result<()> {
             print_json(&redacted_peer_config(&peer))?;
         }
         Commands::LanPeers => {
-            print_json(&load_app_config()?.peers)?;
+            print_json(&redacted_lan_peers()?)?;
         }
         Commands::LanDiscover { port } => {
             print_json(&discover_lan_peers(port)?)?;
@@ -2436,8 +2436,8 @@ async fn app_open_app_support_folder() -> Result<Json<OpenFolderResponse>, LanAp
 }
 
 async fn app_peers() -> Result<Json<Vec<RedactedPeer>>, LanApiError> {
-    load_app_config()
-        .map(|config| Json(config.peers.iter().map(redacted_peer_config).collect()))
+    redacted_lan_peers()
+        .map(Json)
         .map_err(LanApiError::internal)
 }
 
@@ -5249,6 +5249,14 @@ fn redacted_peer_config(peer: &LanPeerConfig) -> RedactedPeer {
         has_lan_key: lan_peer_has_key(peer),
         key_storage: lan_peer_key_storage(peer),
     }
+}
+
+fn redacted_lan_peers() -> Result<Vec<RedactedPeer>> {
+    Ok(load_app_config()?
+        .peers
+        .iter()
+        .map(redacted_peer_config)
+        .collect())
 }
 
 fn lan_peer_key_storage(peer: &LanPeerConfig) -> &'static str {
@@ -9712,6 +9720,39 @@ mod tests {
         let json = serde_json::to_string(&redacted).unwrap();
 
         assert!(json.contains("\"has_lan_key\":true"));
+        assert!(!json.contains("super-secret"));
+    }
+
+    #[test]
+    fn lan_peers_output_redacts_saved_key_material() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let config_dir = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+        }
+        save_app_config(&AppConfig {
+            schema: 1,
+            device_id: Some(Uuid::new_v4()),
+            friendly_device_name: None,
+            preferences: AppPreferences::default(),
+            peers: vec![LanPeerConfig {
+                name: "Workshop".to_string(),
+                url: "http://192.168.1.50:7370".to_string(),
+                lan_key_secret_id: None,
+                lan_key: Some("super-secret".to_string()),
+            }],
+        })
+        .unwrap();
+
+        let peers = redacted_lan_peers().unwrap();
+        let json = serde_json::to_string(&peers).unwrap();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+        }
+
+        assert_eq!(peers[0].name, "Workshop");
+        assert!(peers[0].has_lan_key);
+        assert_eq!(peers[0].key_storage, "portable-config-fallback");
         assert!(!json.contains("super-secret"));
     }
 
