@@ -444,10 +444,11 @@ h2 {
   grid-template-columns: minmax(220px, 1fr) 312px minmax(220px, 1fr);
   gap: 10px 12px;
   align-items: stretch;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
 }
 
 .device-card,
@@ -455,7 +456,7 @@ h2 {
 .details-panel {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--surface);
+  background: #fbfcff;
   box-shadow: var(--shadow);
 }
 
