@@ -68,6 +68,9 @@ for (const viewport of viewports) {
         return {
           platform: document.body.dataset.platform,
           title: document.getElementById("viewTitle")?.textContent,
+          activeNavCount: document.querySelectorAll(".nav-item.active").length,
+          activePanelCount: document.querySelectorAll(".view-panel.active").length,
+          activeView: document.querySelector(".nav-item.active")?.dataset.view,
           scrollWidth: document.documentElement.scrollWidth,
           clientWidth: document.documentElement.clientWidth,
           scrollHeight: document.documentElement.scrollHeight,
@@ -90,6 +93,9 @@ for (const [viewportName, viewportResult] of Object.entries(results)) {
     for (const [viewName, result] of Object.entries(platformResult)) {
       if (result.horizontalOverflow || result.overflowing.length > 0) {
         failures.push(`${viewportName}/${platformName}/${viewName}`);
+      }
+      if (result.activeNavCount !== 1 || result.activePanelCount !== 1 || result.activeView !== viewName) {
+        failures.push(`${viewportName}/${platformName}/${viewName}:active-state`);
       }
     }
   }
