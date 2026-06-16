@@ -171,6 +171,9 @@ jobs:
           grep -q '"Native GUI state initialized' "$smoke_root/gui-self-test.json"
           grep -q '"font-sync-scope"' "$smoke_root/doctor.json"
           grep -q 'system font directories are excluded' "$smoke_root/doctor.json"
+          grep -q '"sign-in-sync-helper"' "$smoke_root/doctor.json"
+          grep -q 'Expected helper:' "$smoke_root/doctor.json"
+          grep -q 'expected registration:' "$smoke_root/doctor.json"
           python3 - "$smoke_root/gui-self-test.json" <<'PY'
           import json
           import sys
@@ -413,6 +416,9 @@ jobs:
           $scanAfterValidationFont = Get-Content (Join-Path $smokeRoot "scan-after-validation-font.json") -Raw
           if (-not $guiSelfTest.Contains('"ok": true')) { throw "GUI self-test did not report ok" }
           if (-not $guiSelfTest.Contains('"Native GUI state initialized')) { throw "GUI self-test message missing" }
+          if (-not $doctor.Contains('"sign-in-sync-helper"')) { throw "Doctor readiness omitted sign-in sync helper check" }
+          if (-not $doctor.Contains("Expected helper:")) { throw "Doctor readiness omitted expected sign-in helper path" }
+          if (-not $doctor.Contains("expected registration:")) { throw "Doctor readiness omitted expected sign-in registration path" }
           $guiSelfTestJson = $guiSelfTest | ConvertFrom-Json
           if ($guiSelfTestJson.ok -ne $true) { throw "GUI self-test JSON did not report ok" }
           if ($guiSelfTestJson.platform -ne "windows") { throw "GUI self-test platform was not windows" }

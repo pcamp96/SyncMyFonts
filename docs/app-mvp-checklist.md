@@ -285,6 +285,8 @@ The app MVP should reuse the current agent commands:
   health signals.
 - [x] GitHub Actions verifies packaged readiness reports expose current-user
   font scope and system-font exclusion.
+- [x] GitHub Actions verifies packaged readiness reports expose sign-in sync
+  helper and registration repair guidance.
 - [x] GitHub Actions verifies packaged validation reports include both
   Mac-to-Windows and Windows-to-Mac evidence rows.
 - [x] GitHub Actions verifies packaged GUI self-test exposes a copyable
