@@ -1,7 +1,7 @@
 # Manual Clean-Machine Validation
 
 Use this checklist to prove the portable app works on real macOS and Windows
-machines, not only in CI. The goal is to validate the native GUI, LAN pairing,
+machines, not only in CI. The goal is to validate the Tauri desktop app, LAN pairing,
 system-font exclusion, and current-user installs on two normal computers.
 
 ## Test Setup
@@ -24,7 +24,7 @@ On both computers:
 
 1. Launch the native app.
    - macOS: open `SyncMyFonts.app`.
-   - Windows: open `bin\syncmyfonts-gui.exe`.
+   - Windows: open `bin\syncmyfonts-ui.exe`.
 2. Optional but recommended: run the packaged evidence helper.
    - macOS: double-click `Collect-Validation-Evidence.command`.
    - Windows: double-click `Collect-Validation-Evidence.cmd`.

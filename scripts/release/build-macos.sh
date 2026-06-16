@@ -13,9 +13,11 @@ mkdir -p "$dist_dir/bin" "$dist_dir/packaging" "$dist_dir/docs"
 
 cd "$repo_root"
 cargo build --release -p syncmyfonts-agent --bins
+cargo build --release --manifest-path "$repo_root/apps/syncmyfonts-ui/src-tauri/Cargo.toml"
 
 cp "$repo_root/target/release/syncmyfonts-agent" "$dist_dir/bin/"
 cp "$repo_root/target/release/syncmyfonts-gui" "$dist_dir/bin/"
+cp "$repo_root/apps/syncmyfonts-ui/src-tauri/target/release/syncmyfonts-ui" "$dist_dir/bin/"
 cp -R "$repo_root/packaging/macos" "$dist_dir/packaging/"
 cp "$repo_root/packaging/macos/Start-SyncMyFonts.command" "$dist_dir/"
 cp "$repo_root/packaging/macos/Collect-Validation-Evidence.command" "$dist_dir/"
@@ -27,7 +29,7 @@ chmod +x "$dist_dir/Start-SyncMyFonts.command" "$dist_dir/Collect-Validation-Evi
 
 app_dir="$dist_dir/SyncMyFonts.app"
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
-cp "$repo_root/target/release/syncmyfonts-gui" "$app_dir/Contents/MacOS/SyncMyFonts"
+cp "$repo_root/apps/syncmyfonts-ui/src-tauri/target/release/syncmyfonts-ui" "$app_dir/Contents/MacOS/SyncMyFonts"
 cp "$repo_root/target/release/syncmyfonts-agent" "$app_dir/Contents/MacOS/syncmyfonts-agent"
 chmod +x "$app_dir/Contents/MacOS/SyncMyFonts" "$app_dir/Contents/MacOS/syncmyfonts-agent"
 cat > "$app_dir/Contents/Info.plist" <<EOF
@@ -69,7 +71,7 @@ SyncMyFonts macOS MVP
    Start-SyncMyFonts.command
 
 2. The native SyncMyFonts window should open. If it does not, run:
-   ./bin/syncmyfonts-agent gui
+   ./bin/syncmyfonts-ui
 
 3. Click Readiness Check. The managed font folder should be under your user
    account, and no administrator prompt should appear.

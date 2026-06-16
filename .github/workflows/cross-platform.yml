@@ -97,6 +97,7 @@ jobs:
           tar -C "$smoke_root" -xzf "$archive"
           package_dir=$(find "$smoke_root" -maxdepth 1 -type d -name 'syncmyfonts-macos-*' | head -n 1)
           test -x "$package_dir/bin/syncmyfonts-agent"
+          test -x "$package_dir/bin/syncmyfonts-ui"
           test -x "$package_dir/bin/syncmyfonts-gui"
           test -x "$package_dir/Start-SyncMyFonts.command"
           test -x "$package_dir/Collect-Validation-Evidence.command"
@@ -104,8 +105,9 @@ jobs:
           test -x "$package_dir/SyncMyFonts.app/Contents/MacOS/syncmyfonts-agent"
           plutil -lint "$package_dir/SyncMyFonts.app/Contents/Info.plist"
           plutil -extract CFBundleExecutable raw -o - "$package_dir/SyncMyFonts.app/Contents/Info.plist" | grep -q '^SyncMyFonts$'
-          grep -q 'syncmyfonts-gui' "$package_dir/Start-SyncMyFonts.command"
+          grep -q 'syncmyfonts-ui' "$package_dir/Start-SyncMyFonts.command"
           sh -n "$package_dir/Collect-Validation-Evidence.command"
+          grep -q 'syncmyfonts-ui' "$package_dir/Collect-Validation-Evidence.command"
           grep -q 'validation-report --write' "$package_dir/Collect-Validation-Evidence.command"
           grep -q 'gui-self-test.json' "$package_dir/Collect-Validation-Evidence.command"
           grep -q 'Launching SyncMyFonts' "$package_dir/Collect-Validation-Evidence.command"
@@ -371,18 +373,21 @@ jobs:
           $packageDir = Get-ChildItem $smokeRoot -Directory -Filter "syncmyfonts-windows-*" | Select-Object -First 1
           if ($packageDir.Name -ne "syncmyfonts-windows-$expectedVersion") { throw "Unexpected Windows package directory name: $($packageDir.Name)" }
           $agent = Join-Path $packageDir.FullName "bin\syncmyfonts-agent.exe"
+          $tauri = Join-Path $packageDir.FullName "bin\syncmyfonts-ui.exe"
           $gui = Join-Path $packageDir.FullName "bin\syncmyfonts-gui.exe"
           $launcher = Join-Path $packageDir.FullName "Start-SyncMyFonts.cmd"
           $evidenceLauncher = Join-Path $packageDir.FullName "Collect-Validation-Evidence.cmd"
           $evidenceScript = Join-Path $packageDir.FullName "Collect-Validation-Evidence.ps1"
           if (-not (Test-Path $agent)) { throw "Packaged agent missing" }
+          if (-not (Test-Path $tauri)) { throw "Packaged Tauri UI missing" }
           if (-not (Test-Path $gui)) { throw "Packaged GUI launcher missing" }
           if (-not (Test-Path $launcher)) { throw "Packaged launcher missing" }
           if (-not (Test-Path $evidenceLauncher)) { throw "Packaged evidence launcher missing" }
           if (-not (Test-Path $evidenceScript)) { throw "Packaged evidence script missing" }
           $launcherText = Get-Content $launcher -Raw
-          if (-not $launcherText.Contains("syncmyfonts-gui.exe")) { throw "Packaged launcher does not target GUI binary" }
+          if (-not $launcherText.Contains("syncmyfonts-ui.exe")) { throw "Packaged launcher does not target Tauri UI binary" }
           $evidenceScriptText = Get-Content $evidenceScript -Raw
+          if (-not $evidenceScriptText.Contains("syncmyfonts-ui.exe")) { throw "Evidence helper does not launch the Tauri UI" }
           if (-not $evidenceScriptText.Contains("validation-report") -or -not $evidenceScriptText.Contains("--write")) { throw "Evidence helper does not write a validation report" }
           if (-not $evidenceScriptText.Contains("gui-self-test.json")) { throw "Evidence helper does not capture GUI self-test" }
           if (-not $evidenceScriptText.Contains("Launching SyncMyFonts")) { throw "Evidence helper does not launch the native app" }

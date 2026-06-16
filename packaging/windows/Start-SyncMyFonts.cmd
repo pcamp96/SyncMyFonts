@@ -2,8 +2,14 @@
 setlocal
 
 set "SCRIPT_DIR=%~dp0"
+set "AGENT=%SCRIPT_DIR%bin\syncmyfonts-ui.exe"
+if exist "%AGENT%" goto run_ui
+
 set "AGENT=%SCRIPT_DIR%bin\syncmyfonts-gui.exe"
 if exist "%AGENT%" goto run
+
+set "AGENT=%SCRIPT_DIR%..\..\bin\syncmyfonts-ui.exe"
+if exist "%AGENT%" goto run_ui
 
 set "AGENT=%SCRIPT_DIR%..\..\bin\syncmyfonts-gui.exe"
 if exist "%AGENT%" goto run_gui
@@ -14,10 +20,14 @@ if exist "%AGENT%" goto run_agent
 set "AGENT=%SCRIPT_DIR%..\..\bin\syncmyfonts-agent.exe"
 if exist "%AGENT%" goto run_agent
 
-echo Could not find bin\syncmyfonts-gui.exe or bin\syncmyfonts-agent.exe next to this launcher.
+echo Could not find bin\syncmyfonts-ui.exe, bin\syncmyfonts-gui.exe, or bin\syncmyfonts-agent.exe next to this launcher.
 echo Move this launcher back into the SyncMyFonts release folder and try again.
 pause
 exit /b 1
+
+:run_ui
+"%AGENT%"
+exit /b %ERRORLEVEL%
 
 :run
 "%AGENT%"

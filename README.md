@@ -25,7 +25,7 @@ For the current native-app MVP, use the latest successful
 GitHub downloads each artifact as an outer ZIP. Open that ZIP first, then
 extract the inner `syncmyfonts-macos-<version>.tar.gz` or
 `syncmyfonts-windows-<version>.zip`. The extracted folder includes
-`START-HERE.txt`, the native GUI, helper scripts, and the docs needed for a
+`START-HERE.txt`, the Tauri desktop app, helper scripts, and the docs needed for a
 Mac-to-Windows LAN sync test.
 
 The GHCR image below is only for the optional self-hosted server, not the normal
@@ -102,14 +102,15 @@ cargo build
 
 ## Run the Native Desktop App
 
-The agent includes a native cross-platform desktop GUI:
+The release package includes a Tauri desktop app. The legacy Rust GUI remains
+available as a fallback and self-test harness while packaging migrates fully:
 
 ```bash
 cargo run -p syncmyfonts-agent --bin syncmyfonts-agent -- gui
 ```
 
 Release archives also include app-style launchers: `SyncMyFonts.app` on macOS
-and `bin\syncmyfonts-gui.exe` on Windows.
+and `bin\syncmyfonts-ui.exe` on Windows.
 
 For the real two-computer validation flow, see
 `docs/manual-clean-machine-validation.md`.
@@ -292,16 +293,18 @@ or firewall permission when a device is serving fonts.
 
 ## App Architecture
 
-The current MVP is one cross-platform agent binary with CLI commands, a native
-desktop GUI, and a browser control surface kept for development and future
-self-hosted/server-adjacent workflows. The GUI calls the same sync logic as the
-CLI instead of reimplementing sync behavior:
+The current MVP is one cross-platform agent binary with CLI commands, a Tauri
+desktop app shell, a legacy native GUI fallback, and a browser control surface
+kept for development and future self-hosted/server-adjacent workflows. The
+desktop app is the packaged user-facing surface; command wiring should continue
+to call the same sync logic as the CLI instead of reimplementing sync behavior:
 
 - "Share fonts on this network" -> `syncmyfonts-agent lan-serve`
 - "Pull fonts from another device" -> `syncmyfonts-agent lan-sync`
 - "Preview what would install" -> `syncmyfonts-agent lan-sync --dry-run`
 - "Sync through my server" -> `syncmyfonts-agent sync`
-- "Open native GUI" -> `syncmyfonts-agent gui`
+- "Open desktop app" -> `syncmyfonts-ui`
+- "Open legacy native GUI fallback" -> `syncmyfonts-agent gui`
 - "Open browser control surface" -> `syncmyfonts-agent app`
 
 See the platform app notes in:

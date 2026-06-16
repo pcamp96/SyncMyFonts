@@ -4,7 +4,8 @@ These PowerShell helpers run `syncmyfonts-agent` for the signed-in user. They do
 not install a Windows service and do not require administrator rights.
 
 For the normal desktop MVP, double-click `Start-SyncMyFonts.cmd` from the
-release folder. It launches the native GUI with `syncmyfonts-agent gui`.
+release folder. It launches the Tauri desktop app when present, with the legacy
+native GUI as a fallback.
 
 If you are running from the portable release archive, the bundled agent path is
 `$PWD\bin\syncmyfonts-agent.exe`. If you are working from a source checkout

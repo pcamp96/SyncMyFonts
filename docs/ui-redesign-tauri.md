@@ -17,15 +17,18 @@ SyncMyFonts is a local-first desktop utility for designers and shop operators wh
 
 ## Current Migration Shape
 
-The new Tauri shell lives in `apps/syncmyfonts-ui`. It is intentionally separate from the current `syncmyfonts-gui` binary until the new UI is visually and operationally ready to replace it in packaging.
+The new Tauri shell lives in `apps/syncmyfonts-ui`. Release packaging should
+prefer the `syncmyfonts-ui` binary for user-facing launchers while keeping the
+current `syncmyfonts-gui` binary only as a legacy fallback and self-test
+harness during the migration.
 
 The first Tauri milestone is UI-only:
 
 1. Build the polished shell.
 2. Prove the Rust command bridge works.
 3. Add screenshots and runtime checks.
-4. Wire existing LAN actions into the shell.
-5. Switch release packaging from egui to Tauri.
+4. Switch release packaging from egui to Tauri.
+5. Wire existing LAN actions into the shell.
 
 ## Visual Language
 

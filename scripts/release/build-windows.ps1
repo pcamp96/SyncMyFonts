@@ -20,12 +20,14 @@ New-Item -ItemType Directory -Force -Path (Join-Path $DistDir "bin"), (Join-Path
 Push-Location $RepoRoot
 try {
     cargo build --release -p syncmyfonts-agent --bins
+    cargo build --release --manifest-path (Join-Path $RepoRoot "apps/syncmyfonts-ui/src-tauri/Cargo.toml")
 } finally {
     Pop-Location
 }
 
 Copy-Item (Join-Path $RepoRoot "target/release/syncmyfonts-agent.exe") (Join-Path $DistDir "bin/")
 Copy-Item (Join-Path $RepoRoot "target/release/syncmyfonts-gui.exe") (Join-Path $DistDir "bin/")
+Copy-Item (Join-Path $RepoRoot "apps/syncmyfonts-ui/src-tauri/target/release/syncmyfonts-ui.exe") (Join-Path $DistDir "bin/")
 Copy-Item -Recurse (Join-Path $RepoRoot "packaging/windows") (Join-Path $DistDir "packaging/")
 Copy-Item (Join-Path $RepoRoot "packaging/windows/Start-SyncMyFonts.cmd") $DistDir
 Copy-Item (Join-Path $RepoRoot "packaging/windows/Collect-Validation-Evidence.ps1") $DistDir
@@ -41,14 +43,14 @@ Set-Content -Path (Join-Path $DistDir "START-HERE.txt") -Encoding UTF8 -Value @"
 SyncMyFonts Windows MVP
 
 1. Double-click:
-   bin\syncmyfonts-gui.exe
+   bin\syncmyfonts-ui.exe
 
    If Windows asks whether to run the app, choose to run it for this MVP build.
    You can also use:
    Start-SyncMyFonts.cmd
 
 2. The native SyncMyFonts window should open. If it does not, run:
-   .\bin\syncmyfonts-agent.exe gui
+   .\bin\syncmyfonts-ui.exe
 
 3. Click Readiness Check. The managed font folder should be under your user
    account, and no administrator prompt should appear.

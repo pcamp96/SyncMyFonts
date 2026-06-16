@@ -1,7 +1,7 @@
 # Release Build Notes
 
 The MVP release artifact is a portable archive containing the
-`syncmyfonts-agent` binary, a native GUI launcher, platform launcher helpers,
+`syncmyfonts-agent` binary, a Tauri desktop app, platform launcher helpers,
 and app install docs. It is not yet a signed installer, notarized app, DMG,
 MSI, or MSIX.
 
@@ -39,7 +39,7 @@ The portable releases include app-style entry points:
 
 ```text
 macOS:   SyncMyFonts.app
-Windows: bin\syncmyfonts-gui.exe
+Windows: bin\syncmyfonts-ui.exe
 ```
 
 The fallback command remains:
@@ -48,7 +48,11 @@ The fallback command remains:
 syncmyfonts-agent gui
 ```
 
-Both paths launch the native SyncMyFonts GUI. It can scan fonts, start LAN
+The primary app-style entry points launch the Tauri SyncMyFonts desktop app.
+The legacy `syncmyfonts-agent gui` path remains a fallback/self-test harness
+while the Tauri UI becomes the packaged app surface.
+
+The legacy GUI can scan fonts, start LAN
 sharing, show a copyable LAN URL and pairing code, discover sharing LAN peers,
 pair with a peer, test a LAN peer, preview missing fonts, install missing
 fonts, save LAN peers, sync all saved peers, stop LAN sharing, verify managed

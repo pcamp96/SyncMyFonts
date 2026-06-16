@@ -5,7 +5,8 @@ These files provide per-user LaunchAgent wrappers for the current
 sudo.
 
 For the normal desktop MVP, double-click `Start-SyncMyFonts.command` from the
-release folder. It launches the native GUI with `syncmyfonts-agent gui`.
+release folder. It launches the Tauri desktop app when present, with the legacy
+native GUI as a fallback.
 
 If you are running from the portable release archive, the bundled agent path is
 `$PWD/bin/syncmyfonts-agent`. If you are working from a source checkout after

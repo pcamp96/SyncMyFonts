@@ -22,6 +22,16 @@ else
   gui=""
 fi
 
+if [ -x "$script_dir/bin/syncmyfonts-ui" ]; then
+  app_launcher="$script_dir/bin/syncmyfonts-ui"
+elif [ -x "$script_dir/../../bin/syncmyfonts-ui" ]; then
+  app_launcher="$script_dir/../../bin/syncmyfonts-ui"
+elif [ "$gui" != "" ]; then
+  app_launcher="$gui"
+else
+  app_launcher=""
+fi
+
 timestamp=$(date -u +"%Y%m%d-%H%M%SZ")
 evidence_dir="$HOME/Desktop/SyncMyFonts-Evidence-$timestamp"
 mkdir -p "$evidence_dir"
@@ -43,7 +53,7 @@ Files:
 - diagnostics.json: redacted support report and local paths.
 - readiness-check.json: local app readiness checks.
 - validation-report-path.json: path to the saved full validation report.
-- gui-self-test.json: native GUI first-run state check, if the GUI binary was present.
+- gui-self-test.json: legacy native GUI first-run state check, if the legacy GUI binary was present.
 
 Next:
 1. Confirm the SyncMyFonts window opens.
@@ -59,8 +69,8 @@ echo "Launching SyncMyFonts..."
 
 if [ -d "$script_dir/SyncMyFonts.app" ]; then
   open "$script_dir/SyncMyFonts.app"
-elif [ "$gui" != "" ]; then
-  "$gui" &
+elif [ "$app_launcher" != "" ]; then
+  "$app_launcher" &
 else
   "$agent" gui &
 fi

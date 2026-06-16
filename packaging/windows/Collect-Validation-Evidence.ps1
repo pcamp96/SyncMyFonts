@@ -17,6 +17,14 @@ if (-not (Test-Path $Gui)) {
     $Gui = Join-Path $ScriptDir "bin\syncmyfonts-gui.exe"
 }
 
+$AppLauncher = Join-Path $ScriptDir "..\..\bin\syncmyfonts-ui.exe"
+if (-not (Test-Path $AppLauncher)) {
+    $AppLauncher = Join-Path $ScriptDir "bin\syncmyfonts-ui.exe"
+}
+if (-not (Test-Path $AppLauncher) -and (Test-Path $Gui)) {
+    $AppLauncher = $Gui
+}
+
 $Timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmssZ")
 $Desktop = [Environment]::GetFolderPath("Desktop")
 if ([string]::IsNullOrWhiteSpace($Desktop)) {
@@ -60,7 +68,7 @@ Files:
 - diagnostics.json: redacted support report and local paths.
 - readiness-check.json: local app readiness checks.
 - validation-report-path.json: path to the saved full validation report.
-- gui-self-test.json: native GUI first-run state check, if the GUI binary was present.
+- gui-self-test.json: legacy native GUI first-run state check, if the legacy GUI binary was present.
 
 Next:
 1. Confirm the SyncMyFonts window opens.
@@ -74,8 +82,8 @@ Write-Host $EvidenceDir
 Write-Host
 Write-Host "Launching SyncMyFonts..."
 
-if (Test-Path $Gui) {
-    Start-Process -FilePath $Gui
+if (Test-Path $AppLauncher) {
+    Start-Process -FilePath $AppLauncher
 } else {
     Start-Process -FilePath $Agent -ArgumentList @("gui")
 }

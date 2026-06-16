@@ -1,18 +1,18 @@
 # App Install MVP
 
-SyncMyFonts is currently a native-GUI MVP backed by the same Rust agent that
+SyncMyFonts is currently a Tauri desktop-app MVP backed by the same Rust agent that
 also exposes CLI commands for scripting and diagnostics.
 
 ## Start The Local App
 
-Run the native GUI from the release folder:
+Run the Tauri desktop app from the release folder:
 
 ```text
 macOS:   SyncMyFonts.app
-Windows: bin\syncmyfonts-gui.exe
+Windows: bin\syncmyfonts-ui.exe
 ```
 
-Or use the fallback command from a local build:
+The legacy egui app remains available as a fallback command from a local build:
 
 ```sh
 syncmyfonts-agent gui
@@ -89,6 +89,7 @@ visibility match the expected user experience.
 
 ```sh
 cargo build --release -p syncmyfonts-agent --bins
+cargo build --release --manifest-path apps/syncmyfonts-ui/src-tauri/Cargo.toml
 ```
 
 The launcher helpers expect the built binary:
@@ -98,12 +99,12 @@ The launcher helpers expect the built binary:
 - Source checkout on macOS: `target/release/syncmyfonts-agent`
 - Source checkout on Windows: `target\release\syncmyfonts-agent.exe`
 
-The portable GUI launchers are:
+The portable desktop app launchers are:
 
-- Portable macOS archive: `SyncMyFonts.app` or `bin/syncmyfonts-gui`
-- Portable Windows archive: `bin\syncmyfonts-gui.exe`
-- Source checkout on macOS: `target/release/syncmyfonts-gui`
-- Source checkout on Windows: `target\release\syncmyfonts-gui.exe`
+- Portable macOS archive: `SyncMyFonts.app` or `bin/syncmyfonts-ui`
+- Portable Windows archive: `bin\syncmyfonts-ui.exe`
+- Source checkout on macOS: `apps/syncmyfonts-ui/src-tauri/target/release/syncmyfonts-ui`
+- Source checkout on Windows: `apps\syncmyfonts-ui\src-tauri\target\release\syncmyfonts-ui.exe`
 
 ## macOS
 
