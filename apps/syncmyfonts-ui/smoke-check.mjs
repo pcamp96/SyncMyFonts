@@ -15,6 +15,7 @@ const platforms = ["macos", "windows"];
 const viewports = [
   { name: "default", width: 1180, height: 760 },
   { name: "compact", width: 980, height: 700 },
+  { name: "narrow", width: 760, height: 700 },
 ];
 
 const browser = await chromium.launch(chromePath ? { executablePath: chromePath, headless: true } : { headless: true });
