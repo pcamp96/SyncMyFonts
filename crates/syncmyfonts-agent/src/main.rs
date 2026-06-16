@@ -8813,7 +8813,10 @@ mod tests {
         assert!(readiness.contains("Sharing: off; no port forwarding is required."));
         assert!(readiness.contains("Pairing: saved token is ready; preview can run."));
         assert!(readiness.contains("Saved peers: 2 ready (Shop PC, Office Mac)"));
-        assert!(readiness.contains("Sign-in sync: off; enable it after a successful saved-peer preview."));
+        assert!(
+            readiness
+                .contains("Sign-in sync: off; enable it after a successful saved-peer preview.")
+        );
         assert!(readiness.contains("Automation: auto-sync while app is open every 30 minute(s)."));
         assert!(readiness.contains("Secrets: 2 saved LAN token(s) are redacted"));
         assert_eq!(readiness.lines().count(), 6);
