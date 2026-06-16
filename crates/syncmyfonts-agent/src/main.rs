@@ -2987,8 +2987,7 @@ impl SyncMyFontsGui {
                     self.warning_count = action.warning_count;
                     self.output = action.result.clone();
                     self.next_step = if action.status == "success" {
-                        "Last action loaded. Continue with Preview From Peer or Sync Saved Peers when both computers are on the same LAN."
-                            .to_string()
+                        self.last_action_success_next_step()
                     } else {
                         "Last action needs attention. Review the result, then run Diagnostics or try again."
                             .to_string()
@@ -3003,6 +3002,18 @@ impl SyncMyFontsGui {
                     "Action history could not be loaded. Run Diagnostics if this keeps happening."
                         .to_string();
             }
+        }
+    }
+
+    fn last_action_success_next_step(&self) -> String {
+        if self.saved_peer_sync_ready() {
+            "Last action loaded. Continue with Preview From Peer or Sync Saved Peers when both computers are on the same LAN."
+                .to_string()
+        } else if let Some(hint) = self.saved_peer_sync_hint() {
+            format!("Last action loaded. Continue with Preview From Peer, or {hint}")
+        } else {
+            "Last action loaded. Continue with Preview From Peer when both computers are on the same LAN."
+                .to_string()
         }
     }
 
@@ -7933,6 +7944,29 @@ mod tests {
         assert!(app.can_enable_saved_peer_automation());
         assert!(app.can_change_auto_sync_preference());
         assert!(app.saved_peer_sync_hint().is_none());
+    }
+
+    #[test]
+    fn gui_last_action_guidance_respects_saved_peer_readiness() {
+        let mut app = SyncMyFontsGui::new();
+        app.saved_peer_names.clear();
+        app.saved_peer_key_count = 0;
+        let no_peers = app.last_action_success_next_step();
+        assert!(no_peers.contains("Preview From Peer"));
+        assert!(no_peers.contains("Pair a LAN peer"));
+        assert!(!no_peers.contains("Sync Saved Peers"));
+
+        app.saved_peer_names = vec!["Shop PC".to_string()];
+        app.saved_peer_key_count = 0;
+        let unpaired = app.last_action_success_next_step();
+        assert!(unpaired.contains("Preview From Peer"));
+        assert!(unpaired.contains("Pair 1 saved peer"));
+        assert!(!unpaired.contains("Sync Saved Peers"));
+
+        app.saved_peer_key_count = 1;
+        let paired = app.last_action_success_next_step();
+        assert!(paired.contains("Preview From Peer"));
+        assert!(paired.contains("Sync Saved Peers"));
     }
 
     #[test]

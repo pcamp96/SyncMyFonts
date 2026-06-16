@@ -185,6 +185,8 @@ The app MVP should reuse the current agent commands:
   first-sync steps, and validation proof guidance.
 - [x] Native GUI reloads the last saved action result, warning count, and
   next-step guidance after relaunch.
+- [x] Native GUI relaunch guidance only suggests `Sync Saved Peers` when saved
+  peers are paired.
 - [x] Native GUI copy actions for the LAN URL and pairing code leave visible,
   remembered receipts for the two-computer handoff.
 - [x] Packaged release instructions and clean-machine evidence helpers use the
