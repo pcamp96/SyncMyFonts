@@ -1103,7 +1103,18 @@ h2 {
   }
 
   .sync-flow {
-    min-height: 126px;
+    min-height: 112px;
+    padding: 18px 14px;
+  }
+
+  .device-card {
+    min-height: 116px;
+    padding: 14px 16px;
+  }
+
+  .role-card {
+    min-height: 88px;
+    padding: 12px 14px;
   }
 
   .safety-list {
