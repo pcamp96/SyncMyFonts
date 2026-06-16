@@ -978,6 +978,7 @@ struct GuiSelfTestReport {
     validation_checklist_text: String,
     setup_packet_text: String,
     saved_peer_count: usize,
+    saved_peer_summary: String,
     saved_peer_sync_ready: bool,
     saved_peer_sync_hint: Option<String>,
     selected_peer_name: String,
@@ -2599,6 +2600,7 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         validation_checklist_text: validation_checklist_text(),
         setup_packet_text: app.setup_packet_text(),
         saved_peer_count: app.saved_peer_names.len(),
+        saved_peer_summary: app.saved_peer_summary.clone(),
         saved_peer_sync_ready: app.saved_peer_sync_ready(),
         saved_peer_sync_hint: app.saved_peer_sync_hint(),
         selected_peer_name: app.selected_peer_name.clone(),
@@ -8003,6 +8005,7 @@ mod tests {
                 .contains("Share Fonts On This Network")
         );
         assert_eq!(report.saved_peer_count, 0);
+        assert_eq!(report.saved_peer_summary, "Saved peers: none yet.");
         assert!(!report.saved_peer_sync_ready);
         assert_eq!(
             report.saved_peer_sync_hint,

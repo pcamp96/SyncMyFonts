@@ -172,6 +172,9 @@ jobs:
           assert any("Automation: available after pairing a peer" in line for line in gui["lan_readiness"])
           assert any("Secrets: no saved LAN tokens yet" in line for line in gui["lan_readiness"])
           assert gui["saved_peer_count"] == 0
+          assert gui["saved_peer_summary"] == "Saved peers: none yet."
+          assert gui["saved_peer_sync_ready"] is False
+          assert gui["saved_peer_sync_hint"] == "Pair a LAN peer before enabling saved-peer sync."
           assert gui["listen_address_ready"] is True
           assert "0.0.0.0:7370" in gui["listen_address_detail"]
           assert gui["peer_url_ready"] is False
@@ -356,6 +359,9 @@ jobs:
           if (-not ($lanReadiness | Where-Object { $_.Contains("Automation: available after pairing a peer") })) { throw "GUI LAN readiness omitted automation gating state" }
           if (-not ($lanReadiness | Where-Object { $_.Contains("Secrets: no saved LAN tokens yet") })) { throw "GUI LAN readiness omitted secret-storage state" }
           if ($guiSelfTestJson.saved_peer_count -ne 0) { throw "GUI self-test unexpectedly loaded saved peers" }
+          if ($guiSelfTestJson.saved_peer_summary -ne "Saved peers: none yet.") { throw "GUI self-test saved-peer summary did not explain empty state" }
+          if ($guiSelfTestJson.saved_peer_sync_ready -ne $false) { throw "GUI saved-peer sync should not be ready on first launch" }
+          if ($guiSelfTestJson.saved_peer_sync_hint -ne "Pair a LAN peer before enabling saved-peer sync.") { throw "GUI saved-peer sync hint did not explain first pairing step" }
           if ($guiSelfTestJson.listen_address_ready -ne $true) { throw "GUI listen address should be ready on first launch" }
           if (-not $guiSelfTestJson.listen_address_detail.Contains("0.0.0.0:7370")) { throw "GUI listen address detail did not explain default LAN sharing address" }
           if ($guiSelfTestJson.peer_url_ready -ne $false) { throw "GUI peer URL should not be ready on first launch" }

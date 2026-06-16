@@ -252,6 +252,8 @@ The app MVP should reuse the current agent commands:
   font, LAN sharing, manual URL fallback, and preview guidance.
 - [x] GitHub Actions verifies packaged GUI self-test starts with peer pairing,
   preview, and install actions locked until a LAN peer is selected and previewed.
+- [x] GitHub Actions verifies packaged GUI self-test exposes saved-peer summary
+  and saved-peer sync readiness fields.
 - [x] GitHub Actions verifies packaged GUI self-test keeps shared-key labels
   optional for pairing-code-first setup.
 - [x] GitHub Actions verifies packaged release instructions use the native
