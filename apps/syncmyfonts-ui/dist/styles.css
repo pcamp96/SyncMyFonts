@@ -840,18 +840,20 @@ h2 {
 .input-row {
   display: grid;
   gap: 8px;
-  padding: 20px;
+  padding: 12px 18px;
 }
 
 .native-field {
-  background: #fbfcff;
+  grid-template-columns: 140px minmax(0, 1fr);
+  align-items: center;
+  background: var(--surface);
 }
 
 .input-row input {
-  height: 40px;
+  height: 36px;
   padding: 0 12px;
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius);
   color: var(--ink);
   background: #fbfcff;
   font: inherit;
@@ -1082,5 +1084,9 @@ h2 {
 
   .safety-list {
     justify-content: start;
+  }
+
+  .native-field {
+    grid-template-columns: 1fr;
   }
 }
