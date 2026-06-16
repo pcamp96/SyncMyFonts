@@ -145,12 +145,17 @@ After pairing at least one peer:
 3. Sign out and back in, or reboot each machine.
 4. Confirm saved-peer sync runs without putting LAN tokens in visible shortcut
    or plist arguments.
+5. Click `Disable Sign-In Sync` on both machines.
+6. Confirm the current-user sign-in helper is removed while saved peers remain
+   available for manual `Sync Saved Peers`.
 
 Evidence:
 
 ```text
 macOS sign-in sync result:
 Windows sign-in sync result:
+macOS disable sign-in sync result:
+Windows disable sign-in sync result:
 ```
 
 ## Pass Criteria
@@ -160,6 +165,7 @@ Windows sign-in sync result:
 - Missing fonts install only into current-user or SyncMyFonts-managed folders.
 - System fonts are not offered for sync.
 - Re-running sync skips already installed fonts.
+- Sign-in sync can be enabled and disabled without losing saved peers.
 - Diagnostics redact secrets.
 - No administrator privileges are required.
 - No port forwarding is required.

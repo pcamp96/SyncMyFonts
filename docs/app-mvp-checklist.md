@@ -292,7 +292,7 @@ The app MVP should reuse the current agent commands:
 - [x] macOS managed verification checks CoreText loadability for intact managed
   font files.
 - [x] Manual clean-machine validation checklist exists for real macOS-to-Windows
-  and Windows-to-macOS app testing.
+  and Windows-to-macOS app testing, including sign-in sync disable proof.
 - [ ] Clean-machine smoke tests prove the portable archives launch the native
   app on macOS and Windows.
 - [x] Packaged `syncmyfonts-agent scan` returns JSON inventory on macOS.

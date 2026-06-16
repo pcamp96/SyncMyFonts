@@ -109,6 +109,7 @@ jobs:
           grep -q 'validation-report --write' "$package_dir/Collect-Validation-Evidence.command"
           grep -q 'gui-self-test.json' "$package_dir/Collect-Validation-Evidence.command"
           grep -q 'Launching SyncMyFonts' "$package_dir/Collect-Validation-Evidence.command"
+          grep -q 'Disable Sign-In Sync' "$package_dir/Collect-Validation-Evidence.command"
           grep -q 'Install Validation' "$package_dir/START-HERE.txt"
           grep -q 'OFL test font' "$package_dir/START-HERE.txt"
           grep -q 'Copy Pairing Instructions' "$package_dir/START-HERE.txt"
@@ -380,6 +381,7 @@ jobs:
           if (-not $evidenceScriptText.Contains("validation-report") -or -not $evidenceScriptText.Contains("--write")) { throw "Evidence helper does not write a validation report" }
           if (-not $evidenceScriptText.Contains("gui-self-test.json")) { throw "Evidence helper does not capture GUI self-test" }
           if (-not $evidenceScriptText.Contains("Launching SyncMyFonts")) { throw "Evidence helper does not launch the native app" }
+          if (-not $evidenceScriptText.Contains("Disable Sign-In Sync")) { throw "Evidence helper does not mention sign-in sync disable proof" }
           $startHereText = Get-Content (Join-Path $packageDir.FullName "START-HERE.txt") -Raw
           if (-not $startHereText.Contains("Install Validation") -or -not $startHereText.Contains("OFL test font")) { throw "Packaged START-HERE does not mention the validation font setup" }
           if (-not $startHereText.Contains("Copy Pairing Instructions")) { throw "Packaged START-HERE does not mention copyable pairing instructions" }

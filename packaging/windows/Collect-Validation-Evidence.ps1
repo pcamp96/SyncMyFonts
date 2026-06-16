@@ -65,7 +65,8 @@ Files:
 Next:
 1. Confirm the SyncMyFonts window opens.
 2. Run Preview From Peer before Get Missing Fonts From Peer.
-3. Keep this folder with the before/after clean-machine validation notes.
+3. After pairing, prove Enable Sign-In Sync and Disable Sign-In Sync both work.
+4. Keep this folder with the before/after clean-machine validation notes.
 "@
 
 Write-Host "Evidence saved to:"
