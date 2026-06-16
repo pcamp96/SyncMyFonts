@@ -690,6 +690,7 @@ h2 {
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: 14px;
   align-items: start;
+  max-width: 980px;
 }
 
 .panel-list,
@@ -869,6 +870,7 @@ h2 {
 .support-layout {
   grid-template-columns: minmax(0, 1fr) 320px;
   align-items: start;
+  max-width: 980px;
 }
 
 .settings-list {
@@ -1000,15 +1002,17 @@ h2 {
     top: 0;
     z-index: 10;
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 18px;
-    padding: 18px;
+    grid-template-columns: minmax(180px, auto) minmax(0, 1fr);
+    gap: 14px 18px;
+    align-items: center;
+    padding: 14px 18px;
     border-right: 0;
     border-bottom: 1px solid var(--line-strong);
   }
 
   .nav-list {
     display: flex;
+    justify-content: end;
     overflow-x: auto;
   }
 
@@ -1021,14 +1025,45 @@ h2 {
     display: none;
   }
 
+  .safety-note {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 9px 12px;
+  }
+
+  .safety-note strong {
+    display: inline;
+    margin: 0 8px 0 0;
+  }
+
+  .safety-note span {
+    display: inline;
+  }
+
   .workspace {
-    padding: 26px 20px 28px;
+    gap: 12px;
+    padding: 22px 20px 28px;
   }
 
   .topbar,
   .details-panel {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .topbar {
+    gap: 14px;
+  }
+
+  .topbar-actions {
+    align-self: start;
+  }
+
+  .view-panel.active {
+    gap: 14px;
   }
 
   .sync-board,
