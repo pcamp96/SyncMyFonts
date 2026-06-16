@@ -2972,6 +2972,7 @@ pub fn run_native_gui_entrypoint() {
 
 struct SyncMyFontsGui {
     status: String,
+    active_tab: GuiTab,
     next_step: String,
     output: String,
     last_support_report: Option<String>,
@@ -3003,6 +3004,25 @@ struct SyncMyFontsGui {
     last_previewed_peer: Option<PreviewedPeer>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GuiTab {
+    Sync,
+    Fonts,
+    Peers,
+    Support,
+}
+
+impl GuiTab {
+    fn label(self) -> &'static str {
+        match self {
+            GuiTab::Sync => "Sync",
+            GuiTab::Fonts => "Fonts",
+            GuiTab::Peers => "Peers",
+            GuiTab::Support => "Support",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PreviewedPeer {
     url: String,
@@ -3031,6 +3051,7 @@ impl SyncMyFontsGui {
             .unwrap_or_default();
         let mut app = Self {
             status: "Loading...".to_string(),
+            active_tab: GuiTab::Sync,
             next_step: "Start by sharing fonts on one computer, then pair from the other computer."
                 .to_string(),
             output: "Ready.".to_string(),
@@ -4526,6 +4547,514 @@ impl SyncMyFontsGui {
                     .to_string();
         }
     }
+
+    fn render_app_shell(&mut self, ui: &mut eframe::egui::Ui, task_running: bool) {
+        use eframe::egui::{Color32, Frame, Margin, Stroke, Vec2};
+
+        let bg = Color32::from_rgb(247, 248, 250);
+        ui.ctx().set_visuals(eframe::egui::Visuals::light());
+        ui.painter().rect_filled(ui.max_rect(), 0.0, bg);
+        ui.visuals_mut().override_text_color = Some(Color32::from_rgb(17, 24, 39));
+
+        let available = ui.available_size();
+        if available.x < 700.0 || available.y < 420.0 {
+            ui.label("Make the window a little wider to use SyncMyFonts.");
+            return;
+        }
+
+        let sidebar_width = 220.0;
+        let main_width = available.x - sidebar_width - 18.0;
+        ui.horizontal_top(|ui| {
+            ui.allocate_ui(Vec2::new(sidebar_width, available.y), |ui| {
+                self.render_sidebar(ui);
+            });
+            ui.separator();
+            ui.allocate_ui(Vec2::new(main_width, available.y), |ui| {
+                ui.add_space(18.0);
+                self.render_header(ui);
+                ui.add_space(16.0);
+                Frame::new()
+                    .fill(Color32::WHITE)
+                    .stroke(Stroke::new(1.0, Color32::from_rgb(216, 222, 231)))
+                    .corner_radius(12.0)
+                    .inner_margin(Margin::same(22))
+                    .show(ui, |ui| match self.active_tab {
+                        GuiTab::Sync => self.render_sync_tab(ui, task_running),
+                        GuiTab::Fonts => self.render_fonts_tab(ui, task_running),
+                        GuiTab::Peers => self.render_peers_tab(ui, task_running),
+                        GuiTab::Support => self.render_support_tab(ui, task_running),
+                    });
+                ui.add_space(14.0);
+                self.render_result_summary(ui);
+            });
+        });
+    }
+
+    fn render_sidebar(&mut self, ui: &mut eframe::egui::Ui) {
+        use eframe::egui::{Color32, RichText};
+
+        ui.vertical(|ui| {
+            ui.set_width(220.0);
+            ui.add_space(18.0);
+            ui.label(
+                RichText::new("SyncMyFonts")
+                    .size(22.0)
+                    .strong()
+                    .color(Color32::from_rgb(17, 24, 39)),
+            );
+            ui.label(RichText::new("LAN font sync").color(Color32::from_rgb(102, 112, 133)));
+            ui.add_space(24.0);
+            for tab in [GuiTab::Sync, GuiTab::Fonts, GuiTab::Peers, GuiTab::Support] {
+                let selected = self.active_tab == tab;
+                let text = if selected {
+                    RichText::new(tab.label()).strong()
+                } else {
+                    RichText::new(tab.label())
+                };
+                if ui
+                    .selectable_label(selected, text)
+                    .on_hover_text(match tab {
+                        GuiTab::Sync => "Pair, preview, and install fonts over the LAN.",
+                        GuiTab::Fonts => "Scan local fonts and manage synced font health.",
+                        GuiTab::Peers => "Saved peer and automation settings.",
+                        GuiTab::Support => "Diagnostics, validation, logs, and support exports.",
+                    })
+                    .clicked()
+                {
+                    self.active_tab = tab;
+                }
+                ui.add_space(4.0);
+            }
+            ui.add_space(24.0);
+            ui.separator();
+            ui.add_space(12.0);
+            ui.label(RichText::new(&self.status).color(Color32::from_rgb(102, 112, 133)));
+            ui.label(
+                RichText::new(&self.saved_peer_summary).color(Color32::from_rgb(102, 112, 133)),
+            );
+        });
+    }
+
+    fn render_header(&mut self, ui: &mut eframe::egui::Ui) {
+        use eframe::egui::{Color32, RichText};
+
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.label(RichText::new(self.active_tab.label()).size(28.0).strong());
+                ui.label(
+                    RichText::new(self.setup_next_action()).color(Color32::from_rgb(102, 112, 133)),
+                );
+            });
+            ui.add_space(16.0);
+            ui.label(RichText::new(format!("warnings: {}", self.warning_count)).weak());
+            if ui.button("Refresh").clicked() {
+                self.refresh_status();
+            }
+        });
+    }
+
+    fn render_sync_tab(&mut self, ui: &mut eframe::egui::Ui, task_running: bool) {
+        self.render_flow_rail(ui);
+        ui.add_space(18.0);
+        self.render_receive_panel(ui, task_running);
+        ui.add_space(18.0);
+        ui.separator();
+        ui.add_space(18.0);
+        self.render_share_panel(ui, task_running);
+        ui.add_space(18.0);
+        self.render_safety_bar(ui);
+    }
+
+    fn render_flow_rail(&self, ui: &mut eframe::egui::Ui) {
+        use eframe::egui::{Color32, RichText};
+
+        let active_step = if self.share.is_some() {
+            "Share"
+        } else if self.peer_pairing_ready() || (self.peer_url_ready() && !self.peer_sync_ready()) {
+            "Pair"
+        } else if self.peer_sync_ready() && !self.peer_install_ready() {
+            "Preview"
+        } else if self.peer_install_ready() {
+            "Install"
+        } else {
+            "Share"
+        };
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("This computer").strong());
+            for step in ["Share", "Pair", "Preview", "Install"] {
+                let active = step == active_step;
+                let text = if active {
+                    format!("[ {step} ]")
+                } else {
+                    step.to_string()
+                };
+                ui.label(RichText::new(text).color(if active {
+                    Color32::from_rgb(37, 99, 235)
+                } else {
+                    Color32::from_rgb(102, 112, 133)
+                }));
+                ui.label(RichText::new("->").color(Color32::from_rgb(148, 163, 184)));
+            }
+            ui.label(RichText::new("Other computer").strong());
+        });
+    }
+
+    fn render_share_panel(&mut self, ui: &mut eframe::egui::Ui, task_running: bool) {
+        use eframe::egui::{Color32, RichText};
+
+        ui.heading("I have fonts to share");
+        ui.label("Start sharing on the computer that already has the font.");
+        ui.add_space(10.0);
+        ui.label(
+            RichText::new(self.listen_address_detail()).color(Color32::from_rgb(102, 112, 133)),
+        );
+        ui.horizontal(|ui| {
+            ui.label("Listen address");
+            ui.text_edit_singleline(&mut self.listen);
+        });
+        ui.horizontal(|ui| {
+            ui.label(share_key_label());
+            ui.add(eframe::egui::TextEdit::singleline(&mut self.share_key).password(true));
+        });
+        ui.add_space(8.0);
+        ui.add_enabled_ui(!task_running, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.add_enabled_ui(self.can_start_sharing(), |ui| {
+                    if ui.button("Start Sharing").clicked() {
+                        self.start_share();
+                    }
+                });
+                ui.add_enabled_ui(self.can_stop_sharing(), |ui| {
+                    if ui.button("Stop Sharing").clicked() {
+                        self.stop_share();
+                    }
+                });
+            });
+        });
+        ui.add_space(8.0);
+        if self.share_urls.is_empty() {
+            ui.label(RichText::new("Sharing is off. No port forwarding is required.").weak());
+        } else {
+            ui.label(RichText::new("Share this with the other computer").strong());
+            ui.label(self.share_urls.join(" or "));
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Copy URL").clicked() {
+                    if let Some(url) = self.share_urls.first() {
+                        ui.ctx().copy_text(url.clone());
+                        let copied_url = url.clone();
+                        self.record_copy_url_receipt(&copied_url);
+                    }
+                }
+                if let Some(code) = &self.last_pairing_code {
+                    ui.label(format!("Pairing code: {code}"));
+                    if ui.button("Copy Code").clicked() {
+                        ui.ctx().copy_text(code.clone());
+                        self.record_copy_pairing_code_receipt("valid for about 10 minutes");
+                    }
+                }
+                if ui.button("Copy Pairing Info").clicked() {
+                    if let Some(invitation) = self.share_invitation_text() {
+                        ui.ctx().copy_text(invitation.clone());
+                        self.output = invitation;
+                        self.next_step = pairing_instructions_copied_next_step().to_string();
+                    }
+                }
+            });
+        }
+    }
+
+    fn render_receive_panel(&mut self, ui: &mut eframe::egui::Ui, task_running: bool) {
+        ui.heading("I need fonts from another computer");
+        ui.label("Find a sharing computer, pair once, preview, then install only missing fonts.");
+        ui.add_space(10.0);
+        ui.horizontal(|ui| {
+            ui.label("Name");
+            ui.text_edit_singleline(&mut self.peer_name);
+        });
+        ui.horizontal(|ui| {
+            ui.label("LAN URL");
+            ui.text_edit_singleline(&mut self.peer_url);
+        });
+        ui.horizontal(|ui| {
+            ui.label("Pairing code");
+            ui.text_edit_singleline(&mut self.pairing_code);
+        });
+        ui.add_space(6.0);
+        ui.label(self.peer_pairing_detail());
+        ui.add_space(8.0);
+        ui.add_enabled_ui(!task_running, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.add_enabled_ui(self.can_find_lan_peers(), |ui| {
+                    if ui.button("Find Computers").clicked() {
+                        self.discover_peers();
+                    }
+                });
+                ui.add_enabled_ui(self.can_pair_peer(), |ui| {
+                    if ui.button("Pair Computer").clicked() {
+                        self.pair_peer();
+                    }
+                });
+                ui.add_enabled_ui(self.can_test_peer(), |ui| {
+                    if ui.button("Test Connection").clicked() {
+                        self.test_peer();
+                    }
+                });
+                ui.add_enabled_ui(self.can_preview_peer(), |ui| {
+                    if ui.button("Preview Fonts").clicked() {
+                        self.sync_peer(true);
+                    }
+                });
+                ui.add_enabled_ui(self.can_get_missing_fonts_from_peer(), |ui| {
+                    if ui.button("Install Missing Fonts").clicked() {
+                        self.sync_peer(false);
+                    }
+                });
+                ui.add_enabled_ui(self.can_save_peer(), |ui| {
+                    if ui.button("Save Peer").clicked() {
+                        self.save_peer();
+                    }
+                });
+            });
+        });
+    }
+
+    fn render_safety_bar(&self, ui: &mut eframe::egui::Ui) {
+        use eframe::egui::{Color32, RichText};
+        ui.horizontal_wrapped(|ui| {
+            for note in [
+                "User fonts only",
+                "System fonts excluded",
+                "Local network only",
+                "No port forwarding",
+            ] {
+                eframe::egui::Frame::new()
+                    .fill(Color32::from_rgb(241, 245, 249))
+                    .corner_radius(999.0)
+                    .inner_margin(eframe::egui::Margin::symmetric(10, 5))
+                    .show(ui, |ui| {
+                        ui.label(RichText::new(note).color(Color32::from_rgb(71, 85, 105)));
+                    });
+            }
+        });
+    }
+
+    fn render_fonts_tab(&mut self, ui: &mut eframe::egui::Ui, task_running: bool) {
+        ui.heading("Local Font Library");
+        ui.label("Scan and verify this user's fonts without touching system font folders.");
+        ui.add_space(12.0);
+        ui.add_enabled_ui(!task_running, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Scan Fonts").clicked() {
+                    self.scan_fonts();
+                }
+                if ui.button("Install Validation Font").clicked() {
+                    self.install_validation_font();
+                }
+                if ui.button("Verify Managed Fonts").clicked() {
+                    self.verify_managed();
+                }
+                if ui.button("Repair Managed Fonts").clicked() {
+                    self.repair_managed();
+                }
+                if ui.button("Open Managed Folder").clicked() {
+                    self.open_managed_font_folder();
+                }
+            });
+        });
+        ui.add_space(12.0);
+        self.render_safety_bar(ui);
+    }
+
+    fn render_peers_tab(&mut self, ui: &mut eframe::egui::Ui, task_running: bool) {
+        ui.heading("Saved Peers");
+        ui.label("Manage trusted LAN computers and repeat sync.");
+        ui.add_space(12.0);
+        ui.horizontal(|ui| {
+            ui.label("Saved peer");
+            eframe::egui::ComboBox::from_id_salt("saved-peer-selector")
+                .selected_text(if self.selected_peer_name.is_empty() {
+                    "No saved peers"
+                } else {
+                    self.selected_peer_name.as_str()
+                })
+                .show_ui(ui, |ui| {
+                    for peer_name in &self.saved_peer_names {
+                        ui.selectable_value(
+                            &mut self.selected_peer_name,
+                            peer_name.clone(),
+                            peer_name,
+                        );
+                    }
+                });
+            ui.add_enabled_ui(self.can_load_saved_peer(), |ui| {
+                if ui.button("Load").clicked() {
+                    self.load_selected_saved_peer_into_form();
+                    self.active_tab = GuiTab::Sync;
+                }
+            });
+        });
+        ui.add_space(10.0);
+        ui.add_enabled_ui(!task_running, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.add_enabled_ui(self.saved_peer_sync_ready(), |ui| {
+                    if ui.button("Sync Saved Peers").clicked() {
+                        self.sync_saved_peers(false);
+                    }
+                    if ui.button("Dry Run Saved Peers").clicked() {
+                        self.sync_saved_peers(true);
+                    }
+                });
+                ui.add_enabled_ui(self.can_forget_peer(), |ui| {
+                    if ui.button(self.forget_peer_button_label()).clicked() {
+                        self.forget_peer();
+                    }
+                });
+                ui.add_enabled_ui(self.can_enable_saved_peer_automation(), |ui| {
+                    if ui.button("Enable Sign-In Sync").clicked() {
+                        self.install_startup_sync();
+                    }
+                });
+                if ui.button("Disable Sign-In Sync").clicked() {
+                    self.uninstall_startup_sync();
+                }
+            });
+        });
+        ui.add_space(10.0);
+        if let Some(hint) = self.saved_peer_sync_hint() {
+            ui.label(hint);
+        }
+        ui.horizontal(|ui| {
+            let mut changed = false;
+            let mut interval_changed = false;
+            ui.add_enabled_ui(self.can_change_auto_sync_preference(), |ui| {
+                changed = ui
+                    .checkbox(&mut self.auto_sync_enabled, "Auto sync saved peers")
+                    .changed();
+                ui.label("Every");
+                interval_changed = ui
+                    .add(
+                        eframe::egui::DragValue::new(&mut self.auto_sync_interval_minutes)
+                            .range(1..=1440)
+                            .speed(1.0),
+                    )
+                    .changed();
+                ui.label("minutes while this app is open");
+            });
+            if changed || interval_changed {
+                self.save_auto_sync_preferences();
+            }
+        });
+    }
+
+    fn render_support_tab(&mut self, ui: &mut eframe::egui::Ui, task_running: bool) {
+        ui.heading("Support & Validation");
+        ui.label("Diagnostics and proof tools live here so the main sync flow stays calm.");
+        ui.add_space(12.0);
+        ui.horizontal(|ui| {
+            ui.label("Device name");
+            ui.text_edit_singleline(&mut self.device_name_input);
+            if ui.button("Save Name").clicked() {
+                self.save_device_name();
+            }
+        });
+        ui.add_space(10.0);
+        ui.add_enabled_ui(!task_running, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                if ui.button("Diagnostics").clicked() {
+                    self.run_diagnostics();
+                }
+                if ui.button("Readiness Check").clicked() {
+                    self.run_doctor();
+                }
+                if ui.button("Validation Report").clicked() {
+                    self.run_validation_report();
+                }
+                if ui.button("Copy Validation Plan").clicked() {
+                    let checklist = validation_checklist_text();
+                    ui.ctx().copy_text(checklist.clone());
+                    self.next_step = "Validation plan copied. Use it on the Mac and Windows PC while proving both sync directions.".to_string();
+                    self.output = checklist;
+                }
+                if ui.button("Copy Readiness").clicked() {
+                    let readiness = self.lan_readiness_text();
+                    ui.ctx().copy_text(readiness.clone());
+                    self.next_step =
+                        "LAN readiness copied. Paste it when checking setup on the other computer."
+                            .to_string();
+                    self.output = readiness;
+                }
+                if ui.button("Open Logs").clicked() {
+                    self.open_logs_folder();
+                }
+                if ui.button("Open App Support").clicked() {
+                    self.open_app_support_folder();
+                }
+                if ui.button("Install App Shortcuts").clicked() {
+                    self.install_app_shortcuts();
+                }
+            });
+        });
+    }
+
+    fn render_result_summary(&mut self, ui: &mut eframe::egui::Ui) {
+        use eframe::egui::{Color32, RichText};
+
+        eframe::egui::Frame::new()
+            .fill(Color32::from_rgb(255, 255, 255))
+            .stroke(eframe::egui::Stroke::new(1.0, Color32::from_rgb(216, 222, 231)))
+            .corner_radius(10.0)
+            .inner_margin(eframe::egui::Margin::same(16))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.label(RichText::new("Result").strong());
+                        ui.label(&self.next_step);
+                        ui.label(RichText::new(format!("Last: {}", self.last_result)).weak());
+                    });
+                    ui.with_layout(
+                        eframe::egui::Layout::right_to_left(eframe::egui::Align::Center),
+                        |ui| {
+                            if ui.button("Copy Result").clicked() {
+                                ui.ctx().copy_text(self.output.clone());
+                                self.next_step = "Result copied.".to_string();
+                            }
+                            let has_support_report = self.last_support_report.is_some();
+                            ui.add_enabled_ui(has_support_report, |ui| {
+                                if ui.button("Copy Support Report").clicked() {
+                                    if let Some(report) = &self.last_support_report {
+                                        ui.ctx().copy_text(report.clone());
+                                        self.next_step = "Redacted support report copied.".to_string();
+                                    }
+                                }
+                            });
+                            let has_result_review = self.last_result_review.is_some();
+                            ui.add_enabled_ui(has_result_review, |ui| {
+                                if ui.button("Copy Review").clicked() {
+                                    if let Some(review) = &self.last_result_review {
+                                        ui.ctx().copy_text(review.clone());
+                                        self.next_step =
+                                            "Readable install review copied. Use it to check skipped fonts."
+                                                .to_string();
+                                    }
+                                }
+                            });
+                        },
+                    );
+                });
+                if self.active_tab == GuiTab::Support {
+                    ui.add_space(8.0);
+                    eframe::egui::ScrollArea::vertical()
+                        .max_height(220.0)
+                        .show(ui, |ui| {
+                            ui.add(
+                                eframe::egui::TextEdit::multiline(&mut self.output)
+                                    .desired_width(f32::INFINITY)
+                                    .desired_rows(10),
+                            );
+                        });
+                }
+            });
+    }
 }
 
 impl Drop for SyncMyFontsGui {
@@ -4551,384 +5080,10 @@ impl eframe::App for SyncMyFontsGui {
         } else if self.auto_sync_enabled {
             ui.ctx().request_repaint_after(Duration::from_secs(5));
         }
-        ui.horizontal(|ui| {
-            ui.heading("SyncMyFonts");
-            if ui.button("Refresh").clicked() {
-                self.refresh_status();
-            }
-        });
-        ui.label(&self.status);
-        ui.label(&self.saved_peer_summary);
-        ui.label(format!(
-            "Last result: {} · warnings: {}",
-            self.last_result, self.warning_count
-        ));
-        ui.horizontal(|ui| {
-            ui.label("Device Name");
-            ui.text_edit_singleline(&mut self.device_name_input);
-            if ui.button("Save Name").clicked() {
-                self.save_device_name();
-            }
-        });
         if let Some(action) = &self.current_action {
             ui.label(format!("{action} is still running..."));
         }
-
-        ui.separator();
-        ui.heading("First LAN Sync");
-        ui.label(self.setup_phase());
-        ui.label(format!(
-            "Recommended next action: {}",
-            self.setup_next_action()
-        ));
-        ui.label(self.role_card_text());
-        for line in self.lan_readiness_lines() {
-            ui.label(line);
-        }
-        ui.horizontal_wrapped(|ui| {
-            if ui.button("Copy Role Card").clicked() {
-                let role_card = self.role_card_text();
-                ui.ctx().copy_text(role_card.clone());
-                self.output = role_card;
-                self.next_step =
-                    "Role card copied. Use it to coordinate this computer with the other computer."
-                        .to_string();
-                self.last_result = format!(
-                    "Copy Role Card completed at {}",
-                    Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
-                );
-                self.warning_count = 0;
-                let _ = record_action("Copy Role Card", "success", 0, &self.next_step);
-            }
-            if ui.button("Copy Readiness").clicked() {
-                let readiness = self.lan_readiness_text();
-                ui.ctx().copy_text(readiness.clone());
-                self.output = readiness;
-                self.next_step =
-                    "LAN readiness copied. Paste it when checking setup on the other computer."
-                        .to_string();
-                self.last_result = format!(
-                    "Copy Readiness completed at {}",
-                    Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
-                );
-                self.warning_count = 0;
-                let _ = record_action("Copy Readiness", "success", 0, &self.next_step);
-            }
-            if ui.button("Copy Setup Packet").clicked() {
-                let packet = self.setup_packet_text();
-                ui.ctx().copy_text(packet.clone());
-                self.output = packet;
-                self.next_step =
-                    "Setup packet copied. Use it to coordinate this computer and the other LAN peer."
-                        .to_string();
-                self.last_result = format!(
-                    "Copy Setup Packet completed at {}",
-                    Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
-                );
-                self.warning_count = 0;
-                let _ = record_action("Copy Setup Packet", "success", 0, &self.next_step);
-            }
-        });
-        for step in self.first_run_steps() {
-            ui.label(step);
-        }
-
-        ui.separator();
-        ui.heading("Local Font Library");
-        ui.add_enabled_ui(!task_running, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                if ui.button("Scan Fonts").clicked() {
-                    self.scan_fonts();
-                }
-                if ui.button("Verify Managed Fonts").clicked() {
-                    self.verify_managed();
-                }
-                if ui.button("Repair Managed Fonts").clicked() {
-                    self.repair_managed();
-                }
-                if ui.button("Install Validation Font").clicked() {
-                    self.install_validation_font();
-                }
-                if ui.button("Diagnostics").clicked() {
-                    self.run_diagnostics();
-                }
-                if ui.button("Readiness Check").clicked() {
-                    self.run_doctor();
-                }
-                if ui.button("Validation Report").clicked() {
-                    self.run_validation_report();
-                }
-                if ui.button("Copy Validation Plan").clicked() {
-                    let checklist = validation_checklist_text();
-                    ui.ctx().copy_text(checklist.clone());
-                    self.next_step = "Validation plan copied. Use it on the Mac and Windows PC while proving both sync directions.".to_string();
-                    self.output = checklist;
-                    self.last_result = format!(
-                        "Copy Validation Plan completed at {}",
-                        Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
-                    );
-                    self.warning_count = 0;
-                    let _ = record_action(
-                        "Copy Validation Plan",
-                        "success",
-                        0,
-                        &self.next_step,
-                    );
-                }
-                if ui.button("Open Managed Folder").clicked() {
-                    self.open_managed_font_folder();
-                }
-                if ui.button("Open Logs").clicked() {
-                    self.open_logs_folder();
-                }
-                if ui.button("Open App Support").clicked() {
-                    self.open_app_support_folder();
-                }
-                ui.add_enabled_ui(self.saved_peer_sync_ready(), |ui| {
-                    if ui.button("Sync Saved Peers").clicked() {
-                        self.sync_saved_peers(false);
-                    }
-                    if ui.button("Dry Run Saved Peers").clicked() {
-                        self.sync_saved_peers(true);
-                    }
-                });
-                ui.add_enabled_ui(self.can_enable_saved_peer_automation(), |ui| {
-                    if ui.button("Enable Sign-In Sync").clicked() {
-                        self.install_startup_sync();
-                    }
-                });
-                if ui.button("Disable Sign-In Sync").clicked() {
-                    self.uninstall_startup_sync();
-                }
-                if ui.button("Install App Shortcuts").clicked() {
-                    self.install_app_shortcuts();
-                }
-            });
-            ui.horizontal(|ui| {
-                let mut changed = false;
-                let mut interval_changed = false;
-                ui.add_enabled_ui(self.can_change_auto_sync_preference(), |ui| {
-                    changed = ui
-                        .checkbox(&mut self.auto_sync_enabled, "Auto Sync Saved Peers")
-                        .changed();
-                    ui.label("Every");
-                    interval_changed = ui
-                        .add(
-                            eframe::egui::DragValue::new(&mut self.auto_sync_interval_minutes)
-                                .range(1..=1440)
-                                .speed(1.0),
-                        )
-                        .changed();
-                    ui.label("minutes while this app is open");
-                });
-                if changed || interval_changed {
-                    self.save_auto_sync_preferences();
-                }
-            });
-            if let Some(hint) = self.saved_peer_sync_hint() {
-                ui.label(hint);
-            }
-        });
-
-        ui.separator();
-        ui.heading("Saved LAN Peer");
-        ui.label(platform_manual_peer_fallback_guidance());
-        ui.horizontal(|ui| {
-            ui.label("Saved Peer");
-            eframe::egui::ComboBox::from_id_salt("saved-peer-selector")
-                .selected_text(if self.selected_peer_name.is_empty() {
-                    "No saved peers"
-                } else {
-                    self.selected_peer_name.as_str()
-                })
-                .show_ui(ui, |ui| {
-                    for peer_name in &self.saved_peer_names {
-                        ui.selectable_value(
-                            &mut self.selected_peer_name,
-                            peer_name.clone(),
-                            peer_name,
-                        );
-                    }
-                });
-            ui.add_enabled_ui(self.can_load_saved_peer(), |ui| {
-                if ui.button("Load Saved Peer").clicked() {
-                    self.load_selected_saved_peer_into_form();
-                }
-            });
-        });
-        ui.horizontal(|ui| {
-            ui.label("Name");
-            ui.text_edit_singleline(&mut self.peer_name);
-            ui.label("URL");
-            ui.text_edit_singleline(&mut self.peer_url);
-        });
-        ui.horizontal(|ui| {
-            ui.label(peer_key_label());
-            ui.add(eframe::egui::TextEdit::singleline(&mut self.peer_key).password(true));
-            ui.label("Pairing Code");
-            ui.text_edit_singleline(&mut self.pairing_code);
-        });
-        ui.label(self.peer_action_hint());
-        ui.label(self.peer_pairing_detail());
-        ui.add_enabled_ui(!task_running, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.add_enabled_ui(self.can_find_lan_peers(), |ui| {
-                    if ui.button("Find LAN Peers").clicked() {
-                        self.discover_peers();
-                    }
-                });
-                ui.add_enabled_ui(self.can_pair_peer(), |ui| {
-                    if ui.button("Pair Peer").clicked() {
-                        self.pair_peer();
-                    }
-                });
-                ui.add_enabled_ui(self.can_test_peer(), |ui| {
-                    if ui.button("Test Connection").clicked() {
-                        self.test_peer();
-                    }
-                });
-                ui.add_enabled_ui(self.can_preview_peer(), |ui| {
-                    if ui.button("Preview From Peer").clicked() {
-                        self.sync_peer(true);
-                    }
-                });
-                ui.add_enabled_ui(self.can_get_missing_fonts_from_peer(), |ui| {
-                    if ui.button("Get Missing Fonts From Peer").clicked() {
-                        self.sync_peer(false);
-                    }
-                });
-                ui.add_enabled_ui(self.can_save_peer(), |ui| {
-                    if ui.button("Save Peer").clicked() {
-                        self.save_peer();
-                    }
-                });
-                ui.add_enabled_ui(self.can_forget_peer(), |ui| {
-                    if ui.button(self.forget_peer_button_label()).clicked() {
-                        self.forget_peer();
-                    }
-                });
-            });
-        });
-
-        ui.separator();
-        ui.heading("Share This Device");
-        if self.share.is_some() {
-            ui.label(platform_lan_sharing_guidance());
-        } else {
-            ui.label(platform_pre_share_guidance());
-        }
-        ui.horizontal(|ui| {
-            ui.label("Listen Address");
-            ui.text_edit_singleline(&mut self.listen);
-            ui.label(share_key_label());
-            ui.add(eframe::egui::TextEdit::singleline(&mut self.share_key).password(true));
-        });
-        ui.label(self.listen_address_detail());
-        ui.add_enabled_ui(!task_running, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.add_enabled_ui(self.can_start_sharing(), |ui| {
-                    if ui.button("Share Fonts On This Network").clicked() {
-                        self.start_share();
-                    }
-                });
-                ui.add_enabled_ui(self.can_stop_sharing(), |ui| {
-                    if ui.button("Stop Sharing").clicked() {
-                        self.stop_share();
-                    }
-                });
-            });
-        });
-        if self.share_urls.is_empty() {
-            ui.label("Sharing is off. No port forwarding is required.");
-        } else {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(format!(
-                    "Use this URL from another computer: {}",
-                    self.share_urls.join(" or ")
-                ));
-                if ui.button("Copy URL").clicked() {
-                    if let Some(url) = self.share_urls.first() {
-                        ui.ctx().copy_text(url.clone());
-                        let copied_url = url.clone();
-                        self.record_copy_url_receipt(&copied_url);
-                    }
-                }
-                if let Some(code) = &self.last_pairing_code {
-                    let remaining_seconds = self
-                        .last_pairing_started_at
-                        .and_then(|started_at| {
-                            pairing_code_remaining_seconds(started_at, Instant::now())
-                        })
-                        .or(self.last_pairing_expires_seconds);
-                    ui.label(format!(
-                        "Pairing code: {code} ({})",
-                        pairing_code_validity_text(remaining_seconds)
-                    ));
-                    if ui.button("Copy Code").clicked() {
-                        ui.ctx().copy_text(code.clone());
-                        let validity_text = pairing_code_validity_text(remaining_seconds);
-                        self.record_copy_pairing_code_receipt(&validity_text);
-                    }
-                }
-                if ui.button("Copy Pairing Instructions").clicked() {
-                    if let Some(invitation) = self.share_invitation_text() {
-                        ui.ctx().copy_text(invitation.clone());
-                        self.output = invitation;
-                        self.next_step = pairing_instructions_copied_next_step().to_string();
-                        self.last_result = format!(
-                            "Copy Pairing Instructions completed at {}",
-                            Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
-                        );
-                        self.warning_count = 0;
-                        let _ = record_action(
-                            "Copy Pairing Instructions",
-                            "success",
-                            0,
-                            &self.next_step,
-                        );
-                    }
-                }
-            });
-        }
-
-        ui.separator();
-        ui.heading("Result");
-        ui.label(&self.next_step);
-        ui.horizontal_wrapped(|ui| {
-            if ui.button("Copy Result").clicked() {
-                ui.ctx().copy_text(self.output.clone());
-                self.next_step = "Result copied.".to_string();
-            }
-            let has_result_review = self.last_result_review.is_some();
-            ui.add_enabled_ui(has_result_review, |ui| {
-                if ui.button("Copy Review").clicked() {
-                    if let Some(review) = &self.last_result_review {
-                        ui.ctx().copy_text(review.clone());
-                        self.next_step =
-                            "Readable install review copied. Use it to check skipped fonts."
-                                .to_string();
-                    }
-                }
-            });
-            let has_support_report = self.last_support_report.is_some();
-            ui.add_enabled_ui(has_support_report, |ui| {
-                if ui.button("Copy Support Report").clicked() {
-                    if let Some(report) = &self.last_support_report {
-                        ui.ctx().copy_text(report.clone());
-                        self.next_step = "Redacted support report copied.".to_string();
-                    }
-                }
-            });
-        });
-        eframe::egui::ScrollArea::vertical()
-            .max_height(260.0)
-            .show(ui, |ui| {
-                ui.add(
-                    eframe::egui::TextEdit::multiline(&mut self.output)
-                        .desired_width(f32::INFINITY)
-                        .desired_rows(14),
-                );
-            });
+        self.render_app_shell(ui, task_running);
     }
 }
 
