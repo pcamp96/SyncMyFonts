@@ -174,6 +174,7 @@ svg {
   background: transparent;
   text-align: left;
   cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .nav-glyph {
@@ -351,6 +352,7 @@ h2 {
   border: 1px solid transparent;
   font-weight: 700;
   cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, transform 80ms ease;
 }
 
 .icon-button {
@@ -363,6 +365,7 @@ h2 {
   color: var(--muted);
   background: var(--surface);
   cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, transform 80ms ease;
 }
 
 .icon-button:hover {
@@ -429,6 +432,11 @@ h2 {
 .button.secondary:hover {
   border-color: var(--line-strong);
   background: #f8faff;
+}
+
+.button:active,
+.icon-button:active {
+  transform: translateY(1px);
 }
 
 .sync-board {
@@ -968,6 +976,7 @@ h2 {
   box-shadow: none;
   text-align: left;
   cursor: pointer;
+  transition: background-color 120ms ease;
 }
 
 .support-row:last-child {
