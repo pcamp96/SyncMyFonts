@@ -274,6 +274,24 @@ jobs:
           SYNCMYFONTS_CONFIG_DIR="$target_config" \
           SYNCMYFONTS_LOG_DIR="$smoke_root/target-logs" \
           SYNCMYFONTS_USER_FONT_DIR="$target_fonts" \
+          "$package_dir/bin/syncmyfonts-agent" lan-peers > "$smoke_root/lan-peers.json"
+          python3 - "$smoke_root/lan-peers.json" "$target_config/config.json" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], "r", encoding="utf-8") as handle:
+              peers = json.load(handle)
+          with open(sys.argv[2], "r", encoding="utf-8") as handle:
+              config = json.load(handle)
+          assert peers[0]["has_lan_key"] is True
+          assert peers[0]["key_storage"] == "native-credential-store"
+          saved_peer = config["peers"][0]
+          assert "lan_key_secret_id" in saved_peer
+          assert saved_peer.get("lan_key") in (None, "")
+          PY
+          SYNCMYFONTS_CONFIG_DIR="$target_config" \
+          SYNCMYFONTS_LOG_DIR="$smoke_root/target-logs" \
+          SYNCMYFONTS_USER_FONT_DIR="$target_fonts" \
           "$package_dir/bin/syncmyfonts-agent" lan-sync-all > "$smoke_root/lan-sync.json"
           grep -q '"ok": true' "$smoke_root/lan-sync.json"
           grep -q '"installed"' "$smoke_root/lan-sync.json"
@@ -496,6 +514,13 @@ jobs:
             & $agent lan-pair --name "Packaged Peer" --url "http://127.0.0.1:$smokePort" --pairing-code "12345678" | Tee-Object -FilePath (Join-Path $smokeRoot "lan-pair.json")
             $lanPair = Get-Content (Join-Path $smokeRoot "lan-pair.json") -Raw
             if (-not $lanPair.Contains('"has_lan_key"')) { throw "Packaged LAN pair did not report saved key state" }
+            & $agent lan-peers | Tee-Object -FilePath (Join-Path $smokeRoot "lan-peers.json")
+            $lanPeers = Get-Content (Join-Path $smokeRoot "lan-peers.json") -Raw | ConvertFrom-Json
+            $savedConfig = Get-Content (Join-Path $targetConfig "config.json") -Raw | ConvertFrom-Json
+            if ($lanPeers[0].has_lan_key -ne $true) { throw "Packaged LAN peer did not resolve a saved key" }
+            if ($lanPeers[0].key_storage -ne "native-credential-store") { throw "Packaged LAN peer did not use Windows Credential Manager storage" }
+            if (-not $savedConfig.peers[0].lan_key_secret_id) { throw "Saved peer config did not include a native secret reference" }
+            if ($savedConfig.peers[0].lan_key) { throw "Saved peer config should not include raw LAN key when native storage succeeds" }
             & $agent lan-sync-all | Tee-Object -FilePath (Join-Path $smokeRoot "lan-sync.json")
             $lanSync = Get-Content (Join-Path $smokeRoot "lan-sync.json") -Raw
             if (-not $lanSync.Contains('"ok": true')) { throw "Packaged LAN sync did not report success" }
