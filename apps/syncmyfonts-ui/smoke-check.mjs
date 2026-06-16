@@ -48,7 +48,8 @@ for (const viewport of viewports) {
         await page.click('[data-step="share"]');
         await page.locator('[data-step="share"]').evaluate((element) => element.blur());
       }
-      await page.mouse.move(4, viewport.height - 4);
+      await page.mouse.move(viewport.width - 8, viewport.height - 8);
+      await page.waitForTimeout(180);
       await page.screenshot({
         path: new URL(`ui-${viewport.name}-${platform}-${view}.png`, outputDir).pathname,
         fullPage: false,

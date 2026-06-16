@@ -40,10 +40,16 @@ body[data-platform="windows"] {
   --radius: 4px;
   --canvas: #f8f9fb;
   --surface-low: #f1f3f7;
+  --line: #dfe3ea;
+  --blue: #005fb8;
+  --blue-dark: #004a91;
+  --blue-soft: #e7f1ff;
   font-family: "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
 }
 
 body[data-platform="macos"] {
+  --canvas: #f6f7fa;
+  --surface-low: #f1f3f7;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -86,6 +92,15 @@ svg {
   padding: 26px 14px 18px;
   border-right: 1px solid var(--line);
   background: #f3f5f8;
+}
+
+body[data-platform="macos"] .sidebar {
+  background: rgba(242, 244, 248, 0.88);
+  backdrop-filter: saturate(1.35) blur(18px);
+}
+
+body[data-platform="windows"] .sidebar {
+  background: #f5f6f8;
 }
 
 .brand {
@@ -185,7 +200,7 @@ svg {
 }
 
 .nav-item:hover {
-  background: #edf1f7;
+  background: rgba(95, 107, 127, 0.07);
 }
 
 .nav-item.active {
@@ -207,6 +222,43 @@ svg {
 
 .nav-item.active .nav-glyph {
   color: var(--blue-dark);
+}
+
+body[data-platform="windows"] .nav-item {
+  border-radius: 3px;
+}
+
+body[data-platform="windows"] .nav-item.active {
+  color: var(--ink);
+  background: #eaf3ff;
+}
+
+body[data-platform="windows"] .nav-item.active::before {
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--blue);
+}
+
+body[data-platform="macos"] .nav-item.active {
+  background: rgba(0, 102, 255, 0.11);
+}
+
+.nav-item.active:hover {
+  background: var(--blue-soft);
+}
+
+body[data-platform="macos"] .nav-item.active:hover {
+  background: rgba(0, 102, 255, 0.11);
+}
+
+body[data-platform="windows"] .nav-item:hover {
+  background: rgba(95, 107, 127, 0.05);
+}
+
+body[data-platform="windows"] .nav-item.active:hover {
+  background: #eaf3ff;
 }
 
 .safety-note {
@@ -467,6 +519,18 @@ h2 {
   background: #f8faff;
 }
 
+body[data-platform="windows"] .button,
+body[data-platform="windows"] .icon-button,
+body[data-platform="windows"] .status-pill,
+body[data-platform="windows"] .warning-pill,
+body[data-platform="windows"] .input-row input {
+  border-radius: 4px;
+}
+
+body[data-platform="macos"] .button.primary {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
 .button:active,
 .icon-button:active {
   transform: translateY(1px);
@@ -482,6 +546,22 @@ h2 {
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow);
+}
+
+body[data-platform="macos"] .sync-board,
+body[data-platform="macos"] .panel-list,
+body[data-platform="macos"] .inspector-card,
+body[data-platform="macos"] .settings-list,
+body[data-platform="macos"] .platform-preview {
+  background: rgba(255, 255, 255, 0.84);
+}
+
+body[data-platform="windows"] .sync-board,
+body[data-platform="windows"] .panel-list,
+body[data-platform="windows"] .inspector-card,
+body[data-platform="windows"] .settings-list,
+body[data-platform="windows"] .platform-preview {
+  box-shadow: none;
 }
 
 .device-card,
@@ -1034,6 +1114,32 @@ h2 {
 
 .toggle.on::after {
   left: 24px;
+}
+
+body[data-platform="windows"] .toggle {
+  width: 44px;
+  height: 24px;
+  border: 1px solid #aab4c3;
+  background: #eef1f6;
+}
+
+body[data-platform="windows"] .toggle::after {
+  top: 4px;
+  left: 5px;
+  width: 14px;
+  height: 14px;
+  background: #5f6b7f;
+  box-shadow: none;
+}
+
+body[data-platform="windows"] .toggle.on {
+  border-color: var(--blue);
+  background: var(--blue);
+}
+
+body[data-platform="windows"] .toggle.on::after {
+  left: 23px;
+  background: white;
 }
 
 .support-row {
