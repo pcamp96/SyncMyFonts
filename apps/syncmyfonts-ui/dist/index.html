@@ -48,6 +48,16 @@
         <path d="M3.8 7.5h6l1.7 2h8.7v7.8a2 2 0 0 1-2 2H5.8a2 2 0 0 1-2-2Z" />
         <path d="M3.8 7.5V6.8a2 2 0 0 1 2-2h3.5l1.8 2.7" />
       </symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24">
+        <path d="m5 12.5 4.1 4.1L19 6.8" />
+      </symbol>
+      <symbol id="icon-report" viewBox="0 0 24 24">
+        <path d="M7 3.8h7l3 3v13.4H7z" />
+        <path d="M14 3.8v3h3" />
+        <path d="M9.5 11h5" />
+        <path d="M9.5 14h5" />
+        <path d="M9.5 17h3" />
+      </symbol>
     </svg>
     <div class="app-shell">
       <aside class="sidebar" aria-label="Primary">
@@ -91,10 +101,7 @@
             <p class="lede" id="viewLede">Move licensed, non-system fonts between trusted computers on this network.</p>
           </div>
           <div class="topbar-actions">
-            <div class="platform-switch" aria-label="Platform preview">
-              <button class="platform-option active" type="button" data-platform-option="macos">macOS</button>
-              <button class="platform-option" type="button" data-platform-option="windows">Windows</button>
-            </div>
+            <span class="platform-pill" id="platformBadge">macOS</span>
             <span class="warning-pill"><span id="warningCount">0</span> warnings</span>
             <button class="icon-button" id="refreshButton" type="button" title="Refresh status" aria-label="Refresh status">
               <svg><use href="#icon-refresh"></use></svg>
@@ -257,7 +264,7 @@
                 <span>Open SyncMyFonts on another computer and choose Share fonts on this network.</span>
               </div>
               <div class="peer-list" id="peerList" hidden></div>
-              <label class="input-row">
+              <label class="input-row native-field">
                 <span>Manual LAN URL</span>
                 <input type="text" placeholder="http://192.168.1.42:7370" />
               </label>
@@ -266,6 +273,11 @@
               <p class="eyebrow">Pairing</p>
               <h2>No port forwarding</h2>
               <p>Local sync is designed for trusted LANs. A manual URL remains available when network discovery is blocked.</p>
+              <div class="check-list">
+                <span>Same trusted LAN</span>
+                <span>Private network only</span>
+                <span>Manual URL fallback</span>
+              </div>
               <button class="button secondary" type="button">Copy setup packet</button>
             </aside>
           </div>
@@ -275,34 +287,34 @@
           <div class="platform-preview">
             <div>
               <p class="eyebrow">Platform behavior</p>
-              <h2 id="platformTitle">macOS preview</h2>
-              <p id="platformCopy">Use this preview to keep copy and layout honest for macOS and Windows packaging.</p>
+              <h2 id="platformTitle">macOS</h2>
+              <p id="platformCopy">Uses this Mac account's user font folders and keeps system font locations excluded.</p>
             </div>
-            <span class="badge neutral" id="platformBadge">macOS</span>
+            <span class="badge neutral" id="platformPanelBadge">macOS</span>
           </div>
-          <div class="settings-grid">
-            <article class="setting-card">
+          <div class="settings-list">
+            <article class="setting-row">
               <div>
                 <h2>Local sync first</h2>
                 <p id="listenAddress">Prefer same-LAN peer transfer before any external sync provider.</p>
               </div>
               <span class="toggle on" aria-hidden="true"></span>
             </article>
-            <article class="setting-card">
+            <article class="setting-row">
               <div>
                 <h2>Exclude system fonts</h2>
                 <p id="systemFontPolicy">Keep Windows and macOS system fonts out of every transfer.</p>
               </div>
               <span class="toggle on" aria-hidden="true"></span>
             </article>
-            <article class="setting-card">
+            <article class="setting-row">
               <div>
                 <h2>Saved-peer sync</h2>
                 <p id="autoSyncStatus">Loading saved-peer sync preference...</p>
               </div>
               <span class="toggle" id="autoSyncToggle" aria-hidden="true"></span>
             </article>
-            <article class="setting-card">
+            <article class="setting-row">
               <div>
                 <h2>Advanced diagnostics</h2>
                 <p>Open logs, readiness checks, and validation reports from Support.</p>
@@ -313,19 +325,46 @@
         </section>
 
         <section class="view-panel" id="view-support" data-title="Support" data-eyebrow="Diagnostics" data-lede="Keep troubleshooting available without letting it dominate the everyday sync workflow.">
-          <div class="support-grid">
-            <button class="support-action" type="button">
-              <strong>Readiness check</strong>
-              <span id="configPath">Confirm folders, permissions, and LAN state.</span>
-            </button>
-            <button class="support-action" type="button">
-              <strong>Validation report</strong>
-              <span>Summarize what the app can safely sync.</span>
-            </button>
-            <button class="support-action" type="button">
-              <strong>Open logs</strong>
-              <span id="logDir">Collect details for debugging without cluttering Sync.</span>
-            </button>
+          <div class="support-layout">
+            <section class="panel-list">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Tools</p>
+                  <h2>Diagnostics</h2>
+                </div>
+              </div>
+              <button class="support-row" type="button">
+                <svg class="row-icon"><use href="#icon-check"></use></svg>
+                <span>
+                  <strong>Readiness check</strong>
+                  <small id="configPath">Confirm folders, permissions, and LAN state.</small>
+                </span>
+              </button>
+              <button class="support-row" type="button">
+                <svg class="row-icon"><use href="#icon-report"></use></svg>
+                <span>
+                  <strong>Validation report</strong>
+                  <small>Summarize what the app can safely sync.</small>
+                </span>
+              </button>
+              <button class="support-row" type="button">
+                <svg class="row-icon"><use href="#icon-folder"></use></svg>
+                <span>
+                  <strong>Open logs</strong>
+                  <small id="logDir">Collect details for debugging without cluttering Sync.</small>
+                </span>
+              </button>
+            </section>
+            <aside class="inspector-card">
+              <p class="eyebrow">Support bundle</p>
+              <h2>Keep evidence tidy</h2>
+              <p>Use these checks before and after a two-computer sync test so troubleshooting stays separate from everyday syncing.</p>
+              <div class="check-list">
+                <span>Readiness before syncing</span>
+                <span>Validation report after install</span>
+                <span>Logs stay in app support</span>
+              </div>
+            </aside>
           </div>
         </section>
       </main>

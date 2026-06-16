@@ -30,7 +30,13 @@ for (const viewport of viewports) {
   results[viewport.name] = {};
 
   for (const platform of platforms) {
-    await page.click(`[data-platform-option="${platform}"]`);
+    await page.evaluate(async (platformName) => {
+      if (typeof window.setPlatform === "function") {
+        window.setPlatform(platformName);
+      } else {
+        document.body.dataset.platform = platformName;
+      }
+    }, platform);
     results[viewport.name][platform] = {};
 
     for (const view of views) {

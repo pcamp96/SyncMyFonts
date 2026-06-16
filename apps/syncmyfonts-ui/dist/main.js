@@ -22,15 +22,15 @@ const stepContent = {
 const platformContent = {
   macos: {
     label: "macOS",
-    title: "macOS preview",
+    title: "macOS",
     hint: "macOS user font folders are eligible. System font folders stay excluded.",
-    copy: "Use this preview to keep copy and layout honest for macOS packaging."
+    copy: "Uses this Mac account's user font folders and keeps system font locations excluded."
   },
   windows: {
     label: "Windows",
-    title: "Windows preview",
+    title: "Windows",
     hint: "Windows per-user font installs are eligible. Windows system fonts stay excluded.",
-    copy: "Use this preview to keep copy and layout honest for Windows packaging."
+    copy: "Uses per-user font installs and keeps Windows system font locations excluded."
   }
 };
 
@@ -125,12 +125,10 @@ function updateStep(step) {
 function setPlatform(platformName) {
   const content = platformContent[platformName] ?? platformContent.macos;
   document.body.dataset.platform = platformName;
-  document.querySelectorAll(".platform-option").forEach((button) => {
-    button.classList.toggle("active", button.dataset.platformOption === platformName);
-  });
   setText("platformTitle", content.title);
   setText("platformCopy", content.copy);
   setText("platformBadge", content.label);
+  setText("platformPanelBadge", content.label);
   setText("platformHint", content.hint);
 }
 
@@ -145,6 +143,7 @@ async function refreshSnapshot() {
     setText("stripDeviceName", snapshot.device_name);
     setText("localDeviceTitle", snapshot.device_name);
     setText("platformName", snapshot.platform);
+    setPlatform(snapshot.platform === "windows" ? "windows" : "macos");
     setText("sharingState", snapshot.sharing ? "sharing on" : "sharing off");
     setText("localShareStatus", snapshot.sharing ? "Sharing is on" : "Sharing is off");
     setText("peerCount", formatPeerCount(snapshot.saved_peers, snapshot.paired_peers));
@@ -183,10 +182,6 @@ document.querySelectorAll(".flow-step").forEach((button) => {
 
 document.querySelectorAll(".nav-item").forEach((button) => {
   button.addEventListener("click", () => setView(button.dataset.view));
-});
-
-document.querySelectorAll(".platform-option").forEach((button) => {
-  button.addEventListener("click", () => setPlatform(button.dataset.platformOption));
 });
 
 document.getElementById("refreshButton")?.addEventListener("click", refreshSnapshot);
