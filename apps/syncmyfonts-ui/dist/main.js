@@ -74,6 +74,14 @@ function formatReadiness(warnings) {
   return Number(warnings) > 0 ? "Needs attention" : "Ready";
 }
 
+function formatWarningSummary(warnings) {
+  const count = Number(warnings);
+  if (count === 0) {
+    return "No issues";
+  }
+  return count === 1 ? "1 issue" : `${count} issues`;
+}
+
 function renderPeerList(peers = []) {
   const list = document.getElementById("peerList");
   const empty = document.getElementById("peerEmptyState");
@@ -157,7 +165,7 @@ async function refreshSnapshot() {
     setText("peerCount", formatPeerCount(snapshot.saved_peers, snapshot.paired_peers));
     setText("stripSharingState", formatSharingState(snapshot.sharing));
     setText("stripPeerCount", String(snapshot.saved_peers));
-    setText("warningCount", snapshot.warnings);
+    setText("warningSummary", formatWarningSummary(snapshot.warnings));
     setText("appReadiness", formatReadiness(snapshot.warnings));
     setText("userFontDir", snapshot.user_font_dir);
     setText("managedFontDir", snapshot.managed_font_dir);
