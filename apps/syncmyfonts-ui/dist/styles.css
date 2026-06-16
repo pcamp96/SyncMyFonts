@@ -30,7 +30,7 @@ body {
 }
 
 body {
-  min-width: 960px;
+  min-width: 760px;
   overflow: hidden;
   color: var(--ink);
   background: var(--canvas);

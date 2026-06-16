@@ -49,6 +49,8 @@ for (const viewport of viewports) {
       });
       results[viewport.name][platform][view] = await page.evaluate(() => {
         const overflowing = [];
+        const body = document.body;
+        const appShell = document.querySelector(".app-shell");
         document.querySelectorAll("*").forEach((element) => {
           const rect = element.getBoundingClientRect();
           if (rect.right > window.innerWidth + 1 || rect.left < -1 || rect.top < -1) {
@@ -74,9 +76,16 @@ for (const viewport of viewports) {
           activeView: document.querySelector(".nav-item.active")?.dataset.view,
           scrollWidth: document.documentElement.scrollWidth,
           clientWidth: document.documentElement.clientWidth,
+          bodyScrollWidth: body.scrollWidth,
+          bodyClientWidth: body.clientWidth,
+          appShellScrollWidth: appShell?.scrollWidth ?? 0,
+          appShellClientWidth: appShell?.clientWidth ?? 0,
           scrollHeight: document.documentElement.scrollHeight,
           clientHeight: document.documentElement.clientHeight,
-          horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+          horizontalOverflow:
+            document.documentElement.scrollWidth > document.documentElement.clientWidth + 1 ||
+            body.scrollWidth > body.clientWidth + 1 ||
+            (appShell ? appShell.scrollWidth > appShell.clientWidth + 1 : false),
           overflowing,
         };
       });
