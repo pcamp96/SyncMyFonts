@@ -17,6 +17,7 @@ const viewports = [
   { name: "compact", width: 980, height: 700 },
   { name: "narrow", width: 760, height: 700 },
 ];
+const workflowSteps = ["share", "pair", "preview", "install"];
 
 const browser = await chromium.launch(chromePath ? { executablePath: chromePath, headless: true } : { headless: true });
 
@@ -42,6 +43,9 @@ for (const viewport of viewports) {
 
     for (const view of views) {
       await page.click(`[data-view="${view}"]`);
+      if (view === "sync") {
+        await page.click('[data-step="share"]');
+      }
       await page.mouse.move(4, viewport.height - 4);
       await page.screenshot({
         path: new URL(`ui-${viewport.name}-${platform}-${view}.png`, outputDir).pathname,
@@ -51,6 +55,7 @@ for (const viewport of viewports) {
         const overflowing = [];
         const body = document.body;
         const appShell = document.querySelector(".app-shell");
+        const activeSyncFlow = document.querySelector(".view-panel.active .sync-flow");
         document.querySelectorAll("*").forEach((element) => {
           const rect = element.getBoundingClientRect();
           if (rect.right > window.innerWidth + 1 || rect.left < -1 || rect.top < -1) {
@@ -74,6 +79,9 @@ for (const viewport of viewports) {
           activeNavCount: document.querySelectorAll(".nav-item.active").length,
           activePanelCount: document.querySelectorAll(".view-panel.active").length,
           activeView: document.querySelector(".nav-item.active")?.dataset.view,
+          activeStepCount: activeSyncFlow?.querySelectorAll(".flow-step.active").length ?? 0,
+          activeStep: activeSyncFlow?.querySelector(".flow-step.active")?.dataset.step ?? "",
+          flowProgress: activeSyncFlow ? getComputedStyle(activeSyncFlow).getPropertyValue("--flow-progress").trim() : "",
           scrollWidth: document.documentElement.scrollWidth,
           clientWidth: document.documentElement.clientWidth,
           bodyScrollWidth: body.scrollWidth,
@@ -89,6 +97,23 @@ for (const viewport of viewports) {
           overflowing,
         };
       });
+
+      if (view === "sync") {
+        results[viewport.name][platform][view].workflowSteps = {};
+        for (const step of workflowSteps) {
+          await page.click(`[data-step="${step}"]`);
+          results[viewport.name][platform][view].workflowSteps[step] = await page.evaluate(() => {
+            const syncFlow = document.querySelector(".sync-flow");
+            return {
+              activeStepCount: document.querySelectorAll(".flow-step.active").length,
+              activeStep: document.querySelector(".flow-step.active")?.dataset.step,
+              flowProgress: syncFlow ? getComputedStyle(syncFlow).getPropertyValue("--flow-progress").trim() : "",
+              stageTitle: document.getElementById("flowStageTitle")?.textContent,
+              detailTitle: document.getElementById("stepTitle")?.textContent,
+            };
+          });
+        }
+      }
     }
   }
 
@@ -106,6 +131,16 @@ for (const [viewportName, viewportResult] of Object.entries(results)) {
       }
       if (result.activeNavCount !== 1 || result.activePanelCount !== 1 || result.activeView !== viewName) {
         failures.push(`${viewportName}/${platformName}/${viewName}:active-state`);
+      }
+      if (viewName === "sync") {
+        for (const [stepName, stepResult] of Object.entries(result.workflowSteps ?? {})) {
+          if (stepResult.activeStepCount !== 1 || stepResult.activeStep !== stepName) {
+            failures.push(`${viewportName}/${platformName}/${viewName}:${stepName}:workflow-state`);
+          }
+          if (!stepResult.flowProgress || stepResult.stageTitle !== stepResult.detailTitle) {
+            failures.push(`${viewportName}/${platformName}/${viewName}:${stepName}:workflow-copy`);
+          }
+        }
       }
     }
   }

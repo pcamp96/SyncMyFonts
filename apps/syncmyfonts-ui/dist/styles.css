@@ -497,6 +497,7 @@ h2 {
 }
 
 .sync-flow {
+  --flow-progress: 14%;
   position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -547,9 +548,10 @@ h2 {
   content: "";
   position: absolute;
   inset: 0 auto 0 0;
-  width: 14%;
+  width: var(--flow-progress);
   border-radius: 999px;
   background: var(--blue);
+  transition: width 160ms ease;
 }
 
 .flow-step {

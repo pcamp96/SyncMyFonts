@@ -2,18 +2,22 @@ const invoke = window.__TAURI__?.core?.invoke;
 
 const stepContent = {
   share: {
+    progress: "14%",
     title: "Share fonts from this computer",
     copy: "Turn on LAN sharing on the computer that already has the font. SyncMyFonts will expose only user-installed fonts."
   },
   pair: {
+    progress: "38%",
     title: "Pair with a nearby computer",
     copy: "Find a SyncMyFonts peer on the same trusted LAN, or paste the peer URL manually if discovery is blocked."
   },
   preview: {
+    progress: "64%",
     title: "Preview before installing",
     copy: "Compare the missing fonts first. Nothing installs until you review the list and approve the transfer."
   },
   install: {
+    progress: "100%",
     title: "Install missing fonts",
     copy: "Install the selected user fonts into this account, then reopen design apps if they do not appear immediately."
   }
@@ -121,6 +125,7 @@ function updateStep(step) {
   setText("stepTitle", content.title);
   setText("stepCopy", content.copy);
   setText("flowStageTitle", content.title);
+  document.querySelector(".sync-flow")?.style.setProperty("--flow-progress", content.progress);
   document.querySelectorAll(".flow-step").forEach((button) => {
     button.classList.toggle("active", button.dataset.step === step);
   });
