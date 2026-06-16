@@ -520,6 +520,18 @@ h2 {
   background: #f8faff;
 }
 
+.button:disabled {
+  color: #8792a4;
+  border-color: var(--line);
+  background: #f3f5f8;
+  cursor: default;
+}
+
+.button:disabled:hover {
+  border-color: var(--line);
+  background: #f3f5f8;
+}
+
 body[data-platform="windows"] .button,
 body[data-platform="windows"] .icon-button,
 body[data-platform="windows"] .status-pill,
@@ -535,6 +547,10 @@ body[data-platform="macos"] .button.primary {
 .button:active,
 .icon-button:active {
   transform: translateY(1px);
+}
+
+.button:disabled:active {
+  transform: none;
 }
 
 .sync-board {
@@ -753,6 +769,14 @@ body[data-platform="windows"] .platform-preview {
   grid-column: 2;
   align-self: end;
   justify-self: start;
+}
+
+.role-card:has(.button:disabled) {
+  background: rgba(251, 252, 255, 0.58);
+}
+
+.role-card:has(.button:disabled) .role-icon {
+  color: #8090a8;
 }
 
 .role-card.selected {
