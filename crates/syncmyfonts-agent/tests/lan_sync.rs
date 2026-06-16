@@ -642,7 +642,8 @@ fn apply_isolated_env(command: &mut Command, font_dir: &Path, config_dir: &Path)
     command
         .env("SYNCMYFONTS_USER_FONT_DIR", font_dir)
         .env("SYNCMYFONTS_CONFIG_DIR", config_dir)
-        .env("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION", "1");
+        .env("SYNCMYFONTS_SKIP_PLATFORM_FONT_REGISTRATION", "1")
+        .env("SYNCMYFONTS_DISABLE_SECRET_STORE", "1");
 }
 
 fn add_saved_peer(bin: &Path, font_dir: &Path, config_dir: &Path, name: &str, url: &str) {

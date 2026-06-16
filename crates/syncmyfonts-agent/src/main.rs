@@ -13,6 +13,7 @@ use std::{
 const LAN_DISCOVERY_REQUEST: &[u8] = b"SYNCMYFONTS_DISCOVER_V1";
 const LAN_DISCOVERY_TIMEOUT: Duration = Duration::from_millis(1400);
 const PAIRING_CODE_TTL: Duration = Duration::from_secs(10 * 60);
+const LAN_KEY_SECRET_SERVICE: &str = "com.syncmyfonts.lan-peer";
 const VALIDATION_FONT_URL: &str =
     "https://raw.githubusercontent.com/google/fonts/main/ofl/basic/Basic-Regular.ttf";
 const VALIDATION_FONT_FILE_NAME: &str = "SyncMyFontsValidation-Basic-Regular.ttf";
@@ -701,6 +702,8 @@ struct ActionRecord {
 struct LanPeerConfig {
     name: String,
     url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    lan_key_secret_id: Option<String>,
     lan_key: Option<String>,
 }
 
@@ -1020,6 +1023,7 @@ struct RedactedPeer {
     name: String,
     url: String,
     has_lan_key: bool,
+    key_storage: &'static str,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -1313,20 +1317,145 @@ fn lan_sync(peer: &str, lan_key: Option<&str>, dry_run: bool) -> Result<LanSyncR
 fn add_lan_peer(name: String, url: String, lan_key: Option<String>) -> Result<LanPeerConfig> {
     let mut config = load_app_config()?;
     let url = normalize_peer_url(&url);
-    let peer = LanPeerConfig {
+    let existing_peer = config
+        .peers
+        .iter()
+        .find(|existing| {
+            existing.name == normalized_peer_name(&name, &url)
+                || normalize_peer_url(&existing.url) == url
+        })
+        .cloned();
+    let mut peer = LanPeerConfig {
         name: normalized_peer_name(&name, &url),
         url,
-        lan_key,
+        lan_key_secret_id: existing_peer
+            .as_ref()
+            .and_then(|existing| existing.lan_key_secret_id.clone()),
+        lan_key: existing_peer.as_ref().and_then(resolve_lan_peer_key),
     };
+    let provided_lan_key = lan_key.filter(|key| !key.trim().is_empty());
+    if let Some(lan_key) = provided_lan_key {
+        save_lan_peer_key(&mut peer, lan_key);
+    }
+    let stored_peer = peer_for_config(&peer);
+    let return_peer = peer.clone();
     if let Some(existing) = config.peers.iter_mut().find(|existing| {
-        existing.name == peer.name || normalize_peer_url(&existing.url) == peer.url
+        existing.name == stored_peer.name || normalize_peer_url(&existing.url) == stored_peer.url
     }) {
-        *existing = peer.clone();
+        *existing = stored_peer;
     } else {
-        config.peers.push(peer.clone());
+        config.peers.push(stored_peer);
     }
     save_app_config(&config)?;
-    Ok(peer)
+    Ok(return_peer)
+}
+
+fn peer_for_config(peer: &LanPeerConfig) -> LanPeerConfig {
+    LanPeerConfig {
+        name: peer.name.clone(),
+        url: peer.url.clone(),
+        lan_key_secret_id: peer.lan_key_secret_id.clone(),
+        lan_key: if peer.lan_key_secret_id.is_some() {
+            None
+        } else {
+            peer.lan_key.clone()
+        },
+    }
+}
+
+fn save_lan_peer_key(peer: &mut LanPeerConfig, lan_key: String) {
+    let secret_id = peer
+        .lan_key_secret_id
+        .clone()
+        .unwrap_or_else(|| format!("lan-peer-{}", Uuid::new_v4()));
+    if store_lan_key_secret(&secret_id, &lan_key).is_ok() {
+        peer.lan_key_secret_id = Some(secret_id);
+    } else {
+        peer.lan_key_secret_id = None;
+    }
+    peer.lan_key = Some(lan_key);
+}
+
+fn resolve_lan_peer_key(peer: &LanPeerConfig) -> Option<String> {
+    peer.lan_key.clone().or_else(|| {
+        peer.lan_key_secret_id
+            .as_deref()
+            .and_then(load_lan_key_secret)
+    })
+}
+
+fn lan_peer_has_key(peer: &LanPeerConfig) -> bool {
+    resolve_lan_peer_key(peer)
+        .as_deref()
+        .is_some_and(|key| !key.trim().is_empty())
+}
+
+fn store_lan_key_secret(secret_id: &str, lan_key: &str) -> Result<()> {
+    if !native_secret_store_enabled() {
+        bail!("native secret store is disabled");
+    }
+    native_lan_key_entry(secret_id)?
+        .set_password(lan_key)
+        .context("storing LAN token in native credential store")
+}
+
+fn load_lan_key_secret(secret_id: &str) -> Option<String> {
+    if !native_secret_store_enabled() {
+        return None;
+    }
+    native_lan_key_entry(secret_id)
+        .ok()
+        .and_then(|entry| entry.get_password().ok())
+        .filter(|key| !key.trim().is_empty())
+}
+
+fn delete_lan_key_secret(secret_id: &str) {
+    if !native_secret_store_enabled() {
+        return;
+    }
+    if let Ok(entry) = native_lan_key_entry(secret_id) {
+        let _ = entry.delete_credential();
+    }
+}
+
+fn native_secret_store_enabled() -> bool {
+    if std::env::var_os("SYNCMYFONTS_DISABLE_SECRET_STORE").is_some() {
+        return false;
+    }
+    #[cfg(any(test, not(any(target_os = "macos", target_os = "windows"))))]
+    {
+        false
+    }
+    #[cfg(all(not(test), any(target_os = "macos", target_os = "windows")))]
+    {
+        true
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn native_lan_key_entry(secret_id: &str) -> Result<keyring_core::Entry> {
+    apple_native_keyring_store::keychain::Cred::build(
+        apple_native_keyring_store::keychain::MacKeychainDomain::User,
+        LAN_KEY_SECRET_SERVICE,
+        secret_id,
+    )
+    .map_err(anyhow::Error::from)
+}
+
+#[cfg(target_os = "windows")]
+fn native_lan_key_entry(secret_id: &str) -> Result<keyring_core::Entry> {
+    use keyring_core::api::CredentialStoreApi;
+
+    let store = windows_native_keyring_store::Store::new()?;
+    let modifiers = std::collections::HashMap::from([("persistence", "Local")]);
+    store
+        .build(LAN_KEY_SECRET_SERVICE, secret_id, Some(&modifiers))
+        .map_err(anyhow::Error::from)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn native_lan_key_entry(_secret_id: &str) -> Result<keyring_core::Entry> {
+    bail!("native credential store is not supported on this platform")
 }
 
 fn normalized_peer_name(name: &str, normalized_url: &str) -> String {
@@ -1350,10 +1479,19 @@ fn normalized_peer_name(name: &str, normalized_url: &str) -> String {
 fn forget_lan_peer(name: &str) -> Result<ForgetPeerResponse> {
     let mut config = load_app_config()?;
     let before = config.peers.len();
+    let forgotten_secret_ids = config
+        .peers
+        .iter()
+        .filter(|peer| peer.name == name)
+        .filter_map(|peer| peer.lan_key_secret_id.clone())
+        .collect::<Vec<_>>();
     config.peers.retain(|peer| peer.name != name);
     let removed = config.peers.len() != before;
     if removed {
         save_app_config(&config)?;
+        for secret_id in forgotten_secret_ids {
+            delete_lan_key_secret(&secret_id);
+        }
     }
     Ok(ForgetPeerResponse {
         removed,
@@ -1387,7 +1525,8 @@ fn lan_sync_all(dry_run: bool) -> Result<LanSyncAllReport> {
     let config = load_app_config()?;
     let mut peers = Vec::new();
     for peer in config.peers {
-        match lan_sync(&peer.url, peer.lan_key.as_deref(), dry_run) {
+        let lan_key = resolve_lan_peer_key(&peer);
+        match lan_sync(&peer.url, lan_key.as_deref(), dry_run) {
             Ok(report) => peers.push(LanPeerSyncReport {
                 name: peer.name,
                 url: peer.url,
@@ -1669,18 +1808,24 @@ fn doctor() -> Result<DoctorReport> {
 
 fn secret_storage_check(config: &AppConfig) -> DoctorCheck {
     let saved_key_count = saved_lan_key_count(config);
+    let portable_key_count = portable_lan_key_count(config);
+    let native_key_count = native_lan_key_ref_count(config);
     if saved_key_count == 0 {
+        doctor_check("secret-storage", true, "No LAN tokens are saved yet.")
+    } else if portable_key_count == 0 {
         doctor_check(
             "secret-storage",
             true,
-            "No LAN tokens are saved in the portable config yet.",
+            format!(
+                "{native_key_count} saved LAN token(s) are referenced from the native credential store and redacted from diagnostics."
+            ),
         )
     } else {
         doctor_check(
             "secret-storage",
             true,
             format!(
-                "{saved_key_count} saved LAN token(s) are stored in the per-user SyncMyFonts config and redacted from diagnostics. Move them to Keychain or Windows Credential Manager before a public signed release."
+                "{portable_key_count} saved LAN token(s) are still stored in the per-user SyncMyFonts config fallback and redacted from diagnostics. {native_key_count} token(s) use native credential-store references."
             ),
         )
     }
@@ -1690,11 +1835,27 @@ fn saved_lan_key_count(config: &AppConfig) -> usize {
     config
         .peers
         .iter()
+        .filter(|peer| lan_peer_has_key(peer))
+        .count()
+}
+
+fn portable_lan_key_count(config: &AppConfig) -> usize {
+    config
+        .peers
+        .iter()
         .filter(|peer| {
             peer.lan_key
                 .as_deref()
                 .is_some_and(|key| !key.trim().is_empty())
         })
+        .count()
+}
+
+fn native_lan_key_ref_count(config: &AppConfig) -> usize {
+    config
+        .peers
+        .iter()
+        .filter(|peer| peer.lan_key_secret_id.is_some())
         .count()
 }
 
@@ -3053,14 +3214,14 @@ impl SyncMyFontsGui {
                     .find(|peer| !selected_name.is_empty() && peer.name == selected_name)
                     .or_else(|| config.peers.first());
                 if let Some(peer) = selected_peer {
-                    let has_saved_key = peer
-                        .lan_key
+                    let saved_key = resolve_lan_peer_key(peer);
+                    let has_saved_key = saved_key
                         .as_deref()
                         .is_some_and(|key| !key.trim().is_empty());
                     self.selected_peer_name = peer.name.clone();
                     self.peer_name = peer.name.clone();
                     self.peer_url = peer.url.clone();
-                    self.peer_key = peer.lan_key.clone().unwrap_or_default();
+                    self.peer_key = saved_key.unwrap_or_default();
                     self.discovered_peer_requires_lan_key = !has_saved_key;
                     self.last_previewed_peer = None;
                     self.next_step = if has_saved_key {
@@ -3876,7 +4037,7 @@ impl SyncMyFontsGui {
             "Secrets: no saved LAN tokens yet.".to_string()
         } else {
             format!(
-                "Secrets: {} saved LAN token(s) are redacted in reports but still stored in the per-user config.",
+                "Secrets: {} saved LAN token(s) are redacted in reports and stored in the native credential store when available, with portable config fallback.",
                 self.saved_peer_key_count
             )
         };
@@ -5085,7 +5246,22 @@ fn redacted_peer_config(peer: &LanPeerConfig) -> RedactedPeer {
     RedactedPeer {
         name: peer.name.clone(),
         url: peer.url.clone(),
-        has_lan_key: peer.lan_key.is_some(),
+        has_lan_key: lan_peer_has_key(peer),
+        key_storage: lan_peer_key_storage(peer),
+    }
+}
+
+fn lan_peer_key_storage(peer: &LanPeerConfig) -> &'static str {
+    if peer.lan_key_secret_id.is_some() {
+        "native-credential-store"
+    } else if peer
+        .lan_key
+        .as_deref()
+        .is_some_and(|key| !key.trim().is_empty())
+    {
+        "portable-config-fallback"
+    } else {
+        "none"
     }
 }
 
@@ -5575,9 +5751,19 @@ fn support_report_text(report: &DiagnosticsReport) -> String {
             .iter()
             .filter(|peer| peer.has_lan_key)
             .count();
+        let portable_key_count = report
+            .saved_peers
+            .iter()
+            .filter(|peer| peer.key_storage == "portable-config-fallback")
+            .count();
+        let native_key_count = report
+            .saved_peers
+            .iter()
+            .filter(|peer| peer.key_storage == "native-credential-store")
+            .count();
         if saved_key_count > 0 {
             lines.push(format!(
-                "Secret storage: {saved_key_count} saved LAN token(s) are redacted here but still stored in the per-user config for this MVP."
+                "Secret storage: {saved_key_count} saved LAN token(s) are redacted here; {native_key_count} native credential-store reference(s), {portable_key_count} portable config fallback token(s)."
             ));
         }
     }
@@ -6433,10 +6619,10 @@ fn diagnostics_warnings(
     if let Err(error) = manifest_result {
         warnings.push(format!("managed manifest unavailable: {error}"));
     }
-    let saved_key_count = saved_lan_key_count(config);
-    if saved_key_count > 0 {
+    let portable_key_count = portable_lan_key_count(config);
+    if portable_key_count > 0 {
         warnings.push(format!(
-            "{saved_key_count} saved LAN token(s) are still stored in the per-user config; diagnostics redact them, but Keychain/Credential Manager storage is still a release-hardening item."
+            "{portable_key_count} saved LAN token(s) are still stored in the per-user config fallback; diagnostics redact them, but native credential-store migration is recommended."
         ));
     }
     warnings
@@ -7799,11 +7985,13 @@ mod tests {
                 LanPeerConfig {
                     name: "Office MacBook".to_string(),
                     url: "http://192.168.1.10:7370".to_string(),
+                    lan_key_secret_id: None,
                     lan_key: Some("office-key".to_string()),
                 },
                 LanPeerConfig {
                     name: "Shop PC".to_string(),
                     url: "http://192.168.1.20:7370".to_string(),
+                    lan_key_secret_id: None,
                     lan_key: Some("shop-key".to_string()),
                 },
             ],
@@ -7846,6 +8034,7 @@ mod tests {
             peers: vec![LanPeerConfig {
                 name: "Shop PC".to_string(),
                 url: "http://192.168.1.20:7370".to_string(),
+                lan_key_secret_id: None,
                 lan_key: None,
             }],
         })
@@ -7875,11 +8064,13 @@ mod tests {
         let paired = LanPeerConfig {
             name: "Shop PC".to_string(),
             url: "http://192.168.1.20:7370".to_string(),
+            lan_key_secret_id: None,
             lan_key: Some("shop-key".to_string()),
         };
         let unpaired = LanPeerConfig {
             name: "Office MacBook".to_string(),
             url: "http://192.168.1.10:7370".to_string(),
+            lan_key_secret_id: None,
             lan_key: None,
         };
 
@@ -7907,11 +8098,13 @@ mod tests {
                 LanPeerConfig {
                     name: "Shop PC".to_string(),
                     url: "http://192.168.1.20:7370".to_string(),
+                    lan_key_secret_id: None,
                     lan_key: Some("shop-key".to_string()),
                 },
                 LanPeerConfig {
                     name: "Office Mac".to_string(),
                     url: "http://192.168.1.10:7370".to_string(),
+                    lan_key_secret_id: None,
                     lan_key: None,
                 },
             ],
@@ -7925,6 +8118,7 @@ mod tests {
             peers: vec![LanPeerConfig {
                 name: "Shop PC".to_string(),
                 url: "http://192.168.1.20:7370".to_string(),
+                lan_key_secret_id: None,
                 lan_key: Some("shop-key".to_string()),
             }],
             ..AppConfig::default()
@@ -9510,6 +9704,7 @@ mod tests {
         let peer = LanPeerConfig {
             name: "Workshop".to_string(),
             url: "http://192.168.1.50:7370".to_string(),
+            lan_key_secret_id: None,
             lan_key: Some("super-secret".to_string()),
         };
 
@@ -9636,11 +9831,13 @@ mod tests {
                 LanPeerConfig {
                     name: "Shop PC".to_string(),
                     url: "http://127.0.0.1:7370".to_string(),
+                    lan_key_secret_id: None,
                     lan_key: Some("super-secret-lan-key".to_string()),
                 },
                 LanPeerConfig {
                     name: "Workshop Laptop".to_string(),
                     url: "http://127.0.0.1:7371".to_string(),
+                    lan_key_secret_id: None,
                     lan_key: None,
                 },
             ],
@@ -9651,12 +9848,12 @@ mod tests {
         assert_eq!(check.name, "secret-storage");
         assert!(check.ok);
         assert!(check.message.contains("1 saved LAN token"));
-        assert!(check.message.contains("per-user SyncMyFonts config"));
         assert!(
             check
                 .message
-                .contains("Keychain or Windows Credential Manager")
+                .contains("per-user SyncMyFonts config fallback")
         );
+        assert!(check.message.contains("native credential-store"));
         assert!(!check.message.contains("super-secret-lan-key"));
     }
 

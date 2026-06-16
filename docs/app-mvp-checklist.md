@@ -114,8 +114,10 @@ The app MVP should reuse the current agent commands:
 - [ ] Per-user config file with server URL and server sync mode preference.
 - [x] Per-user log directory.
 - [x] Diagnostics output that redacts API keys and LAN keys.
-- [x] Readiness and diagnostics warn when saved LAN tokens are still stored in
-  the portable per-user config instead of a platform secret store.
+- [x] Saved LAN tokens use macOS Keychain or Windows Credential Manager when
+  available, with portable per-user config fallback.
+- [x] Readiness and diagnostics distinguish native credential-store references
+  from portable config fallback tokens.
 - [x] Readiness check for local paths, saved peers, and sign-in sync helper.
 - [x] Validation report that bundles diagnostics, readiness, managed font
   verification, and manual clean-machine pass criteria.
@@ -381,10 +383,11 @@ Already present in the repo:
 - [ ] Native tray/menu-bar UI for macOS.
 - [ ] Native tray UI for Windows.
 - [x] Basic release archive scripts for macOS and Windows.
-- [x] Stored per-user config with saved peer URLs and LAN keys.
-- [ ] Keychain or Credential Manager integration for secrets.
-- [x] Visible secret-storage readiness warning until Keychain or Credential
-  Manager integration lands.
+- [x] Stored per-user config with saved peer URLs and native secret references
+  or portable fallback LAN keys.
+- [x] Keychain or Credential Manager integration for saved LAN tokens.
+- [x] Visible secret-storage readiness warning when portable fallback tokens
+  remain.
 - [x] Stable machine-readable reports for every command and error.
 - [x] Dedicated diagnostics command or support-report artifact.
 - [x] Local ownership manifest for managed fonts.
