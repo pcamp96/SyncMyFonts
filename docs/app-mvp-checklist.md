@@ -119,6 +119,8 @@ The app MVP should reuse the current agent commands:
 - [x] Readiness and diagnostics distinguish native credential-store references
   from portable config fallback tokens.
 - [x] Readiness check for local paths, saved peers, and sign-in sync helper.
+- [x] Readiness check detects partial sign-in sync helper/registration installs
+  and gives a repair path.
 - [x] Validation report that bundles diagnostics, readiness, managed font
   verification, and manual clean-machine pass criteria.
 - [x] Validation report includes a Mac-to-Windows and Windows-to-Mac evidence

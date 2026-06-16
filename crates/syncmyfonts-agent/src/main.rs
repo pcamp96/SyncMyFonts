@@ -1779,26 +1779,7 @@ fn doctor() -> Result<DoctorReport> {
     });
     checks.push(secret_storage_check(&config));
 
-    checks.push(match startup_sync_helper_path() {
-        Ok(path) if path.exists() => doctor_check(
-            "sign-in-sync-helper",
-            true,
-            format!("Sign-in sync helper exists at {}.", path.display()),
-        ),
-        Ok(path) => doctor_check(
-            "sign-in-sync-helper",
-            true,
-            format!(
-                "Optional sign-in sync helper is not installed. Use Enable Sign-In Sync if you want saved peers to sync when you sign in. Expected location: {}.",
-                path.display()
-            ),
-        ),
-        Err(error) => doctor_check(
-            "sign-in-sync-helper",
-            false,
-            format!("Sign-in sync helper path could not be resolved: {error}"),
-        ),
-    });
+    checks.push(sign_in_sync_readiness_check());
 
     let failed = checks.iter().filter(|check| !check.ok).count();
     let next_step = if failed == 0 {
@@ -1847,6 +1828,83 @@ fn font_sync_scope_check() -> DoctorCheck {
         true,
         "SyncMyFonts scans and installs current-user fonts only; system font directories are excluded from LAN sync.",
     )
+}
+
+fn sign_in_sync_readiness_check() -> DoctorCheck {
+    match startup_sync_helper_path() {
+        Ok(helper_path) => {
+            let registration_path =
+                startup_sync_registration_path().unwrap_or_else(|_| helper_path.clone());
+            sign_in_sync_readiness_check_from_paths(&helper_path, &registration_path)
+        }
+        Err(error) => doctor_check(
+            "sign-in-sync-helper",
+            false,
+            format!("Sign-in sync helper path could not be resolved: {error}"),
+        ),
+    }
+}
+
+fn startup_sync_registration_path() -> Result<PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        macos_startup_sync_plist_path()
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows_startup_sync_shortcut_path()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        startup_sync_helper_path()
+    }
+}
+
+fn sign_in_sync_readiness_check_from_paths(
+    helper_path: &Path,
+    registration_path: &Path,
+) -> DoctorCheck {
+    let helper_exists = helper_path.exists();
+    let registration_exists = registration_path.exists();
+
+    match (helper_exists, registration_exists) {
+        (true, true) => doctor_check(
+            "sign-in-sync-helper",
+            true,
+            format!(
+                "Sign-in sync is installed. Helper: {}; registration: {}.",
+                helper_path.display(),
+                registration_path.display()
+            ),
+        ),
+        (false, false) => doctor_check(
+            "sign-in-sync-helper",
+            true,
+            format!(
+                "Optional sign-in sync helper is not installed. Use Enable Sign-In Sync if you want saved peers to sync when you sign in. Expected helper: {}; expected registration: {}.",
+                helper_path.display(),
+                registration_path.display()
+            ),
+        ),
+        (true, false) => doctor_check(
+            "sign-in-sync-helper",
+            false,
+            format!(
+                "Sign-in sync helper exists at {}, but registration is missing at {}. Use Disable Sign-In Sync, then Enable Sign-In Sync to repair it.",
+                helper_path.display(),
+                registration_path.display()
+            ),
+        ),
+        (false, true) => doctor_check(
+            "sign-in-sync-helper",
+            false,
+            format!(
+                "Sign-in sync registration exists at {}, but helper is missing at {}. Use Disable Sign-In Sync, then Enable Sign-In Sync to repair it.",
+                registration_path.display(),
+                helper_path.display()
+            ),
+        ),
+    }
 }
 
 fn saved_lan_key_count(config: &AppConfig) -> usize {
@@ -9469,6 +9527,40 @@ mod tests {
                 .message
                 .contains("system font directories are excluded")
         );
+    }
+
+    #[test]
+    fn sign_in_sync_readiness_distinguishes_complete_missing_and_partial_installs() {
+        let root = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        let helper = root.join("run-sign-in-sync.sh");
+        let registration = root.join("com.syncmyfonts.signin-sync.plist");
+
+        let missing = sign_in_sync_readiness_check_from_paths(&helper, &registration);
+        assert_eq!(missing.name, "sign-in-sync-helper");
+        assert!(missing.ok);
+        assert!(
+            missing
+                .message
+                .contains("Optional sign-in sync helper is not installed")
+        );
+
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&helper, b"helper").unwrap();
+        let helper_only = sign_in_sync_readiness_check_from_paths(&helper, &registration);
+        assert!(!helper_only.ok);
+        assert!(helper_only.message.contains("registration is missing"));
+        assert!(helper_only.message.contains("Disable Sign-In Sync"));
+
+        fs::write(&registration, b"registration").unwrap();
+        let complete = sign_in_sync_readiness_check_from_paths(&helper, &registration);
+        assert!(complete.ok);
+        assert!(complete.message.contains("Sign-in sync is installed"));
+
+        fs::remove_file(&helper).unwrap();
+        let registration_only = sign_in_sync_readiness_check_from_paths(&helper, &registration);
+        assert!(!registration_only.ok);
+        assert!(registration_only.message.contains("helper is missing"));
+        assert!(registration_only.message.contains("Enable Sign-In Sync"));
     }
 
     #[test]
