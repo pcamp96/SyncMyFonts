@@ -58,7 +58,7 @@ function setToggle(id, enabled) {
 
 function formatPeerCount(savedPeers, pairedPeers) {
   if (savedPeers === 0) {
-    return "no saved peers";
+    return "No saved peers";
   }
   if (savedPeers === pairedPeers) {
     return savedPeers === 1 ? "1 paired peer" : `${savedPeers} paired peers`;
@@ -158,9 +158,9 @@ async function refreshSnapshot() {
     setText("deviceName", snapshot.device_name);
     setText("stripDeviceName", snapshot.device_name);
     setText("localDeviceTitle", snapshot.device_name);
-    setText("platformName", snapshot.platform);
+    setText("platformName", snapshot.platform === "windows" ? "Windows" : "macOS");
     setPlatform(snapshot.platform === "windows" ? "windows" : "macos");
-    setText("sharingState", snapshot.sharing ? "sharing on" : "sharing off");
+    setText("sharingState", snapshot.sharing ? "Sharing on" : "Not sharing");
     setText("localShareStatus", snapshot.sharing ? "Sharing is on" : "Sharing is off");
     setText("peerCount", formatPeerCount(snapshot.saved_peers, snapshot.paired_peers));
     setText("stripSharingState", formatSharingState(snapshot.sharing));
@@ -184,8 +184,8 @@ async function refreshSnapshot() {
         ? `On every ${snapshot.auto_sync_interval_minutes} minute(s) while the app is open.`
         : "Off until a saved peer is paired and you enable it."
     );
-    setText("configPath", `Config: ${snapshot.config_path}`);
-    setText("logDir", `Logs: ${snapshot.log_dir}`);
+    setText("configPath", `Configuration file: ${snapshot.config_path}`);
+    setText("logDir", `Log folder: ${snapshot.log_dir}`);
     setToggle("autoSyncToggle", snapshot.auto_sync_saved_peers);
     renderPeerList(snapshot.peers);
   } catch (error) {

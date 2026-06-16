@@ -95,15 +95,15 @@
           </div>
           <div class="sidebar-status-row">
             <span>Platform</span>
-            <strong id="platformName">desktop</strong>
+            <strong id="platformName">Detecting</strong>
           </div>
           <div class="sidebar-status-row">
             <span>Sharing</span>
-            <strong id="sharingState">sharing off</strong>
+            <strong id="sharingState">Not sharing</strong>
           </div>
           <div class="sidebar-status-row">
             <span>Peers</span>
-            <strong id="peerCount">no saved peers</strong>
+            <strong id="peerCount">No saved peers</strong>
           </div>
         </div>
       </aside>
@@ -232,16 +232,16 @@
               <div class="font-row">
                 <div>
                   <strong>User font folder</strong>
-                  <span id="userFontDir">Loading local font path...</span>
+                  <span id="userFontDir">User-installed font locations</span>
                 </div>
                 <span class="badge success" id="userFontCount">Scanning</span>
               </div>
               <div class="font-row">
                 <div>
                   <strong>Managed font folder</strong>
-                  <span id="managedFontDir">Loading managed font path...</span>
+                  <span id="managedFontDir">SyncMyFonts managed library</span>
                 </div>
-                <span class="badge neutral" id="managedFontCount">Loading</span>
+                <span class="badge neutral" id="managedFontCount">Checking</span>
               </div>
               <div class="font-row muted-row">
                 <div>
@@ -325,7 +325,7 @@
             <article class="setting-row">
               <div>
                 <h2>Saved-peer sync</h2>
-                <p id="autoSyncStatus">Loading saved-peer sync preference...</p>
+                <p id="autoSyncStatus">Off until a saved peer is paired and you enable it.</p>
               </div>
               <span class="toggle" id="autoSyncToggle" aria-hidden="true"></span>
             </article>
