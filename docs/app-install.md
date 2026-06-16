@@ -56,6 +56,8 @@ GUI self-test, and validation-report evidence into a Desktop folder, then
 launches the native app.
 Use `Enable Sign-In Sync` after pairing peers if this computer should pull
 missing fonts from saved peers whenever the user signs in.
+Use `Disable Sign-In Sync` to remove that current-user helper without removing
+saved peers or changing manual LAN sync.
 On Windows, use `Install App Shortcuts` to create current-user Start Menu
 launchers for the native app, saved-peer sync, dry-run preview, diagnostics,
 and readiness check.

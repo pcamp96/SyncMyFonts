@@ -150,6 +150,19 @@ jobs:
           SYNCMYFONTS_LOG_DIR="$smoke_root/logs" \
           SYNCMYFONTS_USER_FONT_DIR="$smoke_root/fonts" \
           "$package_dir/bin/syncmyfonts-agent" scan > "$smoke_root/scan-after-validation-font.json"
+          mkdir -p "$smoke_root/home"
+          HOME="$smoke_root/home" \
+          SYNCMYFONTS_CONFIG_DIR="$smoke_root/config" \
+          SYNCMYFONTS_LOG_DIR="$smoke_root/logs" \
+          SYNCMYFONTS_USER_FONT_DIR="$smoke_root/fonts" \
+          SYNCMYFONTS_SKIP_STARTUP_REGISTRATION=1 \
+          "$package_dir/bin/syncmyfonts-agent" install-startup-sync > "$smoke_root/startup-sync-install.json"
+          HOME="$smoke_root/home" \
+          SYNCMYFONTS_CONFIG_DIR="$smoke_root/config" \
+          SYNCMYFONTS_LOG_DIR="$smoke_root/logs" \
+          SYNCMYFONTS_USER_FONT_DIR="$smoke_root/fonts" \
+          SYNCMYFONTS_SKIP_STARTUP_REGISTRATION=1 \
+          "$package_dir/bin/syncmyfonts-agent" uninstall-startup-sync > "$smoke_root/startup-sync-uninstall.json"
           grep -q '"support_report_text"' "$smoke_root/diagnostics.json"
           grep -q '"ok": true' "$smoke_root/gui-self-test.json"
           grep -q '"Native GUI state initialized' "$smoke_root/gui-self-test.json"
@@ -244,6 +257,21 @@ jobs:
               and font["content_sha256"]
               for font in scan["fonts"]
           )
+          PY
+          python3 - "$smoke_root/startup-sync-install.json" "$smoke_root/startup-sync-uninstall.json" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], "r", encoding="utf-8") as handle:
+              installed = json.load(handle)
+          with open(sys.argv[2], "r", encoding="utf-8") as handle:
+              removed = json.load(handle)
+          assert installed["installed"] is True
+          assert installed["platform"] == "macos"
+          assert removed["installed"] is False
+          assert removed["platform"] == "macos"
+          assert removed["helper_removed"] is True
+          assert removed["registration_removed"] is True
           PY
           find "$smoke_root/logs" -name 'validation-report-*.json' | grep -q .
           source_fonts="$smoke_root/source-fonts"
@@ -457,6 +485,16 @@ jobs:
           if (-not $validationScanFont.content_sha256) { throw "Validation font scan hash was missing" }
           if (-not (Get-ChildItem (Join-Path $smokeRoot "logs") -Filter "validation-report-*.json" -ErrorAction SilentlyContinue)) { throw "Validation report file was not saved" }
           $env:APPDATA = Join-Path $smokeRoot "appdata"
+          & $agent install-startup-sync | Tee-Object -FilePath (Join-Path $smokeRoot "startup-sync-install.json")
+          & $agent uninstall-startup-sync | Tee-Object -FilePath (Join-Path $smokeRoot "startup-sync-uninstall.json")
+          $startupInstall = Get-Content (Join-Path $smokeRoot "startup-sync-install.json") -Raw | ConvertFrom-Json
+          $startupUninstall = Get-Content (Join-Path $smokeRoot "startup-sync-uninstall.json") -Raw | ConvertFrom-Json
+          if ($startupInstall.installed -ne $true) { throw "Packaged startup sync install did not report installed" }
+          if ($startupInstall.platform -ne "windows") { throw "Packaged startup sync install platform was not windows" }
+          if ($startupUninstall.installed -ne $false) { throw "Packaged startup sync uninstall did not report disabled" }
+          if ($startupUninstall.platform -ne "windows") { throw "Packaged startup sync uninstall platform was not windows" }
+          if ($startupUninstall.helper_removed -ne $true) { throw "Packaged startup sync uninstall did not remove helper" }
+          if ($startupUninstall.registration_removed -ne $true) { throw "Packaged startup sync uninstall did not remove startup registration" }
           & $agent install-app-shortcuts | Tee-Object -FilePath (Join-Path $smokeRoot "app-shortcuts.json")
           $shortcutsDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\SyncMyFonts"
           $expectedShortcuts = @(

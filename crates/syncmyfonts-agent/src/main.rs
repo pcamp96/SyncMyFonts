@@ -143,6 +143,8 @@ enum Commands {
     },
     /// Install a per-user sign-in helper that syncs saved LAN peers.
     InstallStartupSync,
+    /// Remove the per-user sign-in helper that syncs saved LAN peers.
+    UninstallStartupSync,
     /// Install per-user app shortcuts for common SyncMyFonts actions.
     InstallAppShortcuts,
     /// Run the native desktop GUI.
@@ -318,6 +320,9 @@ fn run_cli(cli: Cli) -> Result<()> {
         Commands::InstallStartupSync => {
             print_json(&install_startup_sync()?)?;
         }
+        Commands::UninstallStartupSync => {
+            print_json(&uninstall_startup_sync()?)?;
+        }
         Commands::InstallAppShortcuts => {
             print_json(&install_app_shortcuts()?)?;
         }
@@ -355,6 +360,7 @@ impl Commands {
             Commands::RepairManaged => "repair-managed",
             Commands::InstallValidationFont { .. } => "install-validation-font",
             Commands::InstallStartupSync => "install-startup-sync",
+            Commands::UninstallStartupSync => "uninstall-startup-sync",
             Commands::InstallAppShortcuts => "install-app-shortcuts",
             Commands::Gui => "gui",
             Commands::GuiSelfTest => "gui-self-test",
@@ -882,6 +888,8 @@ struct StartupSyncReport {
     agent_path: PathBuf,
     helper_path: PathBuf,
     registration_path: PathBuf,
+    helper_removed: bool,
+    registration_removed: bool,
     saved_peer_count: usize,
     message: String,
 }
@@ -3725,6 +3733,18 @@ impl SyncMyFontsGui {
         });
     }
 
+    fn uninstall_startup_sync(&mut self) {
+        self.start_task("Disabling sign-in sync", || {
+            match uninstall_startup_sync() {
+                Ok(report) => {
+                    let next_step = "Sign-in sync is disabled. You can still sync manually with Sync Saved Peers.".to_string();
+                    gui_ok(&report, next_step)
+                }
+                Err(error) => gui_error(error),
+            }
+        });
+    }
+
     fn install_app_shortcuts(&mut self) {
         self.start_task("Installing app shortcuts", || {
             match install_app_shortcuts() {
@@ -4525,6 +4545,9 @@ impl eframe::App for SyncMyFontsGui {
                         self.install_startup_sync();
                     }
                 });
+                if ui.button("Disable Sign-In Sync").clicked() {
+                    self.uninstall_startup_sync();
+                }
                 if ui.button("Install App Shortcuts").clicked() {
                     self.install_app_shortcuts();
                 }
@@ -5914,6 +5937,8 @@ fn install_startup_sync() -> Result<StartupSyncReport> {
             agent_path,
             helper_path,
             registration_path,
+            helper_removed: false,
+            registration_removed: false,
             saved_peer_count,
             message: "Installed a per-user LaunchAgent for saved-peer sync at sign-in.".to_string(),
         });
@@ -5936,6 +5961,8 @@ fn install_startup_sync() -> Result<StartupSyncReport> {
             agent_path,
             helper_path,
             registration_path,
+            helper_removed: false,
+            registration_removed: false,
             saved_peer_count,
             message: "Installed a per-user Startup folder helper for saved-peer sync at sign-in."
                 .to_string(),
@@ -5951,10 +5978,88 @@ fn install_startup_sync() -> Result<StartupSyncReport> {
             agent_path,
             helper_path: helper_path.clone(),
             registration_path: helper_path,
+            helper_removed: false,
+            registration_removed: false,
             saved_peer_count,
             message: "Wrote a saved-peer sync helper, but automatic sign-in registration is not supported on this platform yet."
                 .to_string(),
         })
+    }
+}
+
+fn uninstall_startup_sync() -> Result<StartupSyncReport> {
+    let agent_path = agent_command_exe()?;
+    let config = load_app_config()?;
+    let saved_peer_count = config.peers.len();
+    let helper_path = startup_sync_helper_path()?;
+
+    #[cfg(target_os = "macos")]
+    {
+        let registration_path = macos_startup_sync_plist_path()?;
+        if std::env::var("SYNCMYFONTS_SKIP_STARTUP_REGISTRATION").as_deref() != Ok("1")
+            && registration_path.exists()
+        {
+            let _ = Command::new("launchctl")
+                .args(["bootout", &format!("gui/{}", unsafe { libc_uid() })])
+                .arg(&registration_path)
+                .status();
+        }
+        let registration_removed = remove_file_if_exists(&registration_path)?;
+        let helper_removed = remove_file_if_exists(&helper_path)?;
+        return Ok(StartupSyncReport {
+            installed: false,
+            platform: platform_name(),
+            agent_path,
+            helper_path,
+            registration_path,
+            helper_removed,
+            registration_removed,
+            saved_peer_count,
+            message: "Removed the per-user LaunchAgent sign-in sync helper.".to_string(),
+        });
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let registration_path = windows_startup_sync_shortcut_path()?;
+        let registration_removed = remove_file_if_exists(&registration_path)?;
+        let helper_removed = remove_file_if_exists(&helper_path)?;
+        return Ok(StartupSyncReport {
+            installed: false,
+            platform: platform_name(),
+            agent_path,
+            helper_path,
+            registration_path,
+            helper_removed,
+            registration_removed,
+            saved_peer_count,
+            message: "Removed the per-user Startup folder sign-in sync helper.".to_string(),
+        });
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let registration_path = helper_path.clone();
+        let helper_removed = remove_file_if_exists(&helper_path)?;
+        Ok(StartupSyncReport {
+            installed: false,
+            platform: platform_name(),
+            agent_path,
+            helper_path,
+            registration_path,
+            helper_removed,
+            registration_removed: helper_removed,
+            saved_peer_count,
+            message: "Removed the saved-peer sync helper for this platform.".to_string(),
+        })
+    }
+}
+
+fn remove_file_if_exists(path: &Path) -> Result<bool> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error).with_context(|| format!("removing {}", path.display())),
     }
 }
 
@@ -9165,6 +9270,15 @@ mod tests {
         assert!(helper.contains("signin-sync.log"));
         assert!(!helper.contains("SYNCMYFONTS_LAN_KEY"));
         assert!(!helper.contains("--lan-key"));
+    }
+
+    #[test]
+    fn remove_file_if_exists_is_idempotent() {
+        let path = std::env::temp_dir().join(format!("syncmyfonts-remove-{}", Uuid::new_v4()));
+        fs::write(&path, b"temporary helper").unwrap();
+
+        assert!(remove_file_if_exists(&path).unwrap());
+        assert!(!remove_file_if_exists(&path).unwrap());
     }
 
     #[test]

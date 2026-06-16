@@ -413,8 +413,10 @@ The local app MVP is ready when a non-technical user can:
 5. Run `Get Missing Fonts From Peer`.
 6. Repeat the flow in the other direction if needed.
 7. Optionally click `Enable Sign-In Sync` after peers are saved.
-8. Reopen their design app and use the synced fonts.
-9. Read a concise result showing installed, skipped, and failed items.
+8. Click `Disable Sign-In Sync` later if they no longer want background LAN sync
+   at sign-in.
+9. Reopen their design app and use the synced fonts.
+10. Read a concise result showing installed, skipped, and failed items.
 
 No part of that path should require administrator rights, editing environment
 variables by hand, opening system font directories, or understanding the Windows
