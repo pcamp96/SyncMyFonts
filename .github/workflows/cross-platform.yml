@@ -181,6 +181,7 @@ jobs:
           assert isinstance(gui["lan_readiness"], list)
           assert any("Sharing: off" in line for line in gui["lan_readiness"])
           assert any("no port forwarding" in line for line in gui["lan_readiness"])
+          assert any("system fonts are excluded" in line for line in gui["lan_readiness"])
           assert any("Saved peers: none yet" in line for line in gui["lan_readiness"])
           assert any("Sign-in sync: off" in line for line in gui["lan_readiness"])
           assert any("Automation: available after pairing a peer" in line for line in gui["lan_readiness"])
@@ -415,6 +416,7 @@ jobs:
           $lanReadiness = @($guiSelfTestJson.lan_readiness)
           if (-not ($lanReadiness | Where-Object { $_.Contains("Sharing: off") })) { throw "GUI LAN readiness omitted sharing-off state" }
           if (-not ($lanReadiness | Where-Object { $_.Contains("no port forwarding") })) { throw "GUI LAN readiness omitted no-port-forwarding state" }
+          if (-not ($lanReadiness | Where-Object { $_.Contains("system fonts are excluded") })) { throw "GUI LAN readiness omitted system-font exclusion state" }
           if (-not ($lanReadiness | Where-Object { $_.Contains("Saved peers: none yet") })) { throw "GUI LAN readiness omitted saved-peer state" }
           if (-not ($lanReadiness | Where-Object { $_.Contains("Sign-in sync: off") })) { throw "GUI LAN readiness omitted sign-in sync state" }
           if (-not ($lanReadiness | Where-Object { $_.Contains("Automation: available after pairing a peer") })) { throw "GUI LAN readiness omitted automation gating state" }

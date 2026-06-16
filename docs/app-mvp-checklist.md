@@ -127,7 +127,7 @@ The app MVP should reuse the current agent commands:
 - [x] Native GUI shows the current first-run phase: pairing, sharing, preview,
   or sync.
 - [x] Native GUI shows and can copy a LAN readiness summary with sharing,
-  pairing, saved-peer, and automation state.
+  pairing, current-user/system-font scope, saved-peer, and automation state.
 - [x] Native GUI shows and can copy whether saved LAN tokens exist without
   exposing the token values.
 - [x] Native GUI shows a role card with what this computer and the other
@@ -258,6 +258,8 @@ The app MVP should reuse the current agent commands:
   and saved-peer sync readiness fields.
 - [x] GitHub Actions verifies packaged GUI self-test exposes sign-in sync
   readiness state.
+- [x] GitHub Actions verifies packaged GUI self-test exposes system-font
+  exclusion in first-run readiness.
 - [x] GitHub Actions verifies packaged GUI self-test exposes first-run LAN
   action enabled/disabled states.
 - [x] GitHub Actions verifies packaged GUI self-test exposes first-run peer

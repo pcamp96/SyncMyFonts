@@ -4067,6 +4067,7 @@ impl SyncMyFontsGui {
         vec![
             sharing,
             pairing,
+            "Scope: current-user fonts only; system fonts are excluded.".to_string(),
             saved_peers,
             self.sign_in_sync_status_line(),
             automation,
@@ -8476,6 +8477,12 @@ mod tests {
             report
                 .lan_readiness
                 .iter()
+                .any(|line| line.contains("system fonts are excluded"))
+        );
+        assert!(
+            report
+                .lan_readiness
+                .iter()
                 .any(|line| line.contains("Sign-in sync: off"))
         );
         assert_eq!(report.sync_validation_matrix.len(), 2);
@@ -8812,6 +8819,7 @@ mod tests {
 
         assert!(readiness.contains("Sharing: off; no port forwarding is required."));
         assert!(readiness.contains("Pairing: saved token is ready; preview can run."));
+        assert!(readiness.contains("Scope: current-user fonts only; system fonts are excluded."));
         assert!(readiness.contains("Saved peers: 2 ready (Shop PC, Office Mac)"));
         assert!(
             readiness
@@ -8819,7 +8827,7 @@ mod tests {
         );
         assert!(readiness.contains("Automation: auto-sync while app is open every 30 minute(s)."));
         assert!(readiness.contains("Secrets: 2 saved LAN token(s) are redacted"));
-        assert_eq!(readiness.lines().count(), 6);
+        assert_eq!(readiness.lines().count(), 7);
     }
 
     #[test]
