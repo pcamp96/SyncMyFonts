@@ -51,6 +51,12 @@ button {
   font: inherit;
 }
 
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid rgba(0, 102, 255, 0.24);
+  outline-offset: 2px;
+}
+
 .icon-defs {
   position: absolute;
   width: 0;
@@ -862,6 +868,10 @@ h2 {
   color: var(--ink);
   background: #fbfcff;
   font: inherit;
+}
+
+.input-row input:focus-visible {
+  border-color: var(--blue);
 }
 
 .settings-list,
