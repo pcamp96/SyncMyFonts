@@ -156,6 +156,8 @@ The app MVP should reuse the current agent commands:
   current sharing state.
 - [x] Native GUI disables saved-peer loading until at least one LAN peer is
   saved.
+- [x] Native GUI explains whether a loaded saved peer is already paired or
+  still needs an 8-digit pairing code.
 - [x] Native GUI disables saved-peer sync and automation until saved LAN peers
   have pairing tokens, while still allowing a previously enabled auto-sync
   preference to be turned off.

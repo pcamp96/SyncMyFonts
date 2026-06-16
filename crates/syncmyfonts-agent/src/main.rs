@@ -3025,16 +3025,27 @@ impl SyncMyFontsGui {
                     .find(|peer| !selected_name.is_empty() && peer.name == selected_name)
                     .or_else(|| config.peers.first());
                 if let Some(peer) = selected_peer {
+                    let has_saved_key = peer
+                        .lan_key
+                        .as_deref()
+                        .is_some_and(|key| !key.trim().is_empty());
                     self.selected_peer_name = peer.name.clone();
                     self.peer_name = peer.name.clone();
                     self.peer_url = peer.url.clone();
                     self.peer_key = peer.lan_key.clone().unwrap_or_default();
-                    self.discovered_peer_requires_lan_key = peer.lan_key.is_some();
+                    self.discovered_peer_requires_lan_key = !has_saved_key;
                     self.last_previewed_peer = None;
-                    self.next_step = format!(
-                        "Loaded saved peer {}. Click Test Connection, then Preview From Peer before Get Missing Fonts From Peer. Use Sync Saved Peers only after each saved peer is paired.",
-                        peer.name
-                    );
+                    self.next_step = if has_saved_key {
+                        format!(
+                            "Loaded paired peer {}. Click Test Connection, then Preview From Peer before Get Missing Fonts From Peer.",
+                            peer.name
+                        )
+                    } else {
+                        format!(
+                            "Loaded saved peer {} without a saved LAN token. Enter the 8-digit pairing code from that computer, then click Pair Peer.",
+                            peer.name
+                        )
+                    };
                 }
             }
             Err(error) => {
@@ -7713,14 +7724,52 @@ mod tests {
         assert_eq!(app.peer_name, "Shop PC");
         assert_eq!(app.peer_url, "http://192.168.1.20:7370");
         assert_eq!(app.peer_key, "shop-key");
+        assert!(!app.discovered_peer_requires_lan_key);
         assert!(app.next_step.contains("Test Connection"));
         assert!(
             app.next_step
                 .contains("Preview From Peer before Get Missing Fonts From Peer")
         );
+        assert!(app.next_step.contains("Loaded paired peer Shop PC"));
+    }
+
+    #[test]
+    fn gui_loading_unpaired_saved_peer_prompts_pairing() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let config_dir = std::env::temp_dir().join(format!("syncmyfonts-test-{}", Uuid::new_v4()));
+        unsafe {
+            std::env::set_var("SYNCMYFONTS_CONFIG_DIR", &config_dir);
+            std::env::remove_var("SYNCMYFONTS_DEVICE_NAME");
+        }
+        save_app_config(&AppConfig {
+            schema: 1,
+            device_id: Some(Uuid::new_v4()),
+            friendly_device_name: None,
+            preferences: AppPreferences::default(),
+            peers: vec![LanPeerConfig {
+                name: "Shop PC".to_string(),
+                url: "http://192.168.1.20:7370".to_string(),
+                lan_key: None,
+            }],
+        })
+        .unwrap();
+
+        let mut app = SyncMyFontsGui::new();
+        app.selected_peer_name = "Shop PC".to_string();
+        app.load_selected_saved_peer_into_form();
+        unsafe {
+            std::env::remove_var("SYNCMYFONTS_CONFIG_DIR");
+        }
+
+        assert_eq!(app.peer_name, "Shop PC");
+        assert_eq!(app.peer_url, "http://192.168.1.20:7370");
+        assert!(app.peer_key.is_empty());
+        assert!(app.discovered_peer_requires_lan_key);
+        assert!(app.next_step.contains("without a saved LAN token"));
+        assert!(app.next_step.contains("click Pair Peer"));
         assert!(
-            app.next_step
-                .contains("Use Sync Saved Peers only after each saved peer is paired")
+            app.peer_pairing_detail()
+                .contains("was discovered and requires pairing")
         );
     }
 
