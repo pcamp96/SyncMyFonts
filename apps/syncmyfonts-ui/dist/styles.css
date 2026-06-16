@@ -805,6 +805,7 @@ h2 {
   min-height: 58px;
   padding: 12px 18px;
   border-bottom: 1px solid var(--line);
+  transition: background-color 120ms ease;
 }
 
 .font-row:last-child,
@@ -812,11 +813,21 @@ h2 {
   border-bottom: 0;
 }
 
+.font-row:hover,
+.peer-row:hover {
+  background: #f8faff;
+}
+
 .font-row div,
 .peer-row div {
   display: grid;
   gap: 4px;
   min-width: 0;
+}
+
+.font-row strong,
+.peer-row strong {
+  font-size: 14px;
 }
 
 .font-row span,
@@ -844,6 +855,10 @@ h2 {
 
 .muted-row {
   background: #fafbfd;
+}
+
+.muted-row:hover {
+  background: #f7f9fc;
 }
 
 .badge {
@@ -904,8 +919,16 @@ h2 {
 .empty-state {
   display: grid;
   gap: 6px;
-  padding: 28px 20px;
+  margin: 12px;
+  padding: 22px;
   border-bottom: 1px solid var(--line);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  background: #fbfcff;
+}
+
+.empty-state strong {
+  font-size: 15px;
 }
 
 .input-row {

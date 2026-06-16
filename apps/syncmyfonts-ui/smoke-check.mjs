@@ -43,8 +43,10 @@ for (const viewport of viewports) {
 
     for (const view of views) {
       await page.click(`[data-view="${view}"]`);
+      await page.locator(`[data-view="${view}"]`).evaluate((element) => element.blur());
       if (view === "sync") {
         await page.click('[data-step="share"]');
+        await page.locator('[data-step="share"]').evaluate((element) => element.blur());
       }
       await page.mouse.move(4, viewport.height - 4);
       await page.screenshot({
