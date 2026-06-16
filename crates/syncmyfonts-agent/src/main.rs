@@ -991,6 +991,12 @@ struct GuiSelfTestReport {
     peer_pairing_ready: bool,
     peer_sync_ready: bool,
     peer_install_ready: bool,
+    can_load_saved_peer: bool,
+    can_enable_saved_peer_automation: bool,
+    can_change_auto_sync_preference: bool,
+    can_start_sharing: bool,
+    can_stop_sharing: bool,
+    can_forget_peer: bool,
     peer_action_hint: &'static str,
     peer_pairing_detail: String,
     peer_key_label: &'static str,
@@ -2613,6 +2619,12 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         peer_pairing_ready: app.peer_pairing_ready(),
         peer_sync_ready: app.peer_sync_ready(),
         peer_install_ready: app.peer_install_ready(),
+        can_load_saved_peer: app.can_load_saved_peer(),
+        can_enable_saved_peer_automation: app.can_enable_saved_peer_automation(),
+        can_change_auto_sync_preference: app.can_change_auto_sync_preference(),
+        can_start_sharing: app.can_start_sharing(),
+        can_stop_sharing: app.can_stop_sharing(),
+        can_forget_peer: app.can_forget_peer(),
         peer_action_hint: app.peer_action_hint(),
         peer_pairing_detail: app.peer_pairing_detail(),
         peer_key_label: peer_key_label(),
@@ -8019,6 +8031,12 @@ mod tests {
         assert!(!report.peer_pairing_ready);
         assert!(!report.peer_sync_ready);
         assert!(!report.peer_install_ready);
+        assert!(!report.can_load_saved_peer);
+        assert!(!report.can_enable_saved_peer_automation);
+        assert!(!report.can_change_auto_sync_preference);
+        assert!(report.can_start_sharing);
+        assert!(!report.can_stop_sharing);
+        assert!(!report.can_forget_peer);
         assert!(report.peer_action_hint.contains("Find a LAN peer or paste"));
         assert!(report.peer_pairing_detail.contains("No peer selected yet"));
         assert_eq!(report.peer_key_label, "Shared Key (optional)");
