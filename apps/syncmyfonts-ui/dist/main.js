@@ -158,7 +158,7 @@ async function refreshSnapshot() {
     setText("managedFontDir", snapshot.managed_font_dir);
     setText("userFontCount", `${snapshot.user_font_count} found`);
     setText("managedFontCount", `${snapshot.managed_manifest_count} managed`);
-    setText("listenAddress", `LAN sharing listens on ${snapshot.lan_listen_address}. No port forwarding is required.`);
+    setText("listenAddress", `Shares on ${snapshot.lan_listen_address} while this app is open. No port forwarding is required.`);
     setText(
       "systemFontPolicy",
       snapshot.system_fonts_excluded
