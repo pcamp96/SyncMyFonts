@@ -585,6 +585,7 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
+  max-width: 920px;
   padding: 16px 18px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -812,6 +813,10 @@ h2 {
 .support-layout {
   display: grid;
   gap: 14px;
+}
+
+.settings-list {
+  max-width: 920px;
 }
 
 .support-layout {
