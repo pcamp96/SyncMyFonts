@@ -256,6 +256,8 @@ The app MVP should reuse the current agent commands:
   and saved-peer sync readiness fields.
 - [x] GitHub Actions verifies packaged GUI self-test exposes first-run LAN
   action enabled/disabled states.
+- [x] GitHub Actions verifies packaged GUI self-test exposes first-run peer
+  action enabled/disabled states.
 - [x] GitHub Actions verifies packaged GUI self-test keeps shared-key labels
   optional for pairing-code-first setup.
 - [x] GitHub Actions verifies packaged release instructions use the native

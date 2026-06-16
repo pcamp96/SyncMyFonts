@@ -991,6 +991,12 @@ struct GuiSelfTestReport {
     peer_pairing_ready: bool,
     peer_sync_ready: bool,
     peer_install_ready: bool,
+    can_find_lan_peers: bool,
+    can_pair_peer: bool,
+    can_test_peer: bool,
+    can_preview_peer: bool,
+    can_get_missing_fonts_from_peer: bool,
+    can_save_peer: bool,
     can_load_saved_peer: bool,
     can_enable_saved_peer_automation: bool,
     can_change_auto_sync_preference: bool,
@@ -2619,6 +2625,12 @@ fn gui_self_test() -> Result<GuiSelfTestReport> {
         peer_pairing_ready: app.peer_pairing_ready(),
         peer_sync_ready: app.peer_sync_ready(),
         peer_install_ready: app.peer_install_ready(),
+        can_find_lan_peers: app.can_find_lan_peers(),
+        can_pair_peer: app.can_pair_peer(),
+        can_test_peer: app.can_test_peer(),
+        can_preview_peer: app.can_preview_peer(),
+        can_get_missing_fonts_from_peer: app.can_get_missing_fonts_from_peer(),
+        can_save_peer: app.can_save_peer(),
         can_load_saved_peer: app.can_load_saved_peer(),
         can_enable_saved_peer_automation: app.can_enable_saved_peer_automation(),
         can_change_auto_sync_preference: app.can_change_auto_sync_preference(),
@@ -3977,6 +3989,30 @@ impl SyncMyFontsGui {
             })
     }
 
+    fn can_find_lan_peers(&self) -> bool {
+        true
+    }
+
+    fn can_pair_peer(&self) -> bool {
+        self.peer_pairing_ready()
+    }
+
+    fn can_test_peer(&self) -> bool {
+        self.peer_sync_ready()
+    }
+
+    fn can_preview_peer(&self) -> bool {
+        self.peer_sync_ready()
+    }
+
+    fn can_get_missing_fonts_from_peer(&self) -> bool {
+        self.peer_install_ready()
+    }
+
+    fn can_save_peer(&self) -> bool {
+        self.peer_url_ready()
+    }
+
     fn can_load_saved_peer(&self) -> bool {
         !self.saved_peer_names.is_empty()
     }
@@ -4400,28 +4436,32 @@ impl eframe::App for SyncMyFontsGui {
         ui.label(self.peer_pairing_detail());
         ui.add_enabled_ui(!task_running, |ui| {
             ui.horizontal_wrapped(|ui| {
-                if ui.button("Find LAN Peers").clicked() {
-                    self.discover_peers();
-                }
-                ui.add_enabled_ui(self.peer_pairing_ready(), |ui| {
+                ui.add_enabled_ui(self.can_find_lan_peers(), |ui| {
+                    if ui.button("Find LAN Peers").clicked() {
+                        self.discover_peers();
+                    }
+                });
+                ui.add_enabled_ui(self.can_pair_peer(), |ui| {
                     if ui.button("Pair Peer").clicked() {
                         self.pair_peer();
                     }
                 });
-                ui.add_enabled_ui(self.peer_sync_ready(), |ui| {
+                ui.add_enabled_ui(self.can_test_peer(), |ui| {
                     if ui.button("Test Connection").clicked() {
                         self.test_peer();
                     }
+                });
+                ui.add_enabled_ui(self.can_preview_peer(), |ui| {
                     if ui.button("Preview From Peer").clicked() {
                         self.sync_peer(true);
                     }
                 });
-                ui.add_enabled_ui(self.peer_install_ready(), |ui| {
+                ui.add_enabled_ui(self.can_get_missing_fonts_from_peer(), |ui| {
                     if ui.button("Get Missing Fonts From Peer").clicked() {
                         self.sync_peer(false);
                     }
                 });
-                ui.add_enabled_ui(self.peer_url_ready(), |ui| {
+                ui.add_enabled_ui(self.can_save_peer(), |ui| {
                     if ui.button("Save Peer").clicked() {
                         self.save_peer();
                     }
@@ -8031,6 +8071,12 @@ mod tests {
         assert!(!report.peer_pairing_ready);
         assert!(!report.peer_sync_ready);
         assert!(!report.peer_install_ready);
+        assert!(report.can_find_lan_peers);
+        assert!(!report.can_pair_peer);
+        assert!(!report.can_test_peer);
+        assert!(!report.can_preview_peer);
+        assert!(!report.can_get_missing_fonts_from_peer);
+        assert!(!report.can_save_peer);
         assert!(!report.can_load_saved_peer);
         assert!(!report.can_enable_saved_peer_automation);
         assert!(!report.can_change_auto_sync_preference);

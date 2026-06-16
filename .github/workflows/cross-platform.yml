@@ -181,6 +181,12 @@ jobs:
           assert gui["peer_pairing_ready"] is False
           assert gui["peer_sync_ready"] is False
           assert gui["peer_install_ready"] is False
+          assert gui["can_find_lan_peers"] is True
+          assert gui["can_pair_peer"] is False
+          assert gui["can_test_peer"] is False
+          assert gui["can_preview_peer"] is False
+          assert gui["can_get_missing_fonts_from_peer"] is False
+          assert gui["can_save_peer"] is False
           assert gui["can_load_saved_peer"] is False
           assert gui["can_enable_saved_peer_automation"] is False
           assert gui["can_change_auto_sync_preference"] is False
@@ -374,6 +380,12 @@ jobs:
           if ($guiSelfTestJson.peer_pairing_ready -ne $false) { throw "GUI peer pairing should not be ready on first launch" }
           if ($guiSelfTestJson.peer_sync_ready -ne $false) { throw "GUI peer preview should not be ready on first launch" }
           if ($guiSelfTestJson.peer_install_ready -ne $false) { throw "GUI peer install should be locked before preview" }
+          if ($guiSelfTestJson.can_find_lan_peers -ne $true) { throw "GUI LAN discovery should be available on first launch" }
+          if ($guiSelfTestJson.can_pair_peer -ne $false) { throw "GUI pair action should be locked before URL and code are ready" }
+          if ($guiSelfTestJson.can_test_peer -ne $false) { throw "GUI test action should be locked before pairing" }
+          if ($guiSelfTestJson.can_preview_peer -ne $false) { throw "GUI preview action should be locked before pairing" }
+          if ($guiSelfTestJson.can_get_missing_fonts_from_peer -ne $false) { throw "GUI install action should be locked before preview" }
+          if ($guiSelfTestJson.can_save_peer -ne $false) { throw "GUI save action should be locked before a peer URL is ready" }
           if ($guiSelfTestJson.can_load_saved_peer -ne $false) { throw "GUI saved-peer loading should be locked before saving a peer" }
           if ($guiSelfTestJson.can_enable_saved_peer_automation -ne $false) { throw "GUI sign-in sync should be locked before pairing a peer" }
           if ($guiSelfTestJson.can_change_auto_sync_preference -ne $false) { throw "GUI auto-sync preference should be locked before pairing a peer" }
