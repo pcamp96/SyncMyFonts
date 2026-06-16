@@ -28,7 +28,10 @@ use axum::{
 };
 use chrono::Utc;
 use clap::{Parser, error::ErrorKind};
-use reqwest::blocking::{Client, multipart};
+use reqwest::{
+    Url,
+    blocking::{Client, multipart},
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use syncmyfonts_core::{
@@ -3896,7 +3899,7 @@ impl SyncMyFontsGui {
     }
 
     fn peer_url_ready(&self) -> bool {
-        !self.peer_url.trim().is_empty()
+        peer_url_is_ready(&self.peer_url)
     }
 
     fn peer_pairing_ready(&self) -> bool {
@@ -6276,6 +6279,13 @@ fn normalize_peer_url(url: &str) -> String {
     url.trim().trim_end_matches('/').to_string()
 }
 
+fn peer_url_is_ready(url: &str) -> bool {
+    let Ok(url) = Url::parse(url.trim()) else {
+        return false;
+    };
+    matches!(url.scheme(), "http" | "https") && url.host_str().is_some()
+}
+
 fn inspect_font(path: &Path, file_name: String, format: FontFormat) -> Result<LocalFont> {
     let bytes = fs::read(path).with_context(|| format!("reading {}", path.display()))?;
     let content_sha256 = hex::encode(Sha256::digest(&bytes));
@@ -7383,6 +7393,16 @@ mod tests {
     }
 
     #[test]
+    fn peer_url_ready_requires_absolute_http_url() {
+        assert!(peer_url_is_ready("http://192.168.1.50:7370"));
+        assert!(peer_url_is_ready(" https://syncmyfonts.local:7370 "));
+        assert!(!peer_url_is_ready(""));
+        assert!(!peer_url_is_ready("shop-pc:7370"));
+        assert!(!peer_url_is_ready("/api/lan/v1/manifest"));
+        assert!(!peer_url_is_ready("file:///tmp/font.ttf"));
+    }
+
+    #[test]
     fn normalized_peer_name_uses_url_when_name_is_blank() {
         assert_eq!(
             normalized_peer_name("  ", "http://192.168.1.50:7370"),
@@ -7849,8 +7869,19 @@ mod tests {
         assert!(!app.peer_sync_ready());
 
         app.peer_name = "Shop PC".to_string();
-        app.peer_url = "http://192.168.1.25:7370".to_string();
+        app.peer_url = "shop-pc".to_string();
         app.discovered_peer_requires_lan_key = true;
+        app.pairing_code = "12345678".to_string();
+        assert!(!app.peer_url_ready());
+        assert!(!app.peer_pairing_ready());
+        assert_eq!(
+            app.peer_action_hint(),
+            "Find a LAN peer or paste the sharing computer's URL first."
+        );
+        app.pairing_code.clear();
+
+        app.peer_url = "http://192.168.1.25:7370".to_string();
+        assert!(app.peer_url_ready());
         assert!(app.setup_phase().contains("enter the code"));
         assert!(app.role_card_text().contains("Pair Peer"));
         assert!(app.peer_action_hint().contains("Enter the pairing code"));
